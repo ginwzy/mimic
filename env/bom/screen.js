@@ -1,38 +1,37 @@
 /**
  * @env-module screen
- * @description 浏览器screen对象模拟
+ * @description 浏览器screen对象模拟 - 支持 Profile 配置
  * @compatibility Chrome 80+, Firefox 75+, Edge 79+
+ * @version 2.0.0
  */
 
 (function() {
+    'use strict';
+
+    const profile = (window.__profile__ && window.__profile__.screen) || {};
+
     const screen = {
-        // 屏幕尺寸
-        width: 1920,
-        height: 1080,
-        availWidth: 1920,
-        availHeight: 1040,
-        availLeft: 0,
-        availTop: 0,
+        width: profile.width || 1920,
+        height: profile.height || 1080,
+        availWidth: profile.availWidth || 1920,
+        availHeight: profile.availHeight || 1040,
+        availLeft: profile.availLeft !== undefined ? profile.availLeft : 0,
+        availTop: profile.availTop !== undefined ? profile.availTop : 0,
+        colorDepth: profile.colorDepth || 24,
+        pixelDepth: profile.pixelDepth || 24,
+        isExtended: profile.isExtended !== undefined ? profile.isExtended : false,
 
-        // 颜色深度
-        colorDepth: 24,
-        pixelDepth: 24,
-
-        // 方向
         orientation: {
-            angle: 0,
-            type: 'landscape-primary',
+            angle: (profile.orientation && profile.orientation.angle) || 0,
+            type: (profile.orientation && profile.orientation.type) || 'landscape-primary',
             onchange: null,
-            lock: function(orientation) {
-                return Promise.resolve();
-            },
-            unlock: function() {}
-        },
-
-        // 是否为扩展显示器
-        isExtended: false
+            lock: function(orientation) { return Promise.resolve(); },
+            unlock: function() {},
+            addEventListener: function() {},
+            removeEventListener: function() {},
+            dispatchEvent: function() { return true; }
+        }
     };
 
-    // 挂载到window
     window.screen = screen;
 })();

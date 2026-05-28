@@ -1,473 +1,315 @@
 # JS 沙箱环境框架
 
-一个功能完整的 JavaScript 沙箱执行框架，专为 JS 逆向工程设计。支持运行复杂混淆代码、环境注入、浏览器指纹采集、代理监控等功能。
+一个功能完整的 JavaScript 沙箱执行框架，专为 JS 逆向工程设计。支持运行复杂混淆代码、指纹配置驱动的浏览器环境模拟、Canvas/WebGL/Audio 指纹生成、代理监控等功能。
 
-## ✨ 核心特性
+## 核心特性
 
-- 🚀 **高性能沙箱** - 基于 Node.js VM，成功运行 7866 行混淆代码（37ms）
-- 📁 **独立运行器** - 命令行直接运行，无需启动服务
-- 🔍 **代理监控** - 完整的 Proxy 追踪，记录所有属性访问和方法调用
-- 🕷️ **环境采集** - DrissionPage 自动采集真实浏览器环境
-- 🎯 **Web 界面** - 可视化管理，支持文件上传、代码搜索、日志查看
-- 📊 **详细日志** - 属性访问、方法调用、控制台输出完整记录
-- 🛠️ **多种工具** - 3 个运行器满足不同需求
-- ⚡ **一键运行** - IDE 中双击运行，简单快捷
+- **指纹配置系统** - 一个 JSON 文件控制所有浏览器指纹特征，一键切换设备身份
+- **完整浏览器环境** - Navigator、Screen、Window、Location、DOM、Canvas、WebGL、Audio 全覆盖
+- **高性能沙箱** - 基于 Node.js VM，7866 行混淆代码 18ms 执行完成
+- **自动检测模式** - 自动报告脚本缺失的 API，给出加载建议
+- **代理监控** - 完整的 Proxy 追踪，记录所有属性访问和方法调用
+- **反检测** - webdriver=false、toString 保护、无 bot 特征泄露
 
-## 🚀 快速开始
-
-### 安装
+## 快速开始
 
 ```bash
-# 安装 Node.js 依赖
+# 安装依赖
 npm install
 
-# (可选) 安装 Python 依赖用于环境采集
-pip install -r collector/requirements.txt
-```
-
-### 30秒上手
-
-```bash
-# 运行你的第一个脚本
+# 最简单的方式：直接运行
 node standalone-runner.js your-script.js
 
-# 就这么简单！
+# 使用指纹配置运行（推荐）
+node standalone-runner.js --profile default your-script.js
+
+# 不确定脚本需要什么？用检测模式
+node standalone-runner.js --detect your-script.js
 ```
 
-## 📖 使用方式
+## 指纹配置系统 (Profile)
 
-### 方式1: 命令行运行（推荐）
+Profile 是本框架的核心能力。通过一个 JSON 配置文件，控制沙箱中所有浏览器可识别的特征值。
+
+### 使用方式
 
 ```bash
-# 基础运行
-node standalone-runner.js script.js
+# 使用内置配置（Chrome 120 + Win10 + NVIDIA RTX 3060）
+node standalone-runner.js --profile default your-script.js
 
-# 启用代理监控（查看详细日志）
-node standalone-runner.js --proxy script.js
-
-# 静默模式
-node standalone-runner.js --quiet script.js
-
-# 使用环境文件
-node standalone-runner.js --env environment.json script.js
-
-# 组合使用
-node standalone-runner.js --proxy --env env.json script.js
+# 使用自定义配置文件
+node standalone-runner.js --profile-file ./my-device.json your-script.js
 ```
 
-### 方式2: Web 界面
+### 配置文件结构
 
-```bash
-# 启动服务
-npm start
+配置文件存放在 `profiles/` 目录，格式如下：
 
-# 浏览器访问
-http://localhost:3000
-```
-
-**功能**:
-- ✅ 在线执行代码
-- ✅ 上传 JS 文件运行
-- ✅ 查看详细执行日志（属性访问、方法调用）
-- ✅ 搜索环境代码
-- ✅ 查看环境信息
-
-### 方式3: 一键运行
-
-```bash
-# Windows 批处理（IDE 中双击）
-run.bat script.js
-
-# PowerShell
-.\run.ps1 -ScriptFile script.js
-```
-
-## 🛠️ 可用工具
-
-### 1. 基础运行器 - `standalone-runner.js`
-
-快速运行，适合日常使用
-
-```bash
-node standalone-runner.js script.js
-node standalone-runner.js --proxy script.js    # 启用代理监控
-```
-
-### 2. 日志查看器 - `view-logs.js`
-
-查看函数调用和对象创建
-
-```bash
-node view-logs.js script.js
-npm run logs script.js
-```
-
-### 3. 高级代理监控 - `load-proxy-env.js`
-
-完整的 Proxy 监控，包含 toString 保护
-
-```bash
-node load-proxy-env.js script.js
-npm run proxy script.js
-```
-
-## 🕷️ 环境采集
-
-### 指纹采集
-
-```bash
-python collector/fingerprint-collector.py \
-  --url https://example.com \
-  --output fingerprint.json
-```
-
-### 网站环境采集（完整）
-
-采集 location、navigator、document、screen 等所有信息
-
-```bash
-python collector/website-env-collector.py \
-  --url https://www.douyin.com \
-  --output douyin-env.js \
-  --format js
-```
-
-**采集内容**:
-- ✅ Location (href, protocol, pathname, search, hash 等)
-- ✅ Navigator (userAgent, platform, plugins, mimeTypes 等 20+ 属性)
-- ✅ Document (URL, domain, referrer, title, cookie 等)
-- ✅ Screen (width, height, colorDepth, orientation 等)
-- ✅ Window (innerWidth, devicePixelRatio 等)
-- ✅ Performance (timing, timeOrigin)
-- ✅ WebGL 指纹
-- ✅ Canvas 指纹
-- ✅ Audio 指纹
-
-## 📋 完整工作流
-
-### 场景1: 快速运行混淆代码
-
-```bash
-node standalone-runner.js a_bogus119.js
-```
-
-### 场景2: 调试代码，需要看详细日志
-
-```bash
-# 启用代理监控
-node standalone-runner.js --proxy your-script.js
-
-# 或使用日志查看器
-node view-logs.js your-script.js
-```
-
-### 场景3: 采集真实环境运行
-
-```bash
-# 1. 采集目标网站环境
-python collector/website-env-collector.py \
-  --url https://target.com \
-  --output target-env.js \
-  --format js
-
-# 2. 使用采集的环境运行
-node standalone-runner.js --env target-env.js your-code.js
-
-# 3. 如需监控，加上 --proxy
-node standalone-runner.js --proxy --env target-env.js your-code.js
-```
-
-## 📊 日志查看
-
-### 命令行查看
-
-```bash
-# 运行时自动显示统计
-node standalone-runner.js --proxy script.js
-
-# 输出:
-# 📊 代理监控统计:
-#    属性访问 (get): 18 次
-#    属性设置 (set): 1 次
-#    总操作数: 19 次
-```
-
-### Web 界面查看
-
-1. 访问 http://localhost:3000
-2. 执行代码后：
-   - 点击 **"查看详细日志"** 按钮 - 弹窗显示所有日志
-   - 点击 **"访问日志"** - 查看历史日志
-   - 打开 **浏览器控制台** - 看到完整的日志输出
-
-**日志内容包括**:
-- 📝 属性访问（path、type、timestamp）
-- 🔧 方法调用（path、参数类型、timestamp）
-- 📋 控制台输出（log、error、warn、info）
-
-## 🎯 代理监控功能
-
-### 开关控制
-
-```bash
-# 不启用代理（快速）
-node standalone-runner.js script.js
-
-# 启用代理（详细日志）
-node standalone-runner.js --proxy script.js
-
-# 启用代理 + 静默模式（只看统计）
-node standalone-runner.js --proxy --quiet script.js
-```
-
-### 监控内容
-
-- ✅ 属性访问 (get)
-- ✅ 属性设置 (set)
-- ✅ 属性检查 (has)
-- ✅ 属性删除 (deleteProperty)
-- ✅ 属性定义 (defineProperty)
-- ✅ 原型链操作 (getPrototypeOf, setPrototypeOf)
-- ✅ 函数调用 (apply)
-- ✅ 构造调用 (construct)
-- ✅ toString 保护（防止检测）
-
-## 📝 NPM 命令
-
-```bash
-npm start              # 启动 Web 服务
-npm run dev            # 开发模式（自动重启）
-npm run run <file>     # 运行脚本
-npm run logs <file>    # 查看详细日志
-npm run proxy <file>   # 高级代理监控
-npm run collect        # 指纹采集
-npm run collect:web    # 网站环境采集
-```
-
-## 🎓 实战示例
-
-### 示例1: 抖音 a_bogus 参数
-
-```bash
-# 直接运行
-node standalone-runner.js a_bogus119.js
-
-# 结果: 执行成功，37ms，返回 undefined
-```
-
-### 示例2: 采集抖音环境
-
-```bash
-# 采集
-python collector/website-env-collector.py \
-  --url https://www.douyin.com \
-  --output douyin-env.js \
-  --format js
-
-# 查看采集内容
-cat douyin-env.js
-# 包含: location.href, navigator.userAgent, document.cookie 等
-```
-
-### 示例3: 带环境运行
-
-```bash
-# 使用采集的环境
-node standalone-runner.js --env douyin-env.js your-douyin-script.js
-
-# 启用代理监控
-node standalone-runner.js --proxy --env douyin-env.js your-douyin-script.js
-```
-
-## 🔍 代码搜索
-
-### Web 界面搜索
-
-1. 访问 http://localhost:3000
-2. 点击"环境代码库"
-3. 输入关键词（如 `navigator.userAgent`）
-4. 点击"搜索"
-5. 查看匹配文件和代码行
-
-## ⚙️ 高级配置
-
-### 环境文件格式
-
-**JSON 格式**:
 ```json
 {
+  "meta": { "name": "chrome-120-win10-nvidia", "description": "Chrome 120 Windows 10" },
   "navigator": {
-    "userAgent": "Mozilla/5.0 ...",
-    "platform": "Win32"
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",
+    "platform": "Win32",
+    "language": "zh-CN",
+    "hardwareConcurrency": 8,
+    "deviceMemory": 8,
+    "webdriver": false
   },
-  "location": {
-    "href": "https://example.com",
-    "hostname": "example.com"
-  }
+  "screen": { "width": 1920, "height": 1080, "colorDepth": 24 },
+  "window": { "innerWidth": 1920, "innerHeight": 969, "devicePixelRatio": 1 },
+  "canvas": {
+    "toDataURL": "data:image/png;base64,<从真实浏览器复制>",
+    "fingerprint": { "seed": 12345 }
+  },
+  "webgl": {
+    "parameters": { "37446": "ANGLE (NVIDIA, ...)", "37445": "Google Inc. (NVIDIA)", "3379": 16384 },
+    "extensions": ["WEBGL_debug_renderer_info", "..."]
+  },
+  "audio": { "sampleRate": 44100, "fingerprint": { "seed": 67890 } },
+  "location": { "href": "https://www.example.com/", "protocol": "https:" }
 }
 ```
 
-**JS 格式** (推荐):
+### 如何自定义指纹
+
+| 想改什么 | 改哪里 |
+|---------|--------|
+| 浏览器 UA | `navigator.userAgent` |
+| 操作系统 | `navigator.platform` + UA |
+| 屏幕分辨率 | `screen.width` / `screen.height` |
+| GPU 型号 | `webgl.parameters["37446"]` |
+| Canvas 指纹 | `canvas.toDataURL`（从真实浏览器复制） |
+| 地理位置 | `location.href` / `location.hostname` |
+| 时区 | `timezone.offset` / `timezone.timezone` |
+
+### 运行时动态修改
+
 ```javascript
-window.navigator = {
-    userAgent: "Mozilla/5.0 ...",
-    platform: "Win32"
-};
-window.location = {
-    href: "https://example.com"
-};
+// 在脚本中动态修改指纹
+window.__ProfileManager__.set('navigator.userAgent', 'Mozilla/5.0 ...');
+window.__ProfileManager__.merge('screen', { width: 2560, height: 1440 });
 ```
 
-## 📊 性能测试
+## 自动检测模式
 
-| 测试项 | 代码行数 | 执行时间 | 状态 |
-|--------|---------|---------|------|
-| 混淆代码 | 7866 行 | 37ms | ✅ 成功 |
-| 简单代码 | < 100 行 | < 5ms | ✅ 成功 |
-| 带环境注入 | 任意 | < 50ms | ✅ 成功 |
-| 代理监控 | 任意 | +10-20ms | ✅ 成功 |
-
-## 🎯 工具对比
-
-| 工具 | 速度 | 日志详细度 | 代理监控 | 适用场景 |
-|------|------|-----------|----------|---------|
-| standalone-runner | ⚡⚡⚡ | ⭐ | 可选 --proxy | 日常运行 |
-| view-logs | ⚡⚡ | ⭐⭐⭐ | 部分 | 查看调用 |
-| load-proxy-env | ⚡ | ⭐⭐⭐⭐⭐ | ✅ 完整 | 深度调试 |
-| Web 界面 | ⚡⚡ | ⭐⭐⭐ | ✅ | 可视化 |
-
-## 📚 项目结构
-
-```
-/project-root
-├── standalone-runner.js      # 独立运行器（主要工具）
-├── view-logs.js              # 日志查看器
-├── load-proxy-env.js         # 高级代理监控
-├── run.bat / run.ps1         # 一键运行脚本
-├── /server                   # Web 服务
-│   ├── index.js              # 服务入口
-│   ├── /routes               # API 路由
-│   └── /sandbox              # 沙箱模块
-│       └── SimpleSandbox.js  # 核心沙箱
-├── /web                      # Web 界面
-├── /env                      # 环境代码库
-│   └── /core                 # 核心模块
-│       ├── ProxyMonitor.js   # 代理监控
-│       └── ProxyEnv.js       # 代理环境
-├── /collector                # 采集器（Python）
-│   ├── fingerprint-collector.py      # 指纹采集
-│   └── website-env-collector.py      # 网站环境采集
-└── README.md                 # 本文档
-```
-
-## 🔧 API 接口
-
-### 沙箱执行
-
-- `POST /api/sandbox/run` - 执行代码
-- `POST /api/sandbox/run-file` - 执行文件
-- `POST /api/sandbox/inject-env` - 注入环境
-- `POST /api/sandbox/reset` - 重置沙箱
-
-### 状态查询
-
-- `GET /api/sandbox/status` - 沙箱状态
-- `GET /api/sandbox/environment` - 环境信息
-- `GET /api/sandbox/logs` - 访问日志
-
-### 环境管理
-
-- `GET /api/env/list` - 环境文件列表
-- `GET /api/env/file?path=` - 读取文件
-- `POST /api/env/file` - 保存文件
-
-## 💡 最佳实践
-
-### 日常使用
-```bash
-node standalone-runner.js script.js
-```
-
-### 调试分析
-```bash
-node standalone-runner.js --proxy script.js > logs.txt
-```
-
-### 环境补全
-```bash
-# 1. 采集真实环境
-python collector/website-env-collector.py --url <目标网站> --output env.js --format js
-
-# 2. 使用环境运行
-node standalone-runner.js --env env.js your-script.js
-```
-
-### 深度调试
-```bash
-# 完整代理监控 + 非静默模式
-node load-proxy-env.js script.js > full-logs.txt
-```
-
-## 🆘 常见问题
-
-### Q: 如何查看代码执行时访问了哪些属性？
-
-**A**: 使用 `--proxy` 参数
+不确定脚本需要哪些 API？用 `--detect` 自动分析：
 
 ```bash
-node standalone-runner.js --proxy script.js
+node standalone-runner.js --detect your-script.js
 ```
 
-### Q: 如何采集特定网站的环境？
+输出示例：
+```
+🔍 自动检测报告:
+   缺失 API: 3 个
+   运行时错误: 1 个
 
-**A**: 使用 website-env-collector.py
+   ⚠️  关键缺失:
+      - document.createElement
+      - navigator.userAgent
+
+   💡 建议加载:
+      - env/dom/document.js (DOM 操作)
+      - env/bom/navigator.js (Navigator 属性)
+```
+
+## 命令行参数
 
 ```bash
-python collector/website-env-collector.py \
-  --url https://target.com \
-  --output target-env.js \
-  --format js
+node standalone-runner.js [选项] <脚本文件>
+
+选项:
+  --profile <名称>        加载指纹配置（从 profiles/ 目录）
+  --profile-file <路径>   加载自定义指纹配置文件
+  --detect, -d           自动检测模式（报告缺失 API）
+  --proxy, -p            启用代理监控（记录所有属性访问）
+  --env <文件>            加载环境文件（JSON 或 JS）
+  --quiet, -q            静默模式
+  --timeout <毫秒>        超时时间（默认 60000ms）
+  --code <代码>           直接执行代码字符串
+  --help, -h             帮助信息
 ```
 
-### Q: 混淆代码报错怎么办？
-
-**A**: 
-1. 先用基础模式运行看错误
-2. 如果缺少环境，使用采集器采集
-3. 用代理监控查看详细操作
+### 组合使用
 
 ```bash
-node standalone-runner.js script.js              # 看错误
-python collector/website-env-collector.py ...    # 采集
-node standalone-runner.js --proxy --env env.js script.js  # 监控运行
+# 指纹配置 + 代理监控
+node standalone-runner.js --profile default --proxy script.js
+
+# 指纹配置 + 额外环境文件
+node standalone-runner.js --profile default --env extra-env.js script.js
+
+# 检测模式（不加载完整环境，看脚本需要什么）
+node standalone-runner.js --detect script.js
 ```
 
-## 📦 测试验证
+## 环境模块
 
-已成功测试：
+框架提供完整的浏览器环境模拟：
 
-✅ **a_bogus119.js** - 7866 行混淆代码，37ms 执行成功  
-✅ **环境采集** - 完整采集 location、navigator、document 等  
-✅ **代理监控** - 捕获 18 次属性访问，1 次属性设置  
-✅ **Web 界面** - 所有功能正常  
-✅ **一键运行** - Windows 批处理测试通过  
+| 模块 | 路径 | 覆盖内容 |
+|------|------|---------|
+| Navigator | `env/bom/navigator.js` | UA、platform、plugins、connection、webdriver |
+| Screen | `env/bom/screen.js` | 分辨率、色深、可用区域 |
+| Window | `env/bom/window.js` | innerWidth/Height、devicePixelRatio |
+| Location | `env/bom/location.js` | href、protocol、hostname、pathname |
+| Document | `env/dom/document.js` | createElement、querySelector、cookie |
+| Elements | `env/dom/elements.js` | Canvas、WebGL、所有 HTML 元素（59种） |
+| Audio | `env/webapi/audio.js` | AudioContext、OfflineAudioContext、所有节点类型 |
+| Storage | `env/bom/storage.js` | localStorage、sessionStorage |
+| Crypto | `env/bom/crypto.js` | crypto.getRandomValues、subtle |
+| Performance | `env/bom/performance.js` | performance.now、timing |
+| History | `env/bom/history.js` | pushState、replaceState |
 
-## 🎉 开始使用
+### 指纹 API 详情
+
+**Canvas 指纹**
+- `toDataURL()` 返回 profile 中配置的真实 base64 数据
+- `getImageData()` 基于 seed 生成确定性像素数据
+- `measureText()` 返回合理的文字测量值
+
+**WebGL 指纹**
+- `getParameter()` 从 profile 查表返回（GPU 型号、最大纹理等）
+- `getSupportedExtensions()` 返回配置的扩展列表
+- `getExtension('WEBGL_debug_renderer_info')` 返回正确的常量对象
+
+**Audio 指纹**
+- `OfflineAudioContext.startRendering()` 基于 seed 生成确定性音频数据
+- 完整的节点连接链：Oscillator → DynamicsCompressor → Destination
+- `getChannelData()` 返回可计算 hash 的 Float32Array
+
+## 其他运行方式
+
+### 高级代理监控
 
 ```bash
-# 最简单的方式
-node standalone-runner.js your-script.js
-
-# 完整功能
-node standalone-runner.js --proxy --env environment.js your-script.js
+node load-proxy-env.js script.js
+node load-proxy-env.js --profile default script.js
 ```
 
-## 📄 License
+完整的 Proxy 监控，包含 toString 保护，适合深度调试。
+
+### Web 界面
+
+```bash
+npm start
+# 访问 http://localhost:3000
+```
+
+支持在线执行、文件上传、日志查看、环境搜索。
+
+### 服务端 API
+
+```javascript
+import { SimpleSandbox } from './server/sandbox/SimpleSandbox.js';
+
+const sandbox = new SimpleSandbox();
+sandbox.init({ profile: profileData });
+sandbox.injectEnvironment('env/dom/document.js');
+const result = sandbox.execute(code);
+```
+
+## 项目结构
+
+```
+├── standalone-runner.js          # 主运行器（推荐入口）
+├── load-proxy-env.js             # 高级代理监控运行器
+├── profiles/
+│   └── default.json              # 默认指纹配置（Chrome 120 + Win10 + RTX 3060）
+├── env/
+│   ├── core/
+│   │   ├── ProfileManager.js     # 指纹配置管理器
+│   │   ├── AutoDetector.js       # 自动检测器
+│   │   ├── ProxyMonitor.js       # 代理监控
+│   │   └── ProxyEnv.js           # 代理环境
+│   ├── bom/
+│   │   ├── navigator.js          # Navigator 环境
+│   │   ├── screen.js             # Screen 环境
+│   │   ├── window.js             # Window 属性
+│   │   ├── location.js           # Location 环境
+│   │   ├── storage.js            # Storage 环境
+│   │   ├── crypto.js             # Crypto API
+│   │   ├── performance.js        # Performance API
+│   │   └── history.js            # History API
+│   ├── dom/
+│   │   ├── document.js           # Document 环境
+│   │   ├── elements.js           # HTML 元素 + Canvas/WebGL
+│   │   └── event.js              # Event 系统
+│   └── webapi/
+│       └── audio.js              # Web Audio API
+├── server/
+│   ├── index.js                  # Web 服务入口
+│   └── sandbox/
+│       └── SimpleSandbox.js      # 沙箱核心
+├── collector/
+│   ├── fingerprint-collector.py  # 指纹采集
+│   └── website-env-collector.py  # 网站环境采集
+├── test-profile.js               # Profile 系统测试（46项）
+└── test-fingerprint.js           # 指纹检测模拟测试
+```
+
+## 测试验证
+
+```bash
+# 运行 Profile 系统测试（46 项全部通过）
+node standalone-runner.js --profile default test-profile.js
+
+# 运行指纹检测模拟（模拟真实网站检测逻辑）
+node standalone-runner.js --profile default test-fingerprint.js
+
+# 兼容性测试（混淆代码无 profile 也能跑）
+node standalone-runner.js a_bogus119.js
+```
+
+| 测试项 | 结果 |
+|--------|------|
+| Profile 系统 46 项测试 | 全部通过 |
+| Canvas 指纹（绘制+toDataURL+hash） | 正常出值 |
+| WebGL 指纹（GPU 型号+扩展+参数） | 正常出值 |
+| Audio 指纹（OfflineAudioContext+渲染） | 正常出值 |
+| Bot 检测（webdriver/phantom/selenium） | 全部 false |
+| 混淆代码兼容性（a_bogus119.js） | 18ms 通过 |
+
+## 常见问题
+
+**Q: 如何从真实浏览器获取 Canvas 指纹值？**
+
+在浏览器控制台执行：
+```javascript
+var c = document.createElement('canvas');
+c.width = 200; c.height = 50;
+var ctx = c.getContext('2d');
+ctx.fillText('test', 10, 10);
+console.log(c.toDataURL());
+```
+将输出的 base64 字符串粘贴到 `profiles/default.json` 的 `canvas.toDataURL` 字段。
+
+**Q: 如何获取 WebGL GPU 信息？**
+
+在浏览器控制台执行：
+```javascript
+var c = document.createElement('canvas');
+var gl = c.getContext('webgl');
+var ext = gl.getExtension('WEBGL_debug_renderer_info');
+console.log(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+```
+
+**Q: 脚本报错缺少某个 API 怎么办？**
+
+1. 先用 `--detect` 模式查看缺什么
+2. 如果是已有模块覆盖的 API，加 `--profile default` 自动加载
+3. 如果是未覆盖的 API，在 `env/` 目录下补充对应模块
+
+**Q: 不用 profile 能跑吗？**
+
+可以。不加 `--profile` 参数时，框架行为与之前完全一致，向后兼容。
+
+## License
 
 MIT License
 
 ---
 
-**问题反馈**: 如有问题请提 Issue  
-**版本**: v2.0.0  
-**更新**: 2026-02-04
+**版本**: v3.0.0
+**更新**: 2026-05-28

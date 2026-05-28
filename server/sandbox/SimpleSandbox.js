@@ -19,7 +19,7 @@ export class SimpleSandbox {
      * 初始化沙箱
      */
     init(options = {}) {
-        const { timeout = 60000 } = options;
+        const { timeout = 60000, profile = null } = options;
 
         // 创建沙箱上下文
         const sandbox = {
@@ -67,6 +67,7 @@ export class SimpleSandbox {
             },
             __consoleOutput__: [],
             __undefinedPaths__: [],
+            __profile__: profile || null,
             // 日志记录辅助
             __logAccess__: (path, value) => {
                 this.accessLogs.push({

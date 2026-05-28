@@ -7,7 +7,7 @@
 
 (function() {
     'use strict';
-    
+
     // 获取监控系统
     const Monitor = window.__EnvMonitor__ || window.__envMonitor__ || {
         log: function() {},
@@ -15,26 +15,29 @@
         hasMock: function() { return false; },
         executeMock: function() { return { mocked: false }; }
     };
-    
+
+    const profile = (window.__profile__ && window.__profile__.window) || {};
+    const locProfile = (window.__profile__ && window.__profile__.location) || {};
+
     // ==================== 基础属性 ====================
     window.name = '';
     window.status = '';
     window.closed = false;
-    window.innerWidth = 1920;
-    window.innerHeight = 1080;
-    window.outerWidth = 1920;
-    window.outerHeight = 1080;
-    window.screenX = 0;
-    window.screenY = 0;
-    window.screenLeft = 0;
-    window.screenTop = 0;
+    window.innerWidth = profile.innerWidth || 1920;
+    window.innerHeight = profile.innerHeight || 969;
+    window.outerWidth = profile.outerWidth || 1920;
+    window.outerHeight = profile.outerHeight || 1080;
+    window.screenX = profile.screenX !== undefined ? profile.screenX : 0;
+    window.screenY = profile.screenY !== undefined ? profile.screenY : 0;
+    window.screenLeft = profile.screenLeft !== undefined ? profile.screenLeft : 0;
+    window.screenTop = profile.screenTop !== undefined ? profile.screenTop : 0;
     window.pageXOffset = 0;
     window.pageYOffset = 0;
     window.scrollX = 0;
     window.scrollY = 0;
-    window.devicePixelRatio = 1;
+    window.devicePixelRatio = profile.devicePixelRatio || 1;
     window.isSecureContext = true;
-    window.origin = 'https://example.com';
+    window.origin = locProfile.origin || 'https://example.com';
     window.crossOriginIsolated = false;
     
     // frames 相关

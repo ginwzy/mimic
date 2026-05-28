@@ -2342,7 +2342,7 @@
             }
             
             let element;
-            const Constructor = elementConstructors[lowerTag];
+            const Constructor = (window.__elementConstructors__ && window.__elementConstructors__[lowerTag]) || elementConstructors[lowerTag];
             
             if (Constructor) {
                 if (typeof Constructor === 'function') {

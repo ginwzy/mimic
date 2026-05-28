@@ -18,20 +18,43 @@ if (args.length === 0 || args[0] === '--help') {
 高级代理监控运行器
 
 用法:
-  node load-proxy-env.js <script.js> [--quiet]
+  node load-proxy-env.js <script.js> [选项]
 
 选项:
-  --quiet    静默模式，不显示详细日志
+  --quiet              静默模式，不显示详细日志
+  --profile <名称>      加载指纹配置（从 profiles/ 目录）
+  --profile-file <路径> 加载自定义指纹配置文件
 
 示例:
   node load-proxy-env.js a_bogus119.js
   node load-proxy-env.js test.js --quiet
+  node load-proxy-env.js test.js --profile default
     `);
     process.exit(0);
 }
 
-const scriptFile = args[0];
-const quietMode = args.includes('--quiet');
+let scriptFile = null;
+let quietMode = false;
+let profileName = null;
+let profileFile = null;
+
+for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--quiet') {
+        quietMode = true;
+    } else if (arg === '--profile' && i + 1 < args.length) {
+        profileName = args[++i];
+    } else if (arg === '--profile-file' && i + 1 < args.length) {
+        profileFile = args[++i];
+    } else if (!scriptFile) {
+        scriptFile = arg;
+    }
+}
+
+if (!scriptFile) {
+    console.error('✗ 请提供脚本文件');
+    process.exit(1);
+}
 
 // 读取脚本
 const scriptPath = path.resolve(scriptFile);
@@ -89,6 +112,36 @@ sandbox.globalThis = sandbox;
 sandbox.self = sandbox;
 
 const context = vm.createContext(sandbox);
+
+// 加载 Profile
+if (profileName || profileFile) {
+    let profilePath;
+    if (profileFile) {
+        profilePath = path.resolve(profileFile);
+    } else {
+        profilePath = path.join(__dirname, 'profiles', `${profileName}.json`);
+    }
+
+    if (fs.existsSync(profilePath)) {
+        try {
+            const profileData = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+            sandbox.__profile__ = profileData;
+            if (!quietMode) console.log(`✓ Profile 已加载: ${profileData.meta?.name || profileName || profileFile}`);
+        } catch (e) {
+            console.error(`✗ Profile 解析失败: ${e.message}`);
+            process.exit(1);
+        }
+    } else {
+        console.error(`✗ Profile 不存在: ${profilePath}`);
+        process.exit(1);
+    }
+
+    // 加载 ProfileManager
+    const pmPath = path.join(__dirname, 'env/core/ProfileManager.js');
+    if (fs.existsSync(pmPath)) {
+        vm.runInContext(fs.readFileSync(pmPath, 'utf-8'), context);
+    }
+}
 
 // 加载代理监控
 console.log('📦 加载代理监控模块...');

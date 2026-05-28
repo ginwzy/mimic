@@ -1,0 +1,236 @@
+{
+  "meta": {
+    "name": "chrome-120-win10-nvidia",
+    "description": "Chrome 120 on Windows 10 with NVIDIA GPU",
+    "version": "1.0",
+    "source": "manual"
+  },
+  "navigator": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "appCodeName": "Mozilla",
+    "appName": "Netscape",
+    "appVersion": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "platform": "Win32",
+    "product": "Gecko",
+    "productSub": "20030107",
+    "vendor": "Google Inc.",
+    "vendorSub": "",
+    "language": "zh-CN",
+    "languages": ["zh-CN", "zh", "en"],
+    "hardwareConcurrency": 8,
+    "deviceMemory": 8,
+    "maxTouchPoints": 0,
+    "webdriver": false,
+    "cookieEnabled": true,
+    "doNotTrack": null,
+    "onLine": true,
+    "pdfViewerEnabled": true,
+    "connection": {
+      "downlink": 10,
+      "effectiveType": "4g",
+      "rtt": 50,
+      "saveData": false
+    },
+    "plugins": [
+      {
+        "name": "PDF Viewer",
+        "description": "Portable Document Format",
+        "filename": "internal-pdf-viewer",
+        "length": 1,
+        "mimeTypes": [{ "type": "application/pdf", "suffixes": "pdf", "description": "Portable Document Format" }]
+      },
+      {
+        "name": "Chrome PDF Viewer",
+        "description": "Portable Document Format",
+        "filename": "internal-pdf-viewer",
+        "length": 1,
+        "mimeTypes": [{ "type": "application/pdf", "suffixes": "pdf", "description": "" }]
+      },
+      {
+        "name": "Chromium PDF Viewer",
+        "description": "Portable Document Format",
+        "filename": "internal-pdf-viewer",
+        "length": 1,
+        "mimeTypes": [{ "type": "application/pdf", "suffixes": "pdf", "description": "" }]
+      },
+      {
+        "name": "Microsoft Edge PDF Viewer",
+        "description": "Portable Document Format",
+        "filename": "internal-pdf-viewer",
+        "length": 1,
+        "mimeTypes": [{ "type": "application/pdf", "suffixes": "pdf", "description": "" }]
+      },
+      {
+        "name": "WebKit built-in PDF",
+        "description": "Portable Document Format",
+        "filename": "internal-pdf-viewer",
+        "length": 1,
+        "mimeTypes": [{ "type": "application/pdf", "suffixes": "pdf", "description": "" }]
+      }
+    ],
+    "userAgentData": {
+      "brands": [
+        { "brand": "Not_A Brand", "version": "8" },
+        { "brand": "Chromium", "version": "120" },
+        { "brand": "Google Chrome", "version": "120" }
+      ],
+      "mobile": false,
+      "platform": "Windows",
+      "architecture": "x86",
+      "bitness": "64",
+      "model": "",
+      "platformVersion": "10.0.0",
+      "fullVersionList": [
+        { "brand": "Not_A Brand", "version": "8.0.0.0" },
+        { "brand": "Chromium", "version": "120.0.6099.130" },
+        { "brand": "Google Chrome", "version": "120.0.6099.130" }
+      ]
+    }
+  },
+  "screen": {
+    "width": 1920,
+    "height": 1080,
+    "availWidth": 1920,
+    "availHeight": 1040,
+    "availLeft": 0,
+    "availTop": 0,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "isExtended": false,
+    "orientation": {
+      "angle": 0,
+      "type": "landscape-primary"
+    }
+  },
+  "window": {
+    "innerWidth": 1920,
+    "innerHeight": 969,
+    "outerWidth": 1920,
+    "outerHeight": 1080,
+    "screenX": 0,
+    "screenY": 0,
+    "screenLeft": 0,
+    "screenTop": 0,
+    "devicePixelRatio": 1
+  },
+  "canvas": {
+    "toDataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAACWCAYAAABkW7XSAAAAAXNSR0IArs4c6QAABGJJREFUeF7t1AEJAAAMw7Clnn/nLOBhBwm0e+fOESBAgEDgYGEJhQQIEPgELCwfgQCBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjICFlUklEAIELCx/gACBjMAPNnoBl0xHuxkAAAAASUVORK5CYII=",
+    "fingerprint": {
+      "seed": 48291637,
+      "noise": 0.01
+    }
+  },
+  "webgl": {
+    "vendor": "WebKit",
+    "renderer": "WebKit WebGL",
+    "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+    "shadingLanguageVersion": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+    "unmaskedVendor": "Google Inc. (NVIDIA)",
+    "unmaskedRenderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "extensions": [
+      "ANGLE_instanced_arrays",
+      "EXT_blend_minmax",
+      "EXT_color_buffer_half_float",
+      "EXT_disjoint_timer_query",
+      "EXT_float_blend",
+      "EXT_frag_depth",
+      "EXT_shader_texture_lod",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_sRGB",
+      "KHR_parallel_shader_compile",
+      "OES_element_index_uint",
+      "OES_fbo_render_mipmap",
+      "OES_standard_derivatives",
+      "OES_texture_float",
+      "OES_texture_float_linear",
+      "OES_texture_half_float",
+      "OES_texture_half_float_linear",
+      "OES_vertex_array_object",
+      "WEBGL_color_buffer_float",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_depth_texture",
+      "WEBGL_draw_buffers",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw"
+    ],
+    "parameters": {
+      "7936": "WebKit",
+      "7937": "WebKit WebGL",
+      "7938": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "35724": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+      "37445": "Google Inc. (NVIDIA)",
+      "37446": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "3379": 16384,
+      "3386": [32767, 32767],
+      "34076": 16384,
+      "34024": 16384,
+      "36347": 1024,
+      "34921": 16,
+      "36348": 30,
+      "34930": 16,
+      "36349": 12,
+      "34920": 1024,
+      "35660": 16,
+      "35661": 32,
+      "34045": 4,
+      "34852": 8,
+      "34853": 8,
+      "34854": 8,
+      "34855": 8,
+      "34856": 24,
+      "34857": 8,
+      "34858": 8,
+      "36063": 8192,
+      "33901": [1, 1],
+      "33902": [1, 1024],
+      "7935": "WebGL 1.0",
+      "7939": "WebGL 1.0"
+    }
+  },
+  "audio": {
+    "sampleRate": 44100,
+    "maxChannelCount": 2,
+    "state": "suspended",
+    "baseLatency": 0.005333,
+    "outputLatency": 0.016,
+    "fingerprint": {
+      "sum": 124.04347527516074,
+      "seed": 73920156
+    }
+  },
+  "location": {
+    "href": "https://www.example.com/",
+    "protocol": "https:",
+    "host": "www.example.com",
+    "hostname": "www.example.com",
+    "port": "",
+    "pathname": "/",
+    "search": "",
+    "hash": "",
+    "origin": "https://www.example.com"
+  },
+  "timezone": {
+    "offset": -480,
+    "timezone": "Asia/Shanghai"
+  },
+  "fonts": [
+    "Arial",
+    "Arial Black",
+    "Comic Sans MS",
+    "Courier New",
+    "Georgia",
+    "Impact",
+    "Microsoft YaHei",
+    "SimHei",
+    "SimSun",
+    "Times New Roman",
+    "Trebuchet MS",
+    "Verdana"
+  ],
+  "custom": {}
+}

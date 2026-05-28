@@ -659,72 +659,63 @@
         this.height = 150;
         this._context2d = null;
         this._contextWebGL = null;
+
+        var self = this;
+
+        this.getContext = function(contextId, options) {
+            Monitor.logCall('HTMLCanvasElement.getContext', [contextId, options], '[Context]', { elementId: self.__id__ });
+            var mock = Monitor.executeMock('HTMLCanvasElement.getContext', [contextId, options], self);
+            if (mock.mocked) return mock.result;
+
+            if (contextId === '2d') {
+                if (!self._context2d) self._context2d = new CanvasRenderingContext2D(self);
+                return self._context2d;
+            }
+            if (contextId === 'webgl' || contextId === 'experimental-webgl') {
+                if (!self._contextWebGL) self._contextWebGL = new WebGLRenderingContext(self);
+                return self._contextWebGL;
+            }
+            if (contextId === 'webgl2') {
+                return new WebGL2RenderingContext(self);
+            }
+            return null;
+        };
+
+        this.toDataURL = function(type, quality) {
+            Monitor.logCall('HTMLCanvasElement.toDataURL', [type, quality], 'data:image/png;base64,...');
+            var mock = Monitor.executeMock('HTMLCanvasElement.toDataURL', [type, quality], self);
+            if (mock.mocked) return mock.result;
+            var canvasProfile = window.__profile__ && window.__profile__.canvas;
+            if (canvasProfile && canvasProfile.toDataURL) return canvasProfile.toDataURL;
+            return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        };
+
+        this.toBlob = function(callback, type, quality) {
+            Monitor.logCall('HTMLCanvasElement.toBlob', [callback, type, quality], null);
+            var mock = Monitor.executeMock('HTMLCanvasElement.toBlob', [callback, type, quality], self);
+            if (mock.mocked) { if (callback) callback(mock.result); return; }
+            if (callback) callback(new Blob([''], { type: type || 'image/png' }));
+        };
+
+        this.captureStream = function(frameRate) {
+            Monitor.logCall('HTMLCanvasElement.captureStream', [frameRate], '[MediaStream]');
+            return {};
+        };
+
+        this.transferControlToOffscreen = function() {
+            Monitor.logCall('HTMLCanvasElement.transferControlToOffscreen', [], '[OffscreenCanvas]');
+            return {};
+        };
     }
     HTMLCanvasElement.prototype = Object.create(HTMLElement.prototype);
     HTMLCanvasElement.prototype.constructor = HTMLCanvasElement;
-    
-    HTMLCanvasElement.prototype.getContext = function(contextId, options) {
-        Monitor.logCall('HTMLCanvasElement.getContext', [contextId, options], '[Context]', {
-            elementId: this.__id__
-        });
-        
-        // 检查 mock
-        const mock = Monitor.executeMock('HTMLCanvasElement.getContext', [contextId, options], this);
-        if (mock.mocked) return mock.result;
-        
-        if (contextId === '2d') {
-            if (!this._context2d) {
-                this._context2d = new CanvasRenderingContext2D(this);
-            }
-            return this._context2d;
-        }
-        if (contextId === 'webgl' || contextId === 'experimental-webgl') {
-            if (!this._contextWebGL) {
-                this._contextWebGL = new WebGLRenderingContext(this);
-            }
-            return this._contextWebGL;
-        }
-        if (contextId === 'webgl2') {
-            return new WebGL2RenderingContext(this);
-        }
-        return null;
-    };
-    
-    HTMLCanvasElement.prototype.toDataURL = function(type, quality) {
-        Monitor.logCall('HTMLCanvasElement.toDataURL', [type, quality], 'data:image/png;base64,...');
-        const mock = Monitor.executeMock('HTMLCanvasElement.toDataURL', [type, quality], this);
-        if (mock.mocked) return mock.result;
-        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-    };
-    
-    HTMLCanvasElement.prototype.toBlob = function(callback, type, quality) {
-        Monitor.logCall('HTMLCanvasElement.toBlob', [callback, type, quality], null);
-        const mock = Monitor.executeMock('HTMLCanvasElement.toBlob', [callback, type, quality], this);
-        if (mock.mocked) {
-            if (callback) callback(mock.result);
-            return;
-        }
-        if (callback) {
-            callback(new Blob([''], { type: type || 'image/png' }));
-        }
-    };
-    
-    HTMLCanvasElement.prototype.captureStream = function(frameRate) {
-        Monitor.logCall('HTMLCanvasElement.captureStream', [frameRate], '[MediaStream]');
-        return {};
-    };
-    
-    HTMLCanvasElement.prototype.transferControlToOffscreen = function() {
-        Monitor.logCall('HTMLCanvasElement.transferControlToOffscreen', [], '[OffscreenCanvas]');
-        return {};
-    };
     
     window.HTMLCanvasElement = HTMLCanvasElement;
     
     // ==================== CanvasRenderingContext2D ====================
     function CanvasRenderingContext2D(canvas) {
         this.canvas = canvas;
-        
+
         // 状态
         this.fillStyle = '#000000';
         this.strokeStyle = '#000000';
@@ -746,9 +737,60 @@
         this.shadowOffsetX = 0;
         this.shadowOffsetY = 0;
         this.filter = 'none';
-        
+
         // 状态栈
         this._stateStack = [];
+
+        // 直接在实例上定义关键指纹方法
+        var self = this;
+
+        this.getImageData = function(sx, sy, sw, sh) {
+            Monitor.logCall('CanvasRenderingContext2D.getImageData', [sx, sy, sw, sh], null, { canvasId: canvas.__id__ });
+            var mock = Monitor.executeMock('CanvasRenderingContext2D.getImageData', [sx, sy, sw, sh], self);
+            if (mock.mocked) return mock.result;
+            var width = sw || 1;
+            var height = sh || 1;
+            var data = new Uint8ClampedArray(width * height * 4);
+            var canvasProfile = window.__profile__ && window.__profile__.canvas;
+            if (canvasProfile && canvasProfile.fingerprint && canvasProfile.fingerprint.seed) {
+                var s = canvasProfile.fingerprint.seed;
+                for (var i = 0; i < data.length; i++) {
+                    s = Math.imul(s, 1664525) + 1013904223 | 0;
+                    data[i] = (s >>> 24) & 0xFF;
+                }
+            }
+            return { data: data, width: width, height: height, colorSpace: 'srgb' };
+        };
+
+        this.measureText = function(text) {
+            Monitor.logCall('CanvasRenderingContext2D.measureText', [text], null, { canvasId: canvas.__id__ });
+            var mock = Monitor.executeMock('CanvasRenderingContext2D.measureText', [text], self);
+            if (mock.mocked) return mock.result;
+            var w = (text ? text.length : 0) * 8;
+            return {
+                width: w,
+                actualBoundingBoxAscent: 10, actualBoundingBoxDescent: 2,
+                actualBoundingBoxLeft: 0, actualBoundingBoxRight: w,
+                fontBoundingBoxAscent: 12, fontBoundingBoxDescent: 3,
+                emHeightAscent: 10, emHeightDescent: 2,
+                hangingBaseline: 10, alphabeticBaseline: 0, ideographicBaseline: -2
+            };
+        };
+
+        this.createImageData = function(widthOrData, height) {
+            var w = typeof widthOrData === 'number' ? widthOrData : (widthOrData ? widthOrData.width : 1);
+            var h = typeof height === 'number' ? height : (widthOrData ? widthOrData.height : 1);
+            return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h, colorSpace: 'srgb' };
+        };
+
+        this.isPointInPath = function() { return false; };
+        this.isPointInStroke = function() { return false; };
+        this.isContextLost = function() { return false; };
+        this.getLineDash = function() { return []; };
+        this.getTransform = function() { return new DOMMatrix(); };
+        this.getContextAttributes = function() {
+            return { alpha: true, colorSpace: 'srgb', desynchronized: false, willReadFrequently: false };
+        };
     }
     
     // Canvas 2D 方法
@@ -793,8 +835,17 @@
             if (method === 'getImageData') {
                 const width = args[2] || 1;
                 const height = args[3] || 1;
+                const data = new Uint8ClampedArray(width * height * 4);
+                var canvasProfile = window.__profile__ && window.__profile__.canvas;
+                if (canvasProfile && canvasProfile.fingerprint && canvasProfile.fingerprint.seed) {
+                    var s = canvasProfile.fingerprint.seed;
+                    for (var i = 0; i < data.length; i++) {
+                        s = (s * 1664525 + 1013904223) & 0xFFFFFFFF;
+                        data[i] = (s >>> 24) & 0xFF;
+                    }
+                }
                 return {
-                    data: new Uint8ClampedArray(width * height * 4),
+                    data: data,
                     width: width,
                     height: height,
                     colorSpace: 'srgb'
@@ -859,7 +910,7 @@
         this.drawingBufferWidth = canvas.width;
         this.drawingBufferHeight = canvas.height;
         this.drawingBufferColorSpace = 'srgb';
-        
+
         // WebGL 常量
         this.DEPTH_BUFFER_BIT = 0x00000100;
         this.STENCIL_BUFFER_BIT = 0x00000400;
@@ -872,6 +923,94 @@
         this.TRIANGLE_STRIP = 0x0005;
         this.TRIANGLE_FAN = 0x0006;
         // ... 更多常量
+
+        // 直接在实例上定义关键方法（避免 Proxy 导致原型链断裂）
+        var self = this;
+
+        this.getParameter = function(pname) {
+            Monitor.logCall('WebGLRenderingContext.getParameter', [pname], null, { canvasId: canvas.__id__ });
+            var mock = Monitor.executeMock('WebGLRenderingContext.getParameter', [pname], self);
+            if (mock.mocked) return mock.result;
+            var glProfile = window.__profile__ && window.__profile__.webgl;
+            if (glProfile && glProfile.parameters) {
+                var val = glProfile.parameters[String(pname)];
+                if (val !== undefined) return val;
+            }
+            return null;
+        };
+
+        this.getSupportedExtensions = function() {
+            Monitor.logCall('WebGLRenderingContext.getSupportedExtensions', [], null, { canvasId: canvas.__id__ });
+            var mock = Monitor.executeMock('WebGLRenderingContext.getSupportedExtensions', [], self);
+            if (mock.mocked) return mock.result;
+            var glProfile = window.__profile__ && window.__profile__.webgl;
+            if (glProfile && glProfile.extensions) return glProfile.extensions.slice();
+            return [];
+        };
+
+        this.getExtension = function(name) {
+            Monitor.logCall('WebGLRenderingContext.getExtension', [name], null, { canvasId: canvas.__id__ });
+            var mock = Monitor.executeMock('WebGLRenderingContext.getExtension', [name], self);
+            if (mock.mocked) return mock.result;
+            var glProfile = window.__profile__ && window.__profile__.webgl;
+            if (glProfile && glProfile.extensions) {
+                if (!glProfile.extensions.includes(name)) return null;
+                if (name === 'WEBGL_debug_renderer_info') {
+                    return { UNMASKED_VENDOR_WEBGL: 37445, UNMASKED_RENDERER_WEBGL: 37446 };
+                }
+                if (name === 'WEBGL_lose_context') {
+                    return { loseContext: function() {}, restoreContext: function() {} };
+                }
+                if (name === 'OES_vertex_array_object') {
+                    return {
+                        VERTEX_ARRAY_BINDING_OES: 34229,
+                        createVertexArrayOES: function() { return { __type__: 'WebGLVertexArrayObject' }; },
+                        deleteVertexArrayOES: function() {},
+                        isVertexArrayOES: function() { return false; },
+                        bindVertexArrayOES: function() {}
+                    };
+                }
+                if (name === 'ANGLE_instanced_arrays') {
+                    return {
+                        VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE: 35070,
+                        drawArraysInstancedANGLE: function() {},
+                        drawElementsInstancedANGLE: function() {},
+                        vertexAttribDivisorANGLE: function() {}
+                    };
+                }
+                return {};
+            }
+            return null;
+        };
+
+        this.getShaderPrecisionFormat = function(shaderType, precisionType) {
+            Monitor.logCall('WebGLRenderingContext.getShaderPrecisionFormat', [shaderType, precisionType], null);
+            return { rangeMin: 127, rangeMax: 127, precision: 23 };
+        };
+
+        this.getContextAttributes = function() {
+            return {
+                alpha: true, antialias: true, depth: true, desynchronized: false,
+                failIfMajorPerformanceCaveat: false, powerPreference: 'default',
+                premultipliedAlpha: true, preserveDrawingBuffer: false,
+                stencil: false, xrCompatible: false
+            };
+        };
+
+        this.getError = function() { return 0; };
+        this.isContextLost = function() { return false; };
+        this.getShaderParameter = function() { return true; };
+        this.getProgramParameter = function() { return true; };
+        this.getShaderInfoLog = function() { return ''; };
+        this.getProgramInfoLog = function() { return ''; };
+        this.getAttribLocation = function() { return 0; };
+        this.getUniformLocation = function() { return { __type__: 'WebGLUniformLocation' }; };
+        this.createShader = function() { return { __type__: 'WebGLShader' }; };
+        this.createProgram = function() { return { __type__: 'WebGLProgram' }; };
+        this.createBuffer = function() { return { __type__: 'WebGLBuffer' }; };
+        this.createTexture = function() { return { __type__: 'WebGLTexture' }; };
+        this.createFramebuffer = function() { return { __type__: 'WebGLFramebuffer' }; };
+        this.createRenderbuffer = function() { return { __type__: 'WebGLRenderbuffer' }; };
     }
     
     // WebGL 方法
@@ -930,10 +1069,53 @@
             if (method === 'createRenderbuffer') return { __type__: 'WebGLRenderbuffer' };
             if (method === 'getUniformLocation') return { __type__: 'WebGLUniformLocation' };
             if (method === 'getAttribLocation') return 0;
-            if (method === 'getParameter') return null;
+            if (method === 'getParameter') {
+                var glProfile = window.__profile__ && window.__profile__.webgl;
+                if (glProfile && glProfile.parameters) {
+                    var pname = args[0];
+                    var val = glProfile.parameters[String(pname)];
+                    if (val !== undefined) return val;
+                }
+                return null;
+            }
             if (method === 'getError') return 0;
-            if (method === 'getSupportedExtensions') return [];
-            if (method === 'getExtension') return null;
+            if (method === 'getSupportedExtensions') {
+                var glProfile2 = window.__profile__ && window.__profile__.webgl;
+                if (glProfile2 && glProfile2.extensions) return glProfile2.extensions;
+                return [];
+            }
+            if (method === 'getExtension') {
+                var extName = args[0];
+                var glProfile3 = window.__profile__ && window.__profile__.webgl;
+                if (glProfile3 && glProfile3.extensions) {
+                    if (!glProfile3.extensions.includes(extName)) return null;
+                    if (extName === 'WEBGL_debug_renderer_info') {
+                        return { UNMASKED_VENDOR_WEBGL: 37445, UNMASKED_RENDERER_WEBGL: 37446 };
+                    }
+                    if (extName === 'WEBGL_lose_context') {
+                        return { loseContext: function() {}, restoreContext: function() {} };
+                    }
+                    if (extName === 'OES_vertex_array_object') {
+                        return {
+                            VERTEX_ARRAY_BINDING_OES: 34229,
+                            createVertexArrayOES: function() { return { __type__: 'WebGLVertexArrayObject' }; },
+                            deleteVertexArrayOES: function() {},
+                            isVertexArrayOES: function() { return false; },
+                            bindVertexArrayOES: function() {}
+                        };
+                    }
+                    if (extName === 'ANGLE_instanced_arrays') {
+                        return {
+                            VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE: 35070,
+                            drawArraysInstancedANGLE: function() {},
+                            drawElementsInstancedANGLE: function() {},
+                            vertexAttribDivisorANGLE: function() {}
+                        };
+                    }
+                    return {};
+                }
+                return null;
+            }
             if (method === 'getShaderParameter') return true;
             if (method === 'getProgramParameter') return true;
             if (method === 'getShaderInfoLog') return '';
@@ -952,6 +1134,9 @@
                     stencil: false,
                     xrCompatible: false
                 };
+            }
+            if (method === 'getShaderPrecisionFormat') {
+                return { rangeMin: 127, rangeMax: 127, precision: 23 };
             }
             
             return undefined;
