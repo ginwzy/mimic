@@ -1,0 +1,8 @@
+{
+  "meta": { "name": "chromium-base", "description": "Chromium 公共结构默认(非身份值)" },
+  "navigator": {
+    "vendor": "Google Inc.",
+    "cookieEnabled": true,
+    "connection": { "downlink": 10, "effectiveType": "4g", "rtt": 50, "saveData": false }
+  }
+}

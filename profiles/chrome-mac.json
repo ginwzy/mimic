@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "name": "chrome-mac",
+    "description": "Chrome 131 on macOS",
+    "extends": "_base/chromium",
+    "traits": { "engine": "chromium", "platform": "macos", "formFactor": "desktop", "host": "chrome", "version": 131 }
+  },
+  "navigator": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "platform": "MacIntel",
+    "language": "zh-CN",
+    "languages": ["zh-CN", "zh", "en"],
+    "hardwareConcurrency": 8,
+    "deviceMemory": 8
+  },
+  "screen": { "width": 1920, "height": 1080, "availWidth": 1920, "availHeight": 1055, "colorDepth": 30, "pixelDepth": 30 },
+  "location": { "href": "https://example.com/" },
+  "timing": { "now": 1735689600000, "seed": 305419896 }
+}

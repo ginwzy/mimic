@@ -1,36 +1,27 @@
 {
-  "name": "js-sandbox-env-framework",
-  "version": "1.0.0",
-  "description": "JS逆向沙箱化补环境框架 - 支持Proxy递归代理、环境注入、AI辅助补环境",
-  "main": "server/index.js",
+  "name": "mimic",
+  "version": "0.1.0",
+  "description": "基于 jsdom 的浏览器环境伪装框架 —— Profile/traits 驱动,面向 JS 逆向反检测",
   "type": "module",
+  "main": "entry/index.js",
+  "bin": {
+    "mimic": "entry/cli.js"
+  },
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "test": "node test/test.js",
-    "run": "node standalone-runner.js",
-    "run:file": "node standalone-runner.js",
-    "logs": "node view-logs.js",
-    "proxy": "node load-proxy-env.js",
-    "collect": "python collector/fingerprint-collector.py",
-    "collect:web": "python collector/website-env-collector.py"
+    "mimic": "node entry/cli.js",
+    "smoke": "node smoke.js"
   },
   "keywords": [
-    "sandbox",
+    "jsdom",
     "browser-environment",
-    "js-reverse",
-    "isolated-vm",
-    "proxy"
+    "fingerprint",
+    "anti-detection",
+    "js-reverse"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "uuid": "^9.0.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.0"
+    "jsdom": "^25.0.1"
   },
   "engines": {
     "node": ">=18.0.0"
