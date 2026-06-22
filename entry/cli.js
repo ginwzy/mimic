@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * 命令入口:
- *   sdenv run    <script> [--profile name] [--trace]
- *   sdenv check  <script> [--profile name]
- *   sdenv serve  [--port 3000]
- *   sdenv profiles
+ *   mimic run     <script> [--profile name] [--trace]
+ *   mimic check   <script> [--profile name]
+ *   mimic capture [--port 8970]        起采集服务,目标设备访问后落盘 profile
+ *   mimic serve   [--port 3000]
+ *   mimic profiles
  */
 import fs from 'node:fs';
 import { Realm } from '../core/realm.js';
@@ -55,6 +56,11 @@ async function cmdServe(_rest, flags) {
   startServer({ port: Number(flags.port) || 3000 });
 }
 
+async function cmdCapture(_rest, flags) {
+  const { startCapture } = await import('../capture/server.js');
+  startCapture({ port: Number(flags.port) || 8970 });
+}
+
 function fail(msg) {
   console.error(msg);
   process.exit(1);
@@ -62,5 +68,5 @@ function fail(msg) {
 
 const [, , cmd, ...argv] = process.argv;
 const { flags, rest } = parseFlags(argv);
-const table = { run: cmdRun, check: cmdCheck, profiles: cmdProfiles, serve: cmdServe };
-(table[cmd] || (() => fail('命令: run | check | serve | profiles')))(rest, flags);
+const table = { run: cmdRun, check: cmdCheck, profiles: cmdProfiles, serve: cmdServe, capture: cmdCapture };
+(table[cmd] || (() => fail('命令: run | check | capture | serve | profiles')))(rest, flags);

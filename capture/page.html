@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mimic capture</title>
+  <style>
+    body { font: 15px/1.6 -apple-system, system-ui, sans-serif; margin: 0; padding: 16px; background: #111; color: #ddd; }
+    h1 { font-size: 18px; margin: 8px 0; }
+    #status { padding: 10px; border-radius: 8px; margin: 12px 0; }
+    .ok { background: #0a3d1f; } .err { background: #4d1414; } .run { background: #333; }
+    textarea { width: 100%; height: 50vh; background: #000; color: #6f6; border: 1px solid #333; border-radius: 8px; padding: 8px; font: 12px monospace; }
+    small { color: #888; }
+  </style>
+</head>
+<body>
+  <h1>mimic — 真机环境采集</h1>
+  <div id="status" class="run">采集中…</div>
+  <small>采集后自动回传并落盘到服务端 profiles/;下方为原始数据(可手动复制)。</small>
+  <textarea id="out" readonly></textarea>
+
+  <script src="/collect.js"></script>
+  <script>
+    (async () => {
+      const status = document.getElementById('status');
+      const out = document.getElementById('out');
+      try {
+        const data = await window.__capture__();
+        out.value = JSON.stringify(data, null, 2);
+        const res = await fetch('/capture', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const r = await res.json();
+        if (r.error) throw new Error(r.error);
+        const absent = Object.entries(r.fidelity).filter(([, v]) => v === 'absent').map(([k]) => k);
+        status.className = 'ok';
+        status.innerHTML = `✓ 已落盘 <b>${r.file}</b><br>traits: ${JSON.stringify(r.traits)}`
+          + (absent.length ? `<br>⚠ 渲染类未采集: ${absent.join(', ')}(profile 部分合成)` : '')
+          + (r.problems.length ? `<br>⚠ 自洽性: ${r.problems.join('; ')}` : '');
+      } catch (e) {
+        status.className = 'err';
+        status.textContent = '✗ ' + e.message;
+      }
+    })();
+  </script>
+</body>
+</html>

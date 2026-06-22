@@ -39,6 +39,7 @@ node -e "import('./entry/index.js').then(async ({Realm}) => {
 # 命令行
 npm run mimic -- run   <script> --profile chrome-mac [--trace]
 npm run mimic -- check <script>            # 缺失 API + 建议 patch
+npm run mimic -- capture                   # 起采集服务,目标设备(含手机/WebView)访问后落盘 profile
 npm run mimic -- profiles                  # 列出可用指纹
 
 # 冒烟测试(含跨 realm 身份 + 平台差异验证)
@@ -77,6 +78,7 @@ mask/    反检测原语
 patch/   navigator / screen / chrome / touch / canvas / webgl / audio / clock
 trace/   detector / monitor
 entry/   index(API) / cli / server
+capture/ 真机采集(collect 浏览器端 / derive 派生 traits / server 托管回传落盘)
 profiles/  _base/ + 各设备 profile
 reference/ legacy(旧实现) + sdenv/sdenv-extend(第三方参考,不入 git)
 ```
