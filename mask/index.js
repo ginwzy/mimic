@@ -66,6 +66,17 @@ export function createMask(window) {
   }
 
   /**
+   * fn() 之后的收尾:reparent 落地(→ window.Function.prototype)则删掉 fn 写入的 own toString,
+   * 回落原型链上的 nativeToString —— 真 native 方法/访问器无 own toString(从 Function.prototype 继承)。
+   * reparent 未落地(setPrototypeOf 被吞)则保留 own toString 兜底,避免 toString 源码泄漏。
+   * wrap / hook / wrapAccessor / mixin 共用此尾,避免"删 own toString"这一微妙判定被复制后漂移。
+   */
+  function dropOwnToString(func) {
+    if (Object.getPrototypeOf(func) === WFunctionProto) delete func.toString;
+    return func;
+  }
+
+  /**
    * 把"对象上按名已存在的方法/构造器"原地 native 化(对照 sdenv setFuncNative,但用 WeakSet 标记免同名误伤)。
    * 消除 jsdom 内置函数 toString 暴露实现源码的泄漏:window.atob.toString() → 'function atob() { [native code] }'。
    *
@@ -84,10 +95,7 @@ export function createMask(window) {
     if (typeof func !== 'function') return undefined;
     if (masked.has(func)) return func;                            // 已 wrap,幂等跳过
     if (origToString.call(func).includes('[native code]')) return func; // 真 intrinsic,本就 native,不动
-    fn(func, name, len);                                          // name←属性名、length、masked、own toString、reparent
-    if (Object.getPrototypeOf(func) === WFunctionProto) {
-      delete func.toString;                                       // reparent 落地 → 删 own toString,回落原型链 nativeToString
-    }
+    dropOwnToString(fn(func, name, len));                         // name←属性名、length、masked、own toString、reparent;落地则删 own toString
     return func;
   }
 
@@ -110,13 +118,28 @@ export function createMask(window) {
     if (typeof orig !== 'function') return undefined;
     const impl = factory(orig);
     if (typeof impl !== 'function') return undefined;
-    fn(impl, name, orig.length);                                  // name←属性名、length←原 arity、masked、own toString、reparent
-    if (Object.getPrototypeOf(impl) === WFunctionProto) {
-      delete impl.toString;                                       // reparent 落地 → 删 own toString,回落原型链 nativeToString
-    }
+    dropOwnToString(fn(impl, name, orig.length));                 // name←属性名、length←原 arity、masked、own toString、reparent;落地则删 own toString
     const od = Object.getOwnPropertyDescriptor(target, name);
     Object.defineProperty(target, name, od ? { ...od, value: impl } : { value: impl, writable: true, configurable: true });
     return impl;
+  }
+
+  /**
+   * 把对象上"已存在访问器"的 get/set 函数原地 native 化(对照 wrap,但作用于 accessor 的 get/set 而非 data 方法)。
+   * jsdom 原生 accessor(webidl2js 生成)的 name 已是 'get X'/'set X'、length 已对、无 .prototype 残留,
+   * 故只需 fn() 换 toString 外观 + reparent + 删 fn 写入的 own toString —— 不传 name/len(基线无 accessor.*.name/length divergence)。
+   * get/set 原地改造,描述符的 get/set 引用不变,无需重装描述符。真 intrinsic / 已 masked 的自动跳过。
+   * 消除 accessor.get/set.toStringNative=false 的实现源码泄漏(yvq.12)。注:不动 .prototype(mixin getter 残留属 yvq.11)。
+   */
+  function wrapAccessor(target, key) {
+    const d = target == null ? undefined : Object.getOwnPropertyDescriptor(target, key);
+    if (!d || (!d.get && !d.set)) return;
+    for (const half of [d.get, d.set]) {
+      if (typeof half !== 'function') continue;
+      if (masked.has(half)) continue;                              // 已 native 化,幂等跳过
+      if (origToString.call(half).includes('[native code]')) continue; // 真 intrinsic,本就 native,不动
+      dropOwnToString(fn(half));                                   // 不传 name/len(已对)→ masked/toString/reparent + 落地删 own toString
+    }
   }
 
   /** 对象类型标签:Object.prototype.toString.call(obj) → [object Name]。 */
@@ -150,7 +173,7 @@ export function createMask(window) {
   function mixin(target, getters) {
     const proto = Object.getPrototypeOf(target) || target;
     for (const [key, getValue] of Object.entries(getters)) {
-      const get = fn(function () { return adopt(getValue()); }, `get ${key}`);
+      const get = dropOwnToString(fn(function () { return adopt(getValue()); }, `get ${key}`)); // 删 fn 写入的 own toString(对齐 wrap/hook),消除 getter own-toString tell(yvq.12)
       const desc = { get, configurable: true, enumerable: true };
       try {
         Object.defineProperty(proto, key, desc);
@@ -171,5 +194,5 @@ export function createMask(window) {
     }
   }
 
-  return { fn, wrap, hook, tag, iface, mixin, adopt, boot };
+  return { fn, wrap, wrapAccessor, hook, tag, iface, mixin, adopt, boot };
 }

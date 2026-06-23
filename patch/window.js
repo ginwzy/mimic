@@ -46,7 +46,10 @@ export default {
       for (const key of Object.getOwnPropertyNames(obj)) {
         if (key === 'constructor') continue;
         const d = Object.getOwnPropertyDescriptor(obj, key);
-        if (d && typeof d.value === 'function') mask.wrap(obj, key, arityOf(obj, key)); // len 仅校正实证 arity 偏差;访问器(d.get/d.set)不在此处理
+        if (d) {
+          if (typeof d.value === 'function') mask.wrap(obj, key, arityOf(obj, key)); // data 方法:len 仅校正实证 arity 偏差
+          else if (d.get || d.set) mask.wrapAccessor(obj, key);                       // jsdom 原生访问器:get/set 一并 native 化(yvq.12)
+        }
       }
     };
 

@@ -39,16 +39,9 @@ export const RULES = [
       return extra.length === 1 && extra[0] === 'prototype'; // 多出的恰且仅为 prototype
     },
   },
-  {
-    issue: 'yvq.12',
-    reason: 'mask.wrap 只 native 化 data-property 方法;jsdom 原生访问器 getter 仍泄漏实现源码,访问器 native 化未实现。',
-    match: (e) => e.bucket === 'TELL' && e.field === 'accessor.get.toStringNative' && e.mimic === false && e.baseline === true,
-  },
-  {
-    issue: 'yvq.12',
-    reason: 'mask.mixin 造的 getter 带 own toString(fn 加、mixin 未删);真 Chrome getter 从 Function.prototype 继承 toString,无 own。',
-    match: (e) => e.bucket === 'TELL' && /^accessor\.(get|set)\.hasOwnToString$/.test(e.field) && e.mimic === true && e.baseline === false,
-  },
+  // yvq.12(访问器 native 化 + getter own-toString)已修:patch/window sweep 经 mask.wrapAccessor 把 jsdom 原生
+  // accessor get/set 一并 native 化,mask.mixin 删自造 getter 的 own toString。原两条白名单规则
+  // (accessor.get.toStringNative / accessor.(get|set).hasOwnToString)已无匹配项,删除以让 gate 重新守住。
   {
     issue: 'yvq.6',
     reason: 'jsdom 天生不提供这些标准浏览器对象/方法 —— 属覆盖面工作(coverage gap),非 T1 结构回归。',
