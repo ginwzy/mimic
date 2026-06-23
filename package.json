@@ -9,7 +9,10 @@
   },
   "scripts": {
     "mimic": "node entry/cli.js",
-    "smoke": "node smoke.js"
+    "smoke": "node smoke.js",
+    "diff": "node entry/cli.js diff",
+    "baseline": "node entry/cli.js baseline",
+    "test": "node harness/test.js"
   },
   "keywords": [
     "jsdom",

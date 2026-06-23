@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mimic — 结构基线采集</title>
+  <style>
+    body { font: 15px/1.6 -apple-system, system-ui, sans-serif; margin: 0; padding: 16px; background: #111; color: #ddd; }
+    h1 { font-size: 18px; margin: 8px 0; }
+    #status { padding: 10px; border-radius: 8px; margin: 12px 0; }
+    .ok { background: #0a3d1f; } .err { background: #4d1414; } .run { background: #333; }
+    textarea { width: 100%; height: 50vh; background: #000; color: #6f6; border: 1px solid #333; border-radius: 8px; padding: 8px; font: 12px monospace; }
+    small { color: #888; }
+  </style>
+</head>
+<body>
+  <h1>mimic — 真机结构基线采集</h1>
+  <div id="status" class="run">采集中…</div>
+  <small>采集 window/navigator/document/各原型的结构面(name/length/native/描述符/原型链),回传落盘到 harness/baselines/。</small>
+  <textarea id="out" readonly></textarea>
+
+  <script src="/probe.js"></script>
+  <script>
+    (async () => {
+      const status = document.getElementById('status');
+      const out = document.getElementById('out');
+      try {
+        const snap = window.__probe__();
+        snap.meta = snap.meta || {};
+        snap.meta.source = 'chrome';
+        snap.meta.ua = navigator.userAgent;
+        out.value = JSON.stringify(snap, null, 2);
+        const res = await fetch('/probe' + location.search, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(snap),
+        });
+        const r = await res.json();
+        if (r.error) throw new Error(r.error);
+        status.className = 'ok';
+        status.innerHTML = `✓ 基线已落盘 <b>${r.file}</b><br>targets: ${r.targets} · resolved: ${r.resolved}`;
+      } catch (e) {
+        status.className = 'err';
+        status.textContent = '✗ ' + e.message;
+      }
+    })();
+  </script>
+</body>
+</html>
