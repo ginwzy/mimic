@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "source": "capture",
+    "hygiene": {
+      "devicePixelRatio": 2.75,
+      "issues": []
+    },
+    "fidelity": {
+      "navigator": "real",
+      "screen": "real",
+      "window": "real",
+      "timezone": "real",
+      "webgl": "params",
+      "canvas": "absent",
+      "audio": "absent",
+      "fonts": "absent"
+    },
+    "traits": {
+      "engine": "chromium",
+      "platform": "android",
+      "formFactor": "mobile",
+      "host": "chrome",
+      "version": 138
+    },
+    "name": "android-chrome-mobile-v138"
+  },
+  "navigator": {
+    "userAgent": "Mozilla/5.0 (Linux; Android 15; M2012K11AC Build/BP1A.250505.005) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36",
+    "appVersion": "5.0 (Linux; Android 15; M2012K11AC Build/BP1A.250505.005) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36",
+    "platform": "Linux armv8l",
+    "vendor": "Google Inc.",
+    "language": "en-US",
+    "languages": [
+      "en-US"
+    ],
+    "hardwareConcurrency": 8,
+    "maxTouchPoints": 5,
+    "cookieEnabled": true,
+    "connection": {
+      "effectiveType": "4g",
+      "downlink": 10,
+      "rtt": 0,
+      "saveData": false
+    }
+  },
+  "screen": {
+    "width": 393,
+    "height": 873,
+    "availWidth": 393,
+    "availHeight": 873,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "orientation": {
+      "type": "portrait-primary",
+      "angle": 0
+    }
+  },
+  "window": {
+    "innerWidth": 394,
+    "innerHeight": 717,
+    "outerWidth": 393,
+    "outerHeight": 715,
+    "devicePixelRatio": 2.75
+  },
+  "timezone": {
+    "timeZone": "Asia/Shanghai",
+    "offset": -480
+  },
+  "webgl": {
+    "parameters": {
+      "3379": 4096,
+      "3386": [
+        16384,
+        16384
+      ],
+      "7936": "WebKit",
+      "7937": "WebKit WebGL",
+      "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "33901": [
+        1,
+        1023
+      ],
+      "33902": [
+        1,
+        8
+      ],
+      "34024": 16384,
+      "34076": 4096,
+      "34921": 32,
+      "34930": 16,
+      "35661": 96,
+      "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+      "36347": 256,
+      "36348": 31,
+      "36349": 256,
+      "37445": "Qualcomm",
+      "37446": "Adreno (TM) 650"
+    },
+    "extensions": [
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_float_blend",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_norm16",
+      "OES_texture_float_linear",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw"
+    ],
+    "unmaskedVendor": "Qualcomm",
+    "unmaskedRenderer": "Adreno (TM) 650"
+  }
+}
