@@ -4,6 +4,7 @@
  */
 import { diff, summarize } from './diff.js';
 import { classify } from './whitelist.js';
+import { hostOf } from './server.js';
 
 let pass = 0; let failed = 0;
 function ok(name, cond) {
@@ -73,5 +74,16 @@ const fnT = (id, fn) => ({ id, category: 'function', resolved: true, fn });
   ok('MISSING(jsdom 缺)→ gate 不阻断 + 落 yvq.6', s.gatePass === true && s.counts.MISSING === 1);
 }
 
-console.log(`\nharness diff 回归:${pass} 通过 / ${failed} 失败`);
+// —— yvq.19:harness host 判定用 probe 的 window.chrome target.resolved(非 UA)——
+{
+  const viaUA = 'Mozilla/5.0 (Linux; Android 15; M2012K11AC Build/x) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36';
+  ok('hostOf: window.chrome resolved:false(via)→ webview',
+    hostOf({ targets: [{ id: 'window.chrome', resolved: false }], meta: { ua: viaUA } }) === 'webview');
+  ok('hostOf: window.chrome resolved:true → chrome',
+    hostOf({ targets: [{ id: 'window.chrome', resolved: true }], meta: { ua: 'x' } }) === 'chrome');
+  ok('hostOf: 无 target → 回退 UA(含 wv → webview)',
+    hostOf({ targets: [], meta: { ua: 'Mozilla/5.0 (Linux; Android 13; Pixel 7; wv) Version/4.0 Chrome/131 Mobile Safari/537.36' } }) === 'webview');
+}
+
+console.log(`\nharness 回归:${pass} 通过 / ${failed} 失败`);
 process.exit(failed ? 1 : 0);

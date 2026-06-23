@@ -3,7 +3,7 @@
  * 暴露 window.__capture__():Promise<rawProfile>。
  *
  * 只采"标量/查表"类字段(设备报告的固定值,与检测器无关):
- *   navigator.* · userAgentData · screen · window · timezone · WebGL getParameter 表
+ *   navigator.* · userAgentData · screen · window(含 window.chrome 存在性) · timezone · WebGL getParameter 表
  * 渲染派生类(canvas/audio/fonts)不采为单值 —— 标 fidelity:absent,
  * 因为它们是 (操作输入 → GPU/驱动) 的函数,只有键到检测器实际 payload 才可回放。
  */
@@ -101,6 +101,10 @@
       innerWidth: window.innerWidth, innerHeight: window.innerHeight,
       outerWidth: window.outerWidth, outerHeight: window.outerHeight,
       devicePixelRatio: window.devicePixelRatio,
+      // window.chrome 存在性 —— host 判定的结构事实(Chrome 浏览器有 / WebView 无)。
+      // 比 UA 的 wv 标记可靠:WebView 可自定义 UA 去掉 wv(如 via 浏览器),但难伪造 window.chrome。
+      // 采浅 own-keys(非深结构),兼作 patch/chrome 回放的形状参考。
+      chrome: window.chrome ? { ownKeys: Object.getOwnPropertyNames(window.chrome) } : null,
     };
 
     p.timezone = {

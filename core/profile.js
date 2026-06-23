@@ -105,8 +105,15 @@ export class Profile {
     const problems = [];
     const want = (cond, msg) => { if (!cond) problems.push(msg); };
 
-    if (t.host === 'webview') want(/\bwv\b/.test(ua), 'host=webview 但 UA 不含 wv');
-    if (t.host === 'chrome') want(!/\bwv\b/.test(ua), 'host=chrome 但 UA 含 wv');
+    // host 自洽:优先用结构事实「有无 window.chrome」(collect 采),UA-wv 仅在无结构信号时单向兜底。
+    // 不再以「UA 无 wv」断言 chrome —— 改 UA 的 WebView(如 via)正是反例。
+    const winChrome = this.get('window.chrome', undefined);
+    if (winChrome !== undefined) {
+      if (t.host === 'chrome') want(winChrome != null, 'host=chrome 但采集数据无 window.chrome');
+      if (t.host === 'webview') want(winChrome == null, 'host=webview 但采集数据有 window.chrome');
+    } else if (t.host === 'chrome') {
+      want(!/\bwv\b/.test(ua), 'host=chrome 但 UA 含 wv');
+    }
     if (t.platform === 'android') want(/Android/.test(ua), 'platform=android 但 UA 不含 Android');
     if (t.platform === 'windows') want(platform === 'Win32', 'platform=windows 但 navigator.platform≠Win32');
     if (t.platform === 'macos') want(platform === 'MacIntel', 'platform=macos 但 navigator.platform≠MacIntel');

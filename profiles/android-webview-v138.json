@@ -19,10 +19,10 @@
       "engine": "chromium",
       "platform": "android",
       "formFactor": "mobile",
-      "host": "chrome",
+      "host": "webview",
       "version": 138
     },
-    "name": "android-chrome-mobile-v138"
+    "name": "android-webview-v138"
   },
   "navigator": {
     "userAgent": "Mozilla/5.0 (Linux; Android 15; M2012K11AC Build/BP1A.250505.005) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36",
@@ -60,7 +60,8 @@
     "innerHeight": 717,
     "outerWidth": 393,
     "outerHeight": 715,
-    "devicePixelRatio": 2.75
+    "devicePixelRatio": 2.75,
+    "chrome": null
   },
   "timezone": {
     "timeZone": "Asia/Shanghai",

@@ -4,7 +4,7 @@
     "probeVersion": 1,
     "complete": true,
     "ua": "Mozilla/5.0 (Linux; Android 15; M2012K11AC Build/BP1A.250505.005) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36",
-    "profile": "android-chrome-v138"
+    "profile": "android-webview-v138"
   },
   "targets": [
     {

@@ -15,10 +15,24 @@ export function deriveTraits(data) {
     : /Linux|X11/.test(ua) ? 'linux'
     : 'unknown';
   traits.formFactor = /Mobile/.test(ua) ? 'mobile' : 'desktop';
-  traits.host = /\bwv\b/.test(ua) ? 'webview' : 'chrome';
+  traits.host = detectHost(data);
   const m = ua.match(/Chrom(?:e|ium)\/(\d+)/);
   if (m) traits.version = Number(m[1]);
   return traits;
+}
+
+/**
+ * host 判定 —— 优先用结构事实「有无 window.chrome」,UA 仅作回退。
+ * 根因:WebView 可自定义 UA 去掉 wv(如 via 浏览器),UA 不再可靠;
+ * window.chrome 是 Chrome 浏览器层的结构标志(WebView 无),难伪造。
+ * 信号优先级:window.chrome 存在性(collect 采)> navigator.userAgentData(UA-CH,仅 Chrome 层有)> UA wv(弱回退)。
+ * 注:'chrome' in window 区分「采过且无」(null)与「老数据未采」(键缺失)。
+ */
+export function detectHost(data) {
+  const w = data.window;
+  if (w && 'chrome' in w) return w.chrome != null ? 'chrome' : 'webview';
+  if (data.navigator?.userAgentData) return 'chrome';
+  return /\bwv\b/.test(data.navigator?.userAgent || '') ? 'webview' : 'chrome';
 }
 
 /** 建议的 profile 名:platform-host[-mobile]-vNNN。 */

@@ -19,13 +19,19 @@ function safeName(raw) {
   return clean || 'captured';
 }
 
-/** 从 UA 粗派生基线名(平台-host-vNNN)。 */
-function deriveName(ua) {
-  const u = ua || '';
+/** host 判定:probe 已采 window.chrome target → 用其 resolved(结构事实优先于 UA)。 */
+export function hostOf(snap) {
+  const t = (snap.targets || []).find((x) => x.id === 'window.chrome');
+  if (t) return t.resolved ? 'chrome' : 'webview';
+  return /\bwv\b/.test(snap.meta?.ua || '') ? 'webview' : 'chrome';
+}
+
+/** 从 UA(平台/版本)+ 结构信号(host)派生基线名(平台-host-vNNN)。 */
+function deriveName(snap) {
+  const u = snap.meta?.ua || '';
   const platform = /Android/.test(u) ? 'android' : /Mac OS X|Macintosh/.test(u) ? 'mac' : /Windows/.test(u) ? 'win' : /Linux|X11/.test(u) ? 'linux' : 'unknown';
-  const host = /\bwv\b/.test(u) ? 'webview' : 'chrome';
   const m = u.match(/Chrom(?:e|ium)\/(\d+)/);
-  return [platform, host, m ? `v${m[1]}` : null].filter(Boolean).join('-');
+  return [platform, hostOf(snap), m ? `v${m[1]}` : null].filter(Boolean).join('-');
 }
 
 function lanURLs(port) {
@@ -42,7 +48,7 @@ function saveBaseline(snap, nameHint) {
   snap.meta = snap.meta || {};
   snap.meta.source = 'chrome';
   snap.meta.complete = true; // 真机全量基线
-  const name = safeName(nameHint || snap.meta.profile || deriveName(snap.meta.ua));
+  const name = safeName(nameHint || snap.meta.profile || deriveName(snap));
   snap.meta.profile = snap.meta.profile || name;
 
   const file = path.join(BASELINES_DIR, `${name}.json`);
