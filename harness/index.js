@@ -13,11 +13,15 @@ import { diff, summarize } from './diff.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const BASELINES_DIR = path.join(HERE, 'baselines');
 
-/** 解析 baseline:绝对/相对路径直用;裸名到 baselines/<name>.json。 */
+/** 解析 baseline:绝对/相对路径直用;裸名到 baselines/<name>.json;省略则取 baselines/ 下第一个(内置 seed 默认已移除,需先经真机采集)。 */
 function resolveBaseline(ref) {
-  if (!ref) return path.join(BASELINES_DIR, 'chrome-mac-seed.json');
-  if (ref.endsWith('.json') || ref.includes('/')) return path.resolve(ref);
-  return path.join(BASELINES_DIR, `${ref}.json`);
+  if (ref) {
+    if (ref.endsWith('.json') || ref.includes('/')) return path.resolve(ref);
+    return path.join(BASELINES_DIR, `${ref}.json`);
+  }
+  const found = listBaselines();
+  if (!found.length) throw new Error('无可用基线:先用 `mimic baseline` 采一份真机基线到 harness/baselines/');
+  return path.join(BASELINES_DIR, `${found[0]}.json`);
 }
 
 export function listBaselines() {
@@ -31,14 +35,16 @@ export function listBaselines() {
 /**
  * @param {object} [opts]
  * @param {string} [opts.profile]   mimic profile(默认取基线 meta.profile)
- * @param {string} [opts.baseline]  基线名/路径(默认 chrome-mac-seed)
+ * @param {string} [opts.baseline]  基线名/路径(省略取 baselines/ 下第一个)
  * @param {boolean} [opts.t1Only]   仅就 T1 已修目标判 gate
  * @returns {Promise<{profile,baseline,entries,summary}>}
  */
 export async function runDiff({ profile, baseline, t1Only = false } = {}) {
   const file = resolveBaseline(baseline);
   const base = JSON.parse(readFileSync(file, 'utf8'));
-  const prof = profile || base.meta?.profile || 'chrome-mac';
+  // 注意:基线 meta.profile 是"真机采集平台标识",非"要加载的伪装 profile" —— 不拿它当默认 profile,
+  // 否则 linux-chrome-v143 这类基线会去找不存在的 profiles/linux-chrome-v143.json。
+  const prof = profile || 'chrome-mac';
   const mimicSnap = await snapshotMimic(prof);
   const entries = diff(base, mimicSnap);
   const summary = summarize(entries, { t1Only });

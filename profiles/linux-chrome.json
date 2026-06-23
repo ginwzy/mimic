@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "name": "linux-chrome",
+    "description": "Chrome 143 on Linux (X11 x86_64)。UA/appVersion/platform 经真机基线 linux-chrome-v143 的 meta.ua 确证;screen/hardwareConcurrency/deviceMemory 为 Linux 桌面占位值(probe 不采身份值),建议 `mimic capture` 采真机精化。",
+    "extends": "_base/chromium",
+    "traits": { "engine": "chromium", "platform": "linux", "formFactor": "desktop", "host": "chrome", "version": 143 }
+  },
+  "navigator": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+    "appVersion": "5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+    "platform": "Linux x86_64",
+    "language": "zh-CN",
+    "languages": ["zh-CN", "zh", "en"],
+    "hardwareConcurrency": 8,
+    "deviceMemory": 8
+  },
+  "screen": { "width": 1920, "height": 1080, "availWidth": 1920, "availHeight": 1053, "colorDepth": 24, "pixelDepth": 24 },
+  "location": { "href": "https://example.com/" },
+  "timing": { "now": 1735689600000, "seed": 1432778632 }
+}

@@ -110,6 +110,7 @@ export class Profile {
     if (t.platform === 'android') want(/Android/.test(ua), 'platform=android 但 UA 不含 Android');
     if (t.platform === 'windows') want(platform === 'Win32', 'platform=windows 但 navigator.platform≠Win32');
     if (t.platform === 'macos') want(platform === 'MacIntel', 'platform=macos 但 navigator.platform≠MacIntel');
+    if (t.platform === 'linux') want(/Linux/.test(platform), 'platform=linux 但 navigator.platform 不含 Linux');
     if (t.formFactor === 'mobile') want(/Mobile/.test(ua), 'formFactor=mobile 但 UA 不含 Mobile');
     if (t.formFactor === 'desktop') want(!/Mobile/.test(ua), 'formFactor=desktop 但 UA 含 Mobile');
 
