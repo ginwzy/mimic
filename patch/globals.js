@@ -9,10 +9,9 @@
  */
 
 // 缺失 window 方法表:[名, arity, 实现, gate?]。length 取自真机基线,与箭头实参个数解耦(由 fn 校正)。
-// gate(traits)→bool:平台差异方法的门控(缺省=全平台);据真机基线 —— 桌面有、WebView 无的归 desktop。
-const desktopOnly = (t) => t.formFactor === 'desktop';
-// Chrome-vs-WebView 特性差(与桌面/移动无关):WebView 缺的 Chrome 专属 secure-context API 归此。
-const chromeHost = (t) => t.host === 'chrome';
+// gate(traits)→bool:平台差异方法的门控(缺省=全平台);谓词共享自 ./gates(见该文件:门控是一致性约束)。
+import { chromeHost, desktopOnly } from './gates.js';
+
 function methodTable(window, mask) {
   const W = window;
   const { pending, adopt } = mask; // window-realm Promise 壳(语义见 mask)
