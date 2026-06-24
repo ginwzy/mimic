@@ -183,6 +183,37 @@ export function createMask(window) {
     return repl;
   }
 
+  /**
+   * 把 target 的全部 own **字符串**键按 order 重排为真机(Blink)序,消除 getOwnPropertyNames 顺序 tell。
+   * 根因:own 字符串键的枚举序 = 定义(插入)序;jsdom 建原型时的定义序 ≠ Blink IDL 序,且后续 patch 注入的
+   * 键只能 append、无法插进 jsdom 原生键中间 → 整体序错(顺序可被检测器直接逐项对比,是强 tell)。redefine
+   * 已存在键不改其位置,故唯一修法:抓全部描述符 → 删全部 configurable 字符串键 → 按 order 逐个重建。
+   * 描述符原样回写(getter 身份 / value / flags 不变)→ 行为不变、不引入新 tell。整数索引键(若有)恒排在
+   * 字符串键之前、Symbol 键恒排其后,二者均不参与 getOwnPropertyNames 比较,故只动字符串键。
+   * 漂移防护:实际 own 字符串键集合 ≠ order 集合时经宿主 console(Node realm)告警 —— order 缺的键按原
+   * 相对序 append 到尾部,order 多的键跳过。把"注入键集变动 / 真机版本漂移致 order 过期"暴露而非静默错位。
+   * non-configurable 键不删(留原位)+ 描述符原样回写(no-op);全 configurable 的原型可达精确真机序。
+   */
+  function reorderOwnKeys(target, order) {
+    const names = Object.getOwnPropertyNames(target);
+    const want = new Set(order);
+    const present = new Set(names);
+    const missing = order.filter((k) => !present.has(k)); // order 有、target 无 → 跳过
+    const extra = names.filter((k) => !want.has(k));       // target 有、order 无 → append 尾部
+    if (missing.length || extra.length) {
+      try {
+        console.warn(`[mask.reorderOwnKeys] ${target[Symbol.toStringTag] || '?'} own 键集合漂移`
+          + `:order 缺 [${extra.join(',')}],order 多 [${missing.join(',')}]`);
+      } catch { /* noop */ }
+    }
+    const desc = new Map(names.map((k) => [k, Object.getOwnPropertyDescriptor(target, k)]));
+    for (const k of names) if (desc.get(k).configurable) delete target[k];
+    for (const k of order.filter((k) => present.has(k)).concat(extra)) {
+      Object.defineProperty(target, k, desc.get(k));
+    }
+    return target;
+  }
+
   /** 对象类型标签:Object.prototype.toString.call(obj) → [object Name]。 */
   function tag(obj, name) {
     Object.defineProperty(obj, Symbol.toStringTag, {
@@ -292,6 +323,6 @@ export function createMask(window) {
   return {
     fn, native, dropOwnToString, wrap, wrapAccessor, deproto, hook, tag,
     iface, singleton, method, methods, accessor, accessors, mixin, adopt, boot,
-    promise, pending,
+    promise, pending, reorderOwnKeys,
   };
 }
