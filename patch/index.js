@@ -3,6 +3,7 @@
  * 顺序无关:实际执行顺序由各 patch 的 `after` 依赖拓扑决定。
  */
 import windowPatch from './window.js';
+import jsdomTrim from './jsdom-trim.js';
 import globals from './globals.js';
 import stack from './stack.js';
 import symbol from './symbol.js';
@@ -18,4 +19,4 @@ import audio from './audio.js';
 import clock from './clock.js';
 import protochain from './protochain.js';
 
-export const patches = [windowPatch, globals, stack, symbol, navigator, uadata, plugins, screen, chrome, touch, canvas, webgl, audio, clock, protochain];
+export const patches = [windowPatch, jsdomTrim, globals, stack, symbol, navigator, uadata, plugins, screen, chrome, touch, canvas, webgl, audio, clock, protochain];
