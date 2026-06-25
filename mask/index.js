@@ -235,7 +235,9 @@ export function createMask(window) {
       try { console.warn(`[mask.iface] 重复注册 window.${name},复用首注册(检查是否两 patch 抢注)`); } catch { /* noop */ }
       return ifaceRegistry.get(name);
     }
-    const ctor = fn(function () { throw new TypeError('Illegal constructor'); }, name);
+    // 抛 window-realm TypeError:页面 `catch(e){ e instanceof TypeError }`(检测器试探非法构造)须为 true —— 同
+    // adopt 的跨 realm 身份契约,Node realm 的 TypeError 会令该 instanceof 为 false 而成 tell。
+    const ctor = fn(function () { throw new window.TypeError('Illegal constructor'); }, name);
     const proto = adopt(tag({ ...props }, name)); // proto 链落在 window.Object.prototype
     ctor.prototype = proto;
     Object.defineProperty(proto, 'constructor', { value: ctor, configurable: true, enumerable: false });
