@@ -75,7 +75,9 @@ export class Realm {
    *   真机里每段脚本的 stack 帧 URL 是其真实 src,故执行抓取的目标脚本时应传入其原始 URL。
    */
   run(code, { url } = {}) {
-    const filename = url || this.url;
+    // vm.runInContext 的 options.filename 只接 string|undefined,绝不接 null —— 默认值仅对 undefined 生效。
+    // 直接 new Realm 不传 url 时 this.url 为 null,这里收口成 undefined,让 vm 退回默认 filename 而非抛错。
+    const filename = url || this.url || undefined;
     try {
       const value = vm.runInContext(code, this.context, { filename });
       return { ok: true, value, missing: this.trace?.missing() ?? [] };
