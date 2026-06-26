@@ -33,6 +33,8 @@ export default {
     const reg = (o) => { if (o && typeof o === 'object') brandless.add(o); };
     reg(window.screen);
     if (window.navigator.connection) reg(window.navigator.connection);
+    // screen.orientation(ScreenOrientation 单例)同属插了 EventTarget 层但无 slot 的伪 EventTarget(见 patch/screen)。
+    if (window.screen.orientation) reg(window.screen.orientation);
 
     // impl 用 concise method(`{m(){}}`.m):可用 this 又**无 own .prototype** —— 真机 native 方法无 .prototype,
     // 普通 function 表达式带 non-configurable .prototype 删不掉,会成 fn.hasPrototype/ownNames TELL(mask.hook 不剥它)。
