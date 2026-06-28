@@ -16,6 +16,12 @@
  * EXTRA===0 是当前维护中的硬不变量。结构 TELL(window.print 的 WebView shim 形态 / Document.constructor
  * 的 parseHTML* / Node·Event.prototype own 键序)属已知未尽项,以数量上限守护:新增结构 tell 即破门,
  * 已知项逐步修复后下调上限(修复落地时一并收紧)。
+ *
+ * 覆盖口径(勿过度解读 EXTRA===0):EXTRA 只在 probe TARGETS 列出的 target 的 own 键集内逐项算,故"无过度注入"
+ * 仅对被探 target 成立。window 本体不是被探 object target(window.* 仅 Worker/RTCPeerConnection/Notification
+ * 三个 function target),而 mask.iface 每次 defineProperty(window, name, ctor) 注入的 ~25+ 构造器壳全落在 window 上
+ * —— 这批注入对本 gate 结构不可见(是"未守护",非"已泄漏":这些构造器真机 Chrome 确实存在)。补守的前置是先重采
+ * 一份枚举了 window 构造器结构的真机基线(否则旧基线缺这些 id,只会产 MISSING 噪声而非有效 EXTRA 守护)。
  */
 import { runDiff } from './index.js';
 
@@ -43,7 +49,7 @@ for (const [profile, baseline, tellMax] of PAIRS) {
   const { summary } = await runDiff({ profile, baseline });
   const EXTRA = summary.counts.EXTRA || 0;
   const TELL = summary.counts.TELL || 0;
-  ok(`${profile} × ${baseline}:EXTRA===0(无过度注入 / mimic 独有键泄漏)`, EXTRA === 0);
+  ok(`${profile} × ${baseline}:EXTRA===0(被探 target 上无过度注入 / mimic 独有键泄漏)`, EXTRA === 0);
   ok(`${profile} × ${baseline}:结构 TELL ${TELL} ≤ ${tellMax}(无新增结构 tell)`, TELL <= tellMax);
 }
 

@@ -37,6 +37,12 @@ const get = dropOwnToString(fn(() => adopt(getValue()), `get ${key}`));
 - `Object.getOwnPropertyNames(getter)` → `["length","name"]` ✓
 - 预期消除:16 × `accessor.get.hasPrototype` + 16 × `accessor.get.ownNames` = 32 条阻断
 
+**同一不变量的其余持有者**:`mask.mixin` 的 getValue 不读 `this`,箭头函数即可(上)。读 `this` 的实例态
+访问器——`instAccessor`(读关联 `<canvas>`/节点状态)与 `reflectAccessor`(读 per-instance 回写)——箭头不能绑
+`this`,改用 **get-syntax forwarder**(`{ get [name]() { return getter.call(this); } }`):同样无 own `.prototype`
+且能转发 `this`。三者共同守住"native getter 无 own `.prototype`"这一结构不变量,覆盖 plugins/audio/canvas/webgl
+等接口原型上的实例态 getter。
+
 ### 类型 B:方法侧 jsdom function declaration(当前无法静默删除)
 
 `atob`/`setTimeout` 等在 window 上的描述符 configurable:true —— 可以**替换**整个函数对象。

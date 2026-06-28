@@ -1,6 +1,7 @@
 /**
- * 最小冒烟测试:验证 Realm 能创建、patch 能改造、伪装是否生效。
- *   node src/smoke.js
+ * 最小冒烟测试:验证 Realm 能创建、patch 能改造、伪装是否生效。手动演示(console-log 快照),非 CI 门
+ * —— 跨 realm 身份/结构不变量由 npm test 内的 diff-gate + eventtarget/ctoriface/domproto 断言守护。
+ *   node smoke.js
  */
 import { Realm } from './entry/index.js';
 

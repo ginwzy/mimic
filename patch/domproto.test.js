@@ -54,6 +54,18 @@ const R = r.run(`(function(){
     onsearch_null: document.onsearch === null,
     onsearch_writable: (function(){ document.onsearch = function f(){}; return typeof document.onsearch === 'function'; })(),
 
+    // 回归(跨实例隔离):on* 经 eventHandler→reflectAccessor 的 per-instance WeakMap 存储,装在 Element/HTMLElement.prototype
+    // 这类共享原型上时每实例独立。设过 a 的 onX 后,新建 b 须读回 null、且 b 赋值不反噬 a(旧单 closure 实现两者皆破)。
+    // 同覆盖 Element.prototype(onsearch)与 HTMLElement.prototype(onanimationend)。
+    xinst_onsearch: (function(){
+      const a = document.createElement('div'), b = document.createElement('div'); const fa = function fa(){};
+      a.onsearch = fa; const bNull = b.onsearch === null; b.onsearch = function fb(){}; return bNull && a.onsearch === fa;
+    })(),
+    xinst_onanimationend: (function(){
+      const a = document.createElement('div'), b = document.createElement('div'); const fa = function fa(){};
+      a.onanimationend = fa; const bNull = b.onanimationend === null; b.onanimationend = function fb(){}; return bNull && a.onanimationend === fa;
+    })(),
+
     // cosmetic 反射默认值(reflectAccessor 非 null 默认;值对照 sdenv)。默认读须在下方 cos_assign_noThrow 之前
     // (赋值已 round-trip 入 per-instance 存储,会改写后续读)。
     cos_designMode: document.designMode,
@@ -154,6 +166,8 @@ ok('innerText 默认反映 this.textContent', R.it_reflectsTextContent === 'hell
 console.log('\n[回归:on* 仍默认 null 且可写]');
 ok('document.onsearch === null', R.onsearch_null === true);
 ok('document.onsearch 可写', R.onsearch_writable === true);
+ok('on* 跨实例隔离(Element.onsearch:b 读 null 且 a 不被覆盖)', R.xinst_onsearch === true);
+ok('on* 跨实例隔离(HTMLElement.onanimationend:b 读 null 且 a 不被覆盖)', R.xinst_onanimationend === true);
 
 console.log('\n[形态:get/set name+length 不变 + get native]');
 ok("get name 为 'get innerText'", R.it_getName === 'get innerText');

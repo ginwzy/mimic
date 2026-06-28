@@ -42,6 +42,12 @@ export function runPipeline(patches, realm) {
       p.apply(realm);
     } catch (e) {
       record.error = e.message;
+      // best-effort:单 patch 抛错不中止流水线(余下 patch 照跑)。但须经宿主 console 发可见信号 —— 否则
+      // trace 默认关时 patchError 是 no-op、record.error 仅 describe() 透传,装配抛错在所有默认路径(run/diff/
+      // snapshot/session/smoke)无声蒸发,使环境被静默半装,而 diff(首要结构保真门)把半装环境当普通 divergence
+      // 报却无"某 patch 没装上"的根因 —— 正是 base/jsdom 力避的"最难定位盲态"在装配层重现。措辞"未完整应用"
+      //(非"已跳过"):apply 中途抛错可能已部分应用。同 after 未知依赖告警(上)的"不静默吞失败"纪律。
+      console.warn(`[pipeline] patch '${p.name}' apply 抛错 —— 该 patch 未完整应用,环境此面降级:${e.message}`);
       realm.trace?.patchError?.(p.name, e);
     }
   }

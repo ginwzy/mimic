@@ -53,7 +53,7 @@ npm run smoke
 - **值差异**(UA / 屏幕 / GPU)→ Profile 数据,经 `extends` 复用结构。
 - **结构差异**(有无 `window.chrome` / 触摸形态)→ Patch + `traits` 门控。
 
-`traits` 是真实采集的投影(非独立旋钮),`profile.validate()` 守住自洽——构造不出 `host=webview` 却没有 `wv` 的矛盾设备。同一套 patch 由 traits 驱动出不同环境:
+`traits` 是真实采集的投影(非独立旋钮),`profile.validate()` 守住自洽。host 校验以**结构事实**(有无 `window.chrome` 键)为准:profile 带该键时,`host=chrome` 须有、`host=webview` 须无;不带时仅对 `host=chrome` 单向兜底(UA 不得含 `wv`)。它**不**强制 `host=webview` 必带 `wv`——以容纳改了 UA 的合法 WebView(如 via)。同一套 patch 由 traits 驱动出不同环境:
 
 ```
 chrome-mac      host=chrome  → window.chrome 存在;touch 删桌面误带的 ontouch*
@@ -80,9 +80,10 @@ trace/   detector / monitor
 entry/   index(API) / cli / server
 capture/ 真机采集(collect 浏览器端 / derive 派生 traits / server 托管回传落盘)
 profiles/  _base/ + 各设备 profile
-reference/ legacy(旧实现) + sdenv/sdenv-extend(第三方参考,不入 git)
+reference/ legacy(旧实现归档) + sdenv/sdenv-extend(已 vendored 的第三方参考实现)
 ```
 
 ## License
 
-MIT
+本项目 MIT。`reference/sdenv` 与 `reference/sdenv-extend` 为 vendored 的第三方参考实现,各自保留其
+原始许可证(`reference/sdenv` 为 BSD-3-Clause,见该目录 `LICENSE`),不受顶层 MIT 覆盖。

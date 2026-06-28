@@ -11,9 +11,11 @@
  * function(非箭头)过 native():native 不剥 .prototype → hasPrototype=true 自然成立;若用箭头则 .prototype
  * 缺失成 tell。app 是普通数据对象(isInstalled / InstallState / RunningState + 四个方法壳)。
  */
+import { chromeHost } from './gates.js';
+
 export default {
   name: 'chrome',
-  applies: (t) => t.host === 'chrome',
+  applies: chromeHost,
   apply({ window, mask }) {
     const { adopt, native } = mask;
     // adopt:顶端从 Node 异源 Object.prototype 重定向到 window.Object.prototype

@@ -10,6 +10,7 @@
  * jsdom 的 PluginArray.prototype.length 读内部 slot,空壳 Object.create 取不到 → 改用 mask.iface 自建四类
  * (真机 PluginArray/Plugin/MimeType/MimeTypeArray 确为 illegal constructor),proto 装 native 方法、实例填索引。
  */
+import { chromeHost } from './gates.js';
 
 const PDF_DESC = 'Portable Document Format';
 const PLUGIN_NAMES = [
@@ -23,7 +24,7 @@ const MIME_TYPES = [
 export default {
   name: 'plugins',
   after: ['navigator'],
-  applies: (t) => t.host === 'chrome',
+  applies: chromeHost,
   apply({ window, mask }) {
     const defineMethods = mask.methods;
     // 类数组容器:索引 own 属性(enumerable)+ named(non-enumerable)。length 不落实例,见下:真机 length 在

@@ -40,3 +40,6 @@ venv/
 # Build
 dist/
 build/
+
+# Session scratch (workflow/agent 临时件)
+scratchpad/

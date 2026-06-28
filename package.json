@@ -12,7 +12,8 @@
     "smoke": "node smoke.js",
     "diff": "node entry/cli.js diff",
     "baseline": "node entry/cli.js baseline",
-    "test": "node harness/test.js && node harness/diff-gate.test.js && node harness/collection-probe.test.js && node capture/test.js && node core/session.test.js && node patch/webgl.test.js && node patch/canvas.test.js && node patch/audio.test.js && node patch/chrome.test.js && node patch/ctoriface.test.js && node patch/eventtarget.test.js && node patch/domproto.test.js"
+    "gen:keyorder": "node harness/gen-keyorder.mjs",
+    "test": "node harness/test.js && node harness/diff-gate.test.js && node harness/gen-keyorder.mjs && node harness/collection-probe.test.js && node capture/test.js && node core/session.test.js && node patch/webgl.test.js && node patch/canvas.test.js && node patch/audio.test.js && node patch/chrome.test.js && node patch/ctoriface.test.js && node patch/eventtarget.test.js && node patch/domproto.test.js"
   },
   "keywords": [
     "jsdom",

@@ -1,7 +1,7 @@
 /**
  * 编程 API 入口。
  *
- *   import { Realm, Profile } from './src/entry/index.js';
+ *   import { Realm, Profile } from './entry/index.js';
  *   const realm = await Realm.create({ profile: 'chrome-mac' });
  *   const out = realm.run('navigator.userAgent');
  *   realm.dispose();

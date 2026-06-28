@@ -343,13 +343,19 @@ export function createMask(window) {
   }
 
   /**
-   * accessor 的**实例态**变体:getter 是普通函数、以 `this`=实例 调用(经 WeakMap 取每实例私有状态),
-   * 装在共享 prototype 上。区别 accessor 的两点:① getter 读 `this`(故非箭头),② **不自动 adopt**
-   * (返回值多为 primitive 或已是 window 身份的对象;需要时由 getter 自行 adopt)。inst=单个;instAccessors=批量。
+   * accessor 的**实例态**变体:getter 以 `this`=实例 调用(读每实例状态,如关联 <canvas>),装在共享 prototype 上。
+   * 区别 accessor 的两点:① getter 读 `this`,② **不自动 adopt**(返回值多为 primitive 或已是 window 身份的对象;
+   * 需要时由 getter 自行 adopt)。装法经 get-syntax forwarder(`{ get [name]() { return getter.call(this); } }`)
+   * 而非把调用方传入的裸普通函数直接 native —— 后者残留 non-configurable 的 own .prototype(接口原型被 L1 probe
+   * 扫即结构 tell;真机 native 访问器无),get-syntax getter 无 own .prototype 且能转发 this(根因详见 reflectAccessor)。
+   * inst=单个;instAccessors=批量。
    */
   function instAccessor(target, name, getter) {
+    const g = Object.getOwnPropertyDescriptor(
+      { get [name]() { return getter.call(this); } }, name,
+    ).get;
     Object.defineProperty(target, name, {
-      get: native(getter, `get ${name}`), enumerable: true, configurable: true,
+      get: native(g, `get ${name}`, 0), enumerable: true, configurable: true,
     });
     return target;
   }
@@ -359,18 +365,15 @@ export function createMask(window) {
   }
 
   /**
-   * 装可写 on* 事件处理器访问器(get+set,闭包存 handler)。真机 onX 是原型上的**可写** accessor:get-only 会令
+   * 装可写 on* 事件处理器访问器(get+set,默认 null)。真机 onX 是原型上的**可写** accessor:get-only 会令
    * strict 模式 `obj.onX = fn` 抛 TypeError(被 jsdom 异步路径静默吞,正是可观测性盲态);改用 data 属性又会在
-   * 实例上造 own 键、破坏"空实例"不变量。单 closure handler 即够(当前用例 connection/orientation 均为单例)。
+   * 实例上造 own 键、破坏"空实例"不变量。委托给 reflectAccessor(默认 null + per-instance WeakMap 回写):on* 名单
+   * 多装在 Element/HTMLElement.prototype 这类**共享非单例**原型上,单 closure 存储会跨实例污染(设过任一元素的 onX
+   * 后,未赋值的别的元素读回同值、且互相覆盖)—— per-instance 存才守住"未赋值实例读回 null"。形态逐字段同其余反射
+   * 访问器(get 'get X'/0、set 'set X'/1、native、enumerable+configurable),L1 形态零变化。
    */
   function eventHandler(target, name) {
-    let handler = null;
-    Object.defineProperty(target, name, {
-      get: native(() => handler, `get ${name}`, 0),
-      set: native((v) => { handler = v; }, `set ${name}`, 1),
-      enumerable: true, configurable: true,
-    });
-    return target;
+    return reflectAccessor(target, name, () => null, true, null);
   }
 
   /**

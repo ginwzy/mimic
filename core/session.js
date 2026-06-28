@@ -87,9 +87,16 @@ export class Session {
 
   /** 派标准生命周期事件,驱动 load / DOMContentLoaded 回调(BMS 的采集 + POST 多挂在此)。哑派发。 */
   driveEvents() {
+    // readyState→'complete':经 Node 侧 mask.accessor 重定义 Document.prototype 上的原生访问器(jsdom 原生 readyState
+    // 亦在此原型、仅值返回 loading/interactive)。保真形态(get name='get readyState'、native toString、无 set、
+    // enumerable+configurable),消除此前页面 realm 裸 getter 的两处结构 tell:own-on-instance 位置错位
+    //(document.hasOwnProperty('readyState') 真机为 false)+ getter 形态泄漏(.name==='get'、toString 暴露源码)。
+    // 装在 driveEvents 段而非构造器:capture 先 run 目标脚本再 driveEvents,提前强制 'complete' 会改变脚本同步段对
+    // readyState 的分支行为。
+    const { window, mask } = this.realm;
+    try { mask.accessor(window.Document.prototype, 'readyState', () => 'complete'); } catch { /* 不可重定义则跳过 */ }
     this.realm.run(`
       (function(){
-        try { Object.defineProperty(document, 'readyState', { get(){ return 'complete'; }, configurable: true }); } catch(e){}
         function fire(t, type){ try { t.dispatchEvent(new Event(type)); } catch(e){} }
         fire(document, 'readystatechange');
         fire(document, 'DOMContentLoaded');

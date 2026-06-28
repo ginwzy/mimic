@@ -22,7 +22,8 @@
 import { ELEMENT_ORDER, DOCUMENT_ORDER, HTML_ELEMENT_ORDER } from './keyorder-data.js';
 
 // Navigator.prototype 真机 getOwnPropertyNames 序。键集随 host 门控而异 —— 用注入侧同一条 host 轴选择。
-const NAVIGATOR_ORDER = {
+// 导出供 authoring 期 harness/gen-keyorder 校验(与 keyorder-data 三表同源,逐元素比对 baseline)。
+export const NAVIGATOR_ORDER = {
   chrome: [
     'vendorSub', 'productSub', 'vendor', 'maxTouchPoints', 'scheduling', 'userActivation', 'geolocation',
     'doNotTrack', 'plugins', 'mimeTypes', 'pdfViewerEnabled', 'webkitTemporaryStorage', 'webkitPersistentStorage',

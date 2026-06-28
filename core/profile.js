@@ -120,6 +120,14 @@ export class Profile {
     if (t.platform === 'linux') want(/Linux/.test(platform), 'platform=linux 但 navigator.platform 不含 Linux');
     if (t.formFactor === 'mobile') want(/Mobile/.test(ua), 'formFactor=mobile 但 UA 不含 Mobile');
     if (t.formFactor === 'desktop') want(!/Mobile/.test(ua), 'formFactor=desktop 但 UA 含 Mobile');
+    // traits.version 喂 userAgentData 的 brands 主版本(uadata.derive:major = traits.version ?? UA 解析,优先前者),
+    // 而 uaFullVersion/fullVersionList 取自 UA 字符串 → 二者须同主版本,否则 navigator.userAgentData 内部自相矛盾
+    // (brands 主版本 ≠ uaFullVersion)并与 UA 主版本交叉校验冲突。对齐 derive 的 String() 归一与 /Chrome\/(\d+)/ 解析;
+    // UA 无 Chrome/ token(非 Chromium UA)时跳过,不投机。
+    if (t.version != null) {
+      const m = ua.match(/Chrome\/(\d+)/);
+      if (m) want(String(t.version) === m[1], `traits.version(${t.version})与 UA 的 Chrome 主版本(${m[1]})不符`);
+    }
 
     // location.href 自洽:文档 URL 是 origin/protocol/host 的单一真相源(jsdom 由它派生),须为合法 http(s) 绝对 URL。
     // 注:referrer 不由文档 URL 派生(jsdom 独立 referrer 选项),profile 暂无 referrer 段 → 不在此交叉校验(无数据则不投机)。

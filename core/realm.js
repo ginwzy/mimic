@@ -61,7 +61,16 @@ export class Realm {
       jsdomErrors: errors,
     });
 
-    realm.decisions = runPipeline(patches, realm);
+    // 装配失败不留活 window:create 已建 jsdom window,runPipeline 抛出(结构性循环依赖 / applies 谓词抛错 /
+    // patch 致命错)时,这个 window 无人 close 会泄漏(池化/长跑显形)。close 后重抛 —— 错误仍 loud 冒泡,资源已清。
+    // 注:单 patch apply 内部抛错由 pipeline best-effort 吞并告警(见 pipeline),不会到这里;到这里的是应中止整个
+    // realm 构造的结构性/谓词级失败。
+    try {
+      realm.decisions = runPipeline(patches, realm);
+    } catch (e) {
+      try { window.close?.(); } catch { /* noop */ }
+      throw e;
+    }
     return realm;
   }
 
@@ -96,12 +105,22 @@ export class Realm {
     };
   }
 
+  /**
+   * 销毁:close jsdom window 并断开本 Realm 对 window 对象图的全部引用。仅置空 this.window 不够 —— context
+   * 实测 === window(run() 走 this.context 仍能跑),mask/trace 也闭包持有 window;池化/缓存 Realm 时这些会累积
+   * 钉住整张 window 图。故 context/mask/trace/profile 一并置 null,使"已销毁 Realm 不再钉住 window"成真不变量:
+   * dispose 后再 run()/describe() 即抛(更严的"勿在销毁后使用"契约;仓内无此类调用点)。二次 dispose 幂等(?. 守卫)。
+   */
   dispose() {
     try {
-      this.window.close?.();
+      this.window?.close?.();
     } catch {
       /* noop */
     }
     this.window = null;
+    this.context = null;
+    this.mask = null;
+    this.trace = null;
+    this.profile = null;
   }
 }
