@@ -7,8 +7,8 @@
  * 实现一律箭头(无 .prototype,真机 native 亦无)。返回值/默认值保真非本切片目标 —— L1 diff 只验形态,
  * 行为取安全默认(getAnimations→[]、checkVisibility→true、Promise 类取永久 pending、on* 默认 null、只读态
  * 取保守值);this 依赖的真实语义(getHTML 序列化 / scroll 实际滚动 / 反射属性回写 attribute)留后续。
- * 例外:少数可写反射属性 null 默认会在 init 阶段被正常使用触发**抛错**,经 mask.reflectAccessor 取非 null
- * 默认防抛 —— 见下方 CRASHER 子集块(策略只在该处讲全)。
+ * 例外:可写反射属性的 null 默认有两类问题 —— 一类页面正常使用即**抛**(crasher),一类不抛但默认值失真
+ * (cosmetic 值 tell);二者均经 mask.reflectAccessor 取非 null 正确默认 —— 见下方反射默认值块(策略只在该处讲全)。
  *
  * ownKeys.order 与切片边界:L1 diff 的 order tell 仅在两侧键集**相等**时触发(见 diff.js sameSet)。补成员
  * 令对应原型键集补全 → 激活 order 检测 → 须在 keyorder 注册真机序。本 patch 补全 EventTarget.prototype
@@ -20,6 +20,7 @@
  * (方法)+ activeViewTransition(访问器)是 Chrome 隐私 / 实验面,WebView 基线无 —— 无门控即 webview 侧 EXTRA。
  */
 import { chromeHost } from './gates.js';
+import { makeTokenList, refreshTokenList } from '../base/jsdom.js';
 
 const hasOwn = Object.prototype.hasOwnProperty;
 
@@ -28,7 +29,7 @@ export default {
   after: ['window'],
   apply({ window, mask, traits }) {
     const W = window;
-    const { method, accessor, eventHandler, reflectAccessor, adopt, pending, tag, native } = mask;
+    const { method, accessor, eventHandler, reflectAccessor, adopt, pending } = mask;
     // 每个 impl 必须是**独立**函数对象:mask.fn 原地改写 name/length,共享一个引用会令后注册的方法
     // 覆盖前者的 name/length(全指向同一被改写对象)。故下方一律内联新箭头,勿抽公共 const 复用。
 
@@ -171,51 +172,83 @@ export default {
       ['isContentEditable', () => false],
     ];
 
-    // ── CRASHER 子集:可写反射属性的非 null 默认 ────────────────────────────────
-    // 上面 GETSET 名单经 eventHandler 统一默认 null;对 ~80 个 on* 处理器 null 正确,但少数可写反射 IDL
-    // 属性 null 默认会在页面 init 正常使用时**抛**(for...of/.trim()/.add() 于 null),在 sensor 运行前
-    // 中断执行。下表把这几个键分流到 mask.reflectAccessor(形态同 eventHandler,仅默认值改为正确类型)。
+    // ── 反射属性非 null 默认:reflectAccessor 分流 ──────────────────────────────
+    // 上面 GETSET 名单经 eventHandler 统一默认 null;对 ~80 个 on* 处理器 null 正确,但可写反射 IDL 属性真机
+    // 默认是具体类型值。两类需分流到 mask.reflectAccessor(形态同 eventHandler,仅默认值改正确类型):
+    //   crasher —— null 默认会在页面 init 正常使用时**抛**(for...of/.trim()/.add()/.length 于 null),在
+    //     sensor 运行前中断执行(被 base/jsdom 裸 VirtualConsole 静默吞放大)。adoptedStyleSheets/innerText/
+    //     outerText/part 属此。
+    //   cosmetic —— 不抛但 null 是**值 tell**(真机 designMode 'off'、spellcheck true、域色属性 '' …)。
     // 键名在 Document/Element/HTMLElement 原型上唯一,故按名匹配即可,无需区分 host 原型。
 
-    // part 默认值:DOMTokenList 壳(shadow part)。own 安全方法是**必须**的 —— 即便 reparent 到真机
-    // DOMTokenList.prototype 拿 instanceof,继承来的 jsdom 原型方法会在无内部 slot 的壳上触发 brand-check
-    // 抛错,故每个被访问成员都以 own 覆盖。单例共享(以稳为主:per-instance 身份 / 真实 token 集留后续)。
-    let partShellInstance;
-    const partShell = () => {
-      if (partShellInstance) return partShellInstance;
-      const shell = adopt({ length: 0, value: '' });
-      if (W.DOMTokenList) { try { Object.setPrototypeOf(shell, W.DOMTokenList.prototype); } catch { /* noop */ } }
-      tag(shell, 'DOMTokenList');
-      method(shell, 'item', 1, () => null);
-      method(shell, 'contains', 1, () => false);
-      method(shell, 'add', 1, () => undefined);
-      method(shell, 'remove', 1, () => undefined);
-      method(shell, 'toggle', 1, () => false);
-      method(shell, 'replace', 2, () => false);
-      method(shell, 'supports', 1, () => false);
-      method(shell, 'forEach', 1, () => undefined);
-      Object.defineProperty(shell, Symbol.iterator, {
-        value: native(function () { return [][Symbol.iterator](); }, 'values', 0),
-        writable: true, enumerable: false, configurable: true,
-      });
-      partShellInstance = shell;
-      return shell;
+    // part 默认值:per-instance **真实** DOMTokenList(经基座 makeTokenList 复用 jsdom classList 的同一工厂,绑
+    // part attribute)。真实 DTL 自带空 own 属性 + 方法在 DOMTokenList.prototype + 真 token 集 + attribute 双向
+    // 联动 + per-instance 身份 —— 取代旧单例壳(单例 tell + 10 个 own 方法 tell + 无真实 token,皆已删)。
+    // 缓存保 per-instance 身份(el.part === el.part);每次访问前 refresh,使外部 setAttribute('part') 后读到最新
+    // (jsdom 仅 class 有 setAttribute→attrModified 钩子,part 无)。
+    const partLists = new WeakMap();
+    const getPartList = (el) => {
+      let list = partLists.get(el);
+      if (!list) { list = makeTokenList(W, el, 'part'); if (list) partLists.set(el, list); }
+      refreshTokenList(list);
+      return list;
     };
 
     // getDefault 以 this=实例 调用(reflectAccessor 的 getter 经 get-syntax 取得,可绑 this 且无 .prototype):
-    // innerText/outerText 默认取实例 textContent;adoptedStyleSheets/part 不依赖实例,用箭头。
+    // innerText/outerText 默认取实例 textContent;其余不依赖实例,用箭头。
+    // cosmetic 默认值对照 sdenv env/dom(document.js designMode/domain、elements.js spellcheck/contentEditable/…)。
+    // 回写:reflectAccessor 默认 per-instance WeakMap 存写值 → 赋值 round-trip(详见 mask 头注)。
     const reflectDefaults = {
+      // crasher:null 上正常使用即抛
       adoptedStyleSheets: () => [],
       innerText() { return this.textContent ?? ''; },
       outerText() { return this.textContent ?? ''; },
-      part: () => partShell(),
+      part() { return getPartList(this); },
+      // cosmetic:不抛但真机默认非 null
+      designMode: () => 'off',
+      domain: () => W.location?.hostname ?? '',
+      contentEditable: () => 'inherit',
+      spellcheck: () => true,
+      autofocus: () => false,
+      inert: () => false,
+      fullscreenEnabled: () => true,
+      autocapitalize: () => '',
+      enterKeyHint: () => '',
+      inputMode: () => '',
+      alinkColor: () => '',
+      bgColor: () => '',
+      fgColor: () => '',
+      linkColor: () => '',
+      vlinkColor: () => '',
+    };
+
+    // 真机 readonly(保留 no-op set,见 mask.reflectAccessor 头注 writable=false):赋值静默忽略、读回不变。
+    const reflectReadonly = new Set(['fullscreenEnabled']);
+
+    // 自定义 setter(writable=函数):part 是 [PutForwards=value] —— el.part = v 实为 el.part.value = v。
+    // 前向给 jsdom 真实 DTL 的 value setter(DOMString 转换 null→'null' / Symbol→抛 由其负责,逐字匹配真机,
+    // 勿手 coerce)。这是 part round-trip 的真实现(经 attribute 落地、读回仍是 token 列表)。
+    const reflectSetter = {
+      part(v) { getPartList(this).value = v; },
+    };
+
+    // 有类型契约的 writable crasher 子集:存前 coerce 保型,否则 el.innerText=null / adoptedStyleSheets=null 等
+    // 不兼容值入存,用时 .trim()/for...of 即崩(复活 crasher,被裸 VirtualConsole 静默吞)。innerText/outerText
+    // 的 null→'' 正合真机 [LegacyNullToEmptyString];非数组 adoptedStyleSheets 退默认空数组(读回仍可迭代)。
+    // 兜底 adopt([]) 对齐 sandbox realm(getter 对存值分支裸返不 adopt,故 host-realm 数组须在此就地 adopt)。
+    const reflectCoerce = {
+      innerText: (v) => (v === null ? '' : String(v)),
+      outerText: (v) => (v === null ? '' : String(v)),
+      adoptedStyleSheets: (v) => (Array.isArray(v) ? v : adopt([])),
     };
 
     const installGetSet = (proto, names) => {
       for (const name of names) {
         if (hasOwn.call(proto, name)) continue;
         const getDefault = reflectDefaults[name];
-        if (getDefault) reflectAccessor(proto, name, getDefault); // 非 null 默认(crasher 防抛)
+        // 非 null 默认 + 回写。writable:自定义 setter(part PutForwards)> 函数;readonly 保 no-op;余 WeakMap 存。
+        const writable = reflectSetter[name] ?? !reflectReadonly.has(name);
+        if (getDefault) reflectAccessor(proto, name, getDefault, writable, reflectCoerce[name]);
         else eventHandler(proto, name);                          // on* 等:默认 null(真机正确)
       }
     };

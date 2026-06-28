@@ -374,21 +374,40 @@ export function createMask(window) {
   }
 
   /**
-   * 可写反射 IDL 属性访问器(get+set,带**非 null** 默认)。区别 eventHandler(默认恒 null,对 on* 正确):
-   * 少数可写反射属性真机默认是具体类型值(adoptedStyleSheets→数组 / innerText/outerText→string / part→
-   * DOMTokenList),null 默认会在页面 init 正常 for...of / .trim() / .add() 时抛 —— 在 sensor 运行前中断执行
-   * (正是 base/jsdom 裸 VirtualConsole 静默吞异步错误所放大的盲态)。形态逐字段同 eventHandler(get 'get X'/0、
-   * set 'set X'/1、native、enumerable+configurable),故 L1 形态零变化。
-   * getter 经 **get-syntax** 取得(`{ get [name](){} }`):既无 own .prototype(普通 function expr 有,且
-   * non-configurable 删不掉 → DOM 原型被 L1 probe 扫即结构 tell;真机 native getter 亦无),又能绑 this(箭头
-   * 不能)→ getDefault 可读实例态(如 innerText 取 this.textContent)。set no-op:真实回写 attribute 语义留
-   * 后续,no-op 即满足"不抛"(setter.call(null) 仍抛 Illegal invocation,真机同此,不另守)。
+   * 可写反射 IDL 属性访问器(get+set,带**非 null** 默认 + per-instance 回写)。区别 eventHandler(默认恒 null,
+   * 对 on* 正确):少数可写反射属性真机默认是具体类型值(adoptedStyleSheets→数组 / innerText→string /
+   * designMode→'off'),null 默认会在页面 init 正常 for...of / .trim() / 读时抛或成值 tell —— 在 sensor 运行前
+   * 中断执行(正是 base/jsdom 裸 VirtualConsole 静默吞异步错误所放大的盲态)。形态逐字段同 eventHandler(get
+   * 'get X'/0、set 'set X'/1、native、enumerable+configurable),故 L1 形态零变化。
+   * get/set 均经 **get-/set-syntax**(`{ get/set [name](){} }`):无 own .prototype(普通 function expr 有,且
+   * non-configurable 删不掉 → DOM 原型被 L1 probe 扫即结构 tell;真机 native 访问器亦无),且能绑 this(箭头不能)。
+   * 回写:per-property WeakMap 存每实例写值(选 WeakMap 而非实例 own 槽 —— 后者造 own 键、破坏"空实例"不变量;
+   * 顺带消 eventHandler 单 closure 的跨实例污染)。get 优先返存值、否则 getDefault.call(this)(读实例态,如
+   * innerText 取 this.textContent)。存**逐字**值:正常类型赋值即 round-trip。
+   * coerce(可选):存前保型。有类型契约的 crasher 子集(innerText/outerText→string、adoptedStyleSheets→array)
+   * **必须**给 —— 否则 `el.innerText=null` / `=[]` 外的不兼容值入存,用时 .trim()/for...of 即崩,复活防抖目标
+   * (且被 base/jsdom 裸 VirtualConsole 静默吞成不可见 sensor 中断)。cosmetic 标量无 coerce、逐字存(值 tell 无碍)。
+   * 真机 enumerated 规范化(spellcheck 'yes'→true / contentEditable 非法值→抛 / designMode 大小写归一)无基线不臆造,留细化。
+   * writable 三态:
+   *   true   —— per-instance WeakMap 存(默认,见上)。
+   *   false  —— no-op set:真机 readonly(fullscreenEnabled,赋值静默忽略、读回不变),保 no-op 才 match。
+   *   函数   —— 自定义 set 体(以 this=实例 调用),用于赋值前向到子对象的 [PutForwards](part = v 实为
+   *             part.value = v;前向给 jsdom 真实 value setter,DOMString 转换/抛由其负责,勿手 coerce)。
+   * 自定义 setter 仍经 set-syntax+native(无 own .prototype、'set X'/1)→ 形态零变化。
    */
-  function reflectAccessor(target, name, getDefault) {
-    const getter = Object.getOwnPropertyDescriptor({ get [name]() { return adopt(getDefault.call(this)); } }, name).get;
+  function reflectAccessor(target, name, getDefault, writable = true, coerce = null) {
+    const written = new WeakMap();
+    const getter = Object.getOwnPropertyDescriptor(
+      { get [name]() { return written.has(this) ? written.get(this) : adopt(getDefault.call(this)); } }, name,
+    ).get;
+    const setter = typeof writable === 'function'
+      ? Object.getOwnPropertyDescriptor({ set [name](v) { writable.call(this, v); } }, name).set
+      : writable
+        ? Object.getOwnPropertyDescriptor({ set [name](v) { written.set(this, coerce ? coerce(v) : v); } }, name).set
+        : () => {};
     Object.defineProperty(target, name, {
       get: native(getter, `get ${name}`, 0),
-      set: native(() => {}, `set ${name}`, 1),
+      set: native(setter, `set ${name}`, 1),
       enumerable: true, configurable: true,
     });
     return target;

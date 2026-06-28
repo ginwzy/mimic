@@ -3,6 +3,42 @@
  * 未来若要更换 DOM 引擎(如换成 sdenv-jsdom),只改这一处。
  */
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+
+// jsdom 未公开其 webidl2js 内部工厂。本文件是唯一接触 jsdom 的基座层,故在此(而非 patch 层)捕获生成模块,
+// 供上层为 jsdom 未实现的反射属性(如 part)铸**真实** DOMTokenList(经下方 makeTokenList/refreshTokenList)。
+// 路径经 require.resolve('jsdom') 派生(可移植,不写死绝对路径);require 同一文件 → Node 缓存命中 jsdom 内部
+// 同一模块实例。顶层 require(非 try/catch):jsdom 版本漂移使路径失效时**启动即响亮报错**,而非运行时静默返
+// null 复活崩溃 —— 真正的失败模式是"启动炸"而非"part 静默崩",故不留平行降级实现。
+const _require = createRequire(import.meta.url);
+const _genIdl = join(dirname(_require.resolve('jsdom')), 'generated', 'idl');
+const _DOMTokenList = _require(join(_genIdl, 'DOMTokenList.js'));
+const _idlUtils = _require(join(_genIdl, 'utils.js'));
+
+/**
+ * 为元素的某 content attribute 铸一个**真实** jsdom DOMTokenList wrapper(复用 classList 的同一 createImpl 工厂)。
+ * 真实 DTL 自带:空 own 属性、方法在 DOMTokenList.prototype、绑该 attribute 双向 live、per-instance 身份 ——
+ * 比手搓壳保真得多(无 own 方法 tell / 无单例 tell / 无 brand-check)。
+ * @param {object} globalObject  目标 realm 的 window(决定 wrapper 的 DOMTokenList.prototype 身份)
+ * @param {object} elementWrapper  元素(公开 wrapper)
+ * @param {string} attributeLocalName  绑定的 content attribute 名(如 'part')
+ * @returns {object|null}  真实 DOMTokenList wrapper;拿不到元素 impl 时 null(真实元素不会走到)
+ */
+export function makeTokenList(globalObject, elementWrapper, attributeLocalName) {
+  const impl = _idlUtils.tryImplForWrapper(elementWrapper);
+  if (!impl) return null;
+  return _DOMTokenList.create(globalObject, [], { element: impl, attributeLocalName });
+}
+
+/**
+ * 标记 makeTokenList 所得 DTL 为 dirty,使其下次访问从 attribute 重新解析 —— 兜住"外部 setAttribute 后读":
+ * jsdom 仅对 class 在 setAttribute 钩子里自动调 attrModified,part 无此钩子,故访问前主动刷(idlUtils 封在基座,
+ * 上层永不碰 impl)。
+ */
+export function refreshTokenList(wrapper) {
+  _idlUtils.tryImplForWrapper(wrapper)?.attrModified();
+}
 
 /**
  * 创建一个干净的浏览器 window(尚未做任何 Chrome 化 / 反检测改造)。
