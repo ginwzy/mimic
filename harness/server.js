@@ -1,10 +1,9 @@
 /**
  * harness/server.js —— 结构基线落盘 + host/命名派生(库模块,非独立服务)。
  *
- * 历史上这是与 capture/server.js 镜像的第二个 HTTP 服务(probe-only,端口 8971)。已并入统一采集服务
- * (capture/server.js):一次设备访问、一个 session 内同源产出 profile + baseline,消除双服务命名漂移
- * (旧 macos/mac 不一致致 profile↔baseline 永配不上对)。本文件遂退化为纯库:saveBaseline 由统一服务调用,
- * hostOf 供 harness/test.js,deriveName 作命名回退。不再自起服务,故无 http/os 依赖。
+ * 原为与 capture/server.js 镜像的第二个 HTTP 服务(probe-only,端口 8971),已并入统一采集服务(合一
+ * 动机见 capture/server.js 头注)。本文件遂退化为纯库:saveBaseline 由统一服务调用,hostOf 供
+ * harness/test.js,deriveName 作命名回退。不再自起服务,故无 http/os 依赖。
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -18,8 +18,8 @@ export default {
   applies: chromeHost,
   apply({ window, mask }) {
     const { adopt, native } = mask;
-    // adopt:顶端从 Node 异源 Object.prototype 重定向到 window.Object.prototype
-    // (否则检测器 getPrototypeOf(chrome) === Object.prototype 为 false,一行即破)。
+    // adopt:把自造对象顶端从 Node 异源 Object.prototype 重定向到 window.Object.prototype
+    // (跨 realm 顶端 tell,根因见 protochain)。
     const chrome = adopt({});
 
     // 老式 native 函数壳:普通 function 保 .prototype,native(impl,'',0) 设 name=''/length=0/toString native。
