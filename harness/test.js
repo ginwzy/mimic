@@ -72,7 +72,7 @@ const fnT = (id, fn) => ({ id, category: 'function', resolved: true, fn });
   ok('MISSING(jsdom 缺)→ gate 不阻断 + 落覆盖缺口白名单', s.gatePass === true && s.counts.MISSING === 1);
 }
 
-// —— yvq.19:harness host 判定用 probe 的 window.chrome target.resolved(非 UA)——
+// —— harness host 判定用 probe 的 window.chrome target.resolved(非 UA)——
 {
   const viaUA = 'Mozilla/5.0 (Linux; Android 15; M2012K11AC Build/x) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36';
   ok('hostOf: window.chrome resolved:false(via)→ webview',

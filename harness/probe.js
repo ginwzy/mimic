@@ -104,10 +104,9 @@
 
   /**
    * 类数组集合的**值级**采集 —— 有意越过 probe "只采结构不采身份值" 契约:plugins/mimeTypes 是 host 固定的
-   * 不变量集(Chrome 统一 PDF viewer 后恒 5 plugin × 2 mimeType),非 per-device 身份值,故归结构 harness
-   * 守护(不归 profile.validate)。`plugins.length=0` 是经典 headless tell,结构面采不到(length 仅是个数值),
-   * 必须直采 length + 逐索引项的标量字段才能比对。itemFields 由 target 显式声明,只取 string/number/boolean
-   * (跨回 Node 仍只过 primitive,守 probe 铁律);非标量字段(如 enabledPlugin 反指)不列,避免环引用序列化。
+   * 不变量集(Chrome 统一 PDF viewer 后恒 5 plugin × 2 mimeType),非 per-device 身份值,故归结构 harness 守护、
+   * 不归 profile.validate。`plugins.length=0` 是经典 headless tell 而结构面采不到 → 直采 length + 逐索引标量字段。
+   * itemFields 由 target 显式声明,只取 primitive(非标量如 enabledPlugin 反指不列,避免环引用序列化)。
    */
   function collectionRecord(o, itemFields) {
     var length = -1;

@@ -101,8 +101,7 @@
       innerWidth: window.innerWidth, innerHeight: window.innerHeight,
       outerWidth: window.outerWidth, outerHeight: window.outerHeight,
       devicePixelRatio: window.devicePixelRatio,
-      // window.chrome 存在性 —— host 判定的结构事实(Chrome 浏览器有 / WebView 无)。
-      // 比 UA 的 wv 标记可靠:WebView 可自定义 UA 去掉 wv(如 via 浏览器),但难伪造 window.chrome。
+      // window.chrome 存在性 —— host 判定的结构事实(根因/信号优先级见 derive.detectHost)。
       // 采浅 own-keys(非深结构),兼作 patch/chrome 回放的形状参考。
       chrome: window.chrome ? { ownKeys: Object.getOwnPropertyNames(window.chrome) } : null,
     };

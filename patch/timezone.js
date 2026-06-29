@@ -84,7 +84,7 @@ export default {
     Object.defineProperty(DateTimeFormat, 'prototype', { value: RealDTF.prototype, writable: false, enumerable: false, configurable: false });
     Object.defineProperty(RealDTF.prototype, 'constructor', { value: DateTimeFormat, writable: true, enumerable: false, configurable: true });
     DateTimeFormat.supportedLocalesOf = mask.native((...a) => RealDTF.supportedLocalesOf(...a), 'supportedLocalesOf', RealDTF.supportedLocalesOf.length);
-    mask.native(DateTimeFormat, 'DateTimeFormat', RealDTF.length); // name/length/native toString/reparent → Function.prototype
+    mask.native(DateTimeFormat, 'DateTimeFormat', RealDTF.length);
     window.Intl.DateTimeFormat = DateTimeFormat;
   },
 };

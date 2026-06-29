@@ -12,7 +12,7 @@
 import { chromeHost, mobileOnly, desktopOnly } from './gates.js';
 
 // data 方法形状表:[名, arity, 实现, gate?](row 形状同 patch/globals.methodTable)。真机为 Navigator.prototype
-// 上 enumerable 的 data 方法;length 取自真机基线(fn 校正,与箭头实参数解耦)。可信壳语义:void→resolve、
+// 上 enumerable 的 data 方法;arity = 真机基线 length(fn 校正,根因见 mask.fn)。可信壳语义:void→resolve、
 // 返回复杂对象→永久 pending、旧式 (constraints,success,error) 回调签名→无返回。
 // 分批:secure-context 批(getBattery 起,jsdom 全缺,同 userAgentData 经 secure 重采才暴露);chromeHost 批
 // (WebView 缺的 Chrome 专属:Protected Audience 广告竞价、Protocol Handler、AppBadge)。
@@ -169,7 +169,7 @@ export default {
       mask.method(proto, name, len, impl);
     }
 
-    // ── 机制层 driver:接口单例 accessor。eager 建实例 + 注册全局类,getter 返回同一单例(=== 不变量)。
+    // ── 机制层 driver:接口单例 accessor(eager 建单例 + getter 恒返同一对象的 === 不变量,见上方 ifaceTable 表注)。
     const accessors = {};
     for (const [key, { cls, methods = {}, props = {}, gate }] of Object.entries(ifaceTable(mask))) {
       if (!passes(gate)) continue;

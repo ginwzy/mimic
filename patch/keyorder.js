@@ -15,9 +15,8 @@
  * 零 non-configurable own 键)。Node/Event.prototype 做不到:真机序里 configurable accessors 排在
  * non-configurable WebIDL 常量(ELEMENT_NODE… / CAPTURING_PHASE…)**之前**,但 jsdom 把常量冻结在末尾删不动,
  * 后置重排插不到其前 —— 须在 jsdom 原型构造期拦截(更深的技术,本 pass 不覆盖)。
- * host 轴:事件处理器密集的 Document/HTMLElement.prototype 真机序**随 host 而异**(实测 chrome-v143 vs
- * webview-v138 共享键 100+ 处错位)→ per-host 表;Element.prototype 序 host 无关(实测共享序一致)→ 单表;
- * Navigator 因 host 门控键集而异 → per-host。大表逐字提取于 ./keyorder-data(见该文件)。
+ * host 轴:三表(Element/Document/HTMLElement.prototype)与 Navigator 均 per-host
+ * (各 host 键集/键序差异及 per-host 取表根因见 ./keyorder-data)。大表逐字提取于该文件。
  */
 import { ELEMENT_ORDER, DOCUMENT_ORDER, HTML_ELEMENT_ORDER } from './keyorder-data.js';
 

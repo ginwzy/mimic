@@ -42,9 +42,9 @@ export function saveBaseline(snap, nameHint) {
   snap.meta = snap.meta || {};
   snap.meta.source = 'chrome';
   snap.meta.complete = true; // 真机全量基线
-  // 命名一致性只在调用点保证:统一采集服务恒传 nameHint(与 profile 同一 suggestName 结果)。下面的回退用
-  // deriveName(mac/win 简称),与 capture/derive.suggestName(macos/windows)是两套缩写 —— 仅当无 hint 时触发
-  // (今唯一无 hint 路径已不存在)。新增任何无 hint 的 saveBaseline 调用会落到这套不同缩写,届时再统一二者。
+  // 命名一致性只在调用点保证:统一采集服务恒传 nameHint(与 profile 同一 suggestName 结果)。回退 deriveName
+  // 用 mac/win 简称,与 capture/derive.suggestName 的 macos/windows 不一致 —— 仅无 hint 时触发(当前无此路径;
+  // 新增无 hint 的 saveBaseline 调用会落到这套不同缩写)。
   const name = safeName(nameHint || snap.meta.profile || deriveName(snap));
   snap.meta.profile = snap.meta.profile || name;
 

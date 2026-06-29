@@ -11,7 +11,7 @@
  * 本补丁为 stub(结构保真级,非身份值):条目结构/原型/instanceof/时间戳自洽对齐真机,条目集合为同源合成
  * (真机 resource 名集属采集面,未采 → 合成 N 条 plausible 同源资源,胜过空集这一确定 tell)。
  * 已知未尽项:① 条目数据走实例 own 键(真机为 PerformanceEntry.prototype 上 getter + 实例空 own 键);
- * ② 条目集合非真机采集值。两者待条目进 probe 集 / 采集面补全后精化(见 br)。
+ * ② 条目集合非真机采集值。两者待条目进 probe 集 / 采集面补全后精化。
  */
 
 // 同源资源条目时间戳锚定小值(≤ ~9ms):performance.now() 自 realm 建起即 >10ms,保证 responseEnd ≤ now

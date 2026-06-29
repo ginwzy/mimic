@@ -1,5 +1,5 @@
 /**
- * capture/test.js —— host 判定回归(锁住 yvq.19:UA-wv 过载 → window.chrome 结构信号)。
+ * capture/test.js —— host 判定回归(锁住 UA-wv 过载 → window.chrome 结构信号)。
  *   node capture/test.js
  * 覆盖 detectHost 信号优先级 · deriveTraits/suggestName 端到端 · Profile.validate host 自洽。
  */

@@ -2,7 +2,7 @@
  * core/session.test.js —— Session 出口捕获自测(确定性 gate;harness 不实例化 Session,故此为其唯一回归门)。
  *   node core/session.test.js
  *
- * 用合成目标脚本逐一压每条出口路径 —— 这是 yvq.40 的**通过/失败**判据(真实 ANA BMS 是观察性的,不在此 gate):
+ * 用合成目标脚本逐一压每条出口路径 —— 这是 Session 出口捕获的**通过/失败**判据(真实 ANA BMS 是观察性的,不在此 gate):
  *   ① 同步段 XHR.send(run() 内即捕获 → syncCaptured)
  *   ② load 回调里的 XHR.send(事件驱动捕获)
  *   ③ navigator.sendBeacon
@@ -38,7 +38,7 @@ const TARGET = `
 console.log('[Session 出口捕获 — 5 路径合成 gate]');
 
 // 纯 Realm 基线 arity:用于断言"hook 保留原 arity"(jsdom 原生 send.length=0,真机为 1 —— jsdom 既有差异,
-// 不在本 issue 范围;关键是 hook 不得**改变**它,否则拦截层自身成新 tell)。
+// 不在本测试范围;关键是 hook 不得**改变**它,否则拦截层自身成新 tell)。
 const plain = await Realm.create({ profile: 'chrome-mac' });
 const baseSendLen = plain.run('XMLHttpRequest.prototype.send.length').value;
 const baseFetchLen = plain.run('window.fetch.length').value;

@@ -47,7 +47,11 @@ export function createMask(window) {
     return v;
   }
 
-  /** 函数 native 化:伪装 toString、校正 name/length、对齐到 window.Function 身份。 */
+  /**
+   * 函数 native 化:伪装 toString、校正 name/length、对齐到 window.Function 身份。
+   * 校正 length 的根因:箭头 / concise-method 实现的 .length = 书写形参个数(壳常写成无参 `()=>…`),与真机
+   * native 方法的 arity 解耦 —— 故调用方传真机基线 len,这里钉死,免 jsdom/壳的形参个数泄漏。
+   */
   function fn(func, name, len) {
     if (typeof func !== 'function') return func;
     if (typeof name === 'string') Object.defineProperty(func, 'name', { value: name, configurable: true });

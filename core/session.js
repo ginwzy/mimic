@@ -19,7 +19,7 @@ const hostTag = (v) => Object.prototype.toString.call(v);
 export class Session {
   /**
    * @param {object} [opts]  透传 Realm.create:{ profile, url, debug, trace, patches }
-   *   url 覆写把文档域设成目标域 —— cookie 才按域落地、sensor 携带的 origin 才对(见 Realm/yvq.43)。
+   *   url 覆写把文档域设成目标域 —— cookie 才按域落地、sensor 携带的 origin 才对(见 Realm.create 的 url 说明)。
    * @returns {Promise<Session>}
    */
   static async create({ profile, url, debug = false, trace = false, patches } = {}) {
@@ -79,7 +79,7 @@ export class Session {
     }
   }
 
-  /** 写入 cookie(逐条;jsdom 按文档域校验 —— 依赖 Realm 的 url 覆写把文档域设成目标域,见 yvq.43)。 */
+  /** 写入 cookie(逐条;jsdom 按文档域校验 —— 依赖 Realm 的 url 覆写把文档域设成目标域)。 */
   setCookies(cookies = []) {
     for (const c of cookies) this.realm.run('document.cookie = ' + JSON.stringify(c));
     return this;

@@ -90,7 +90,7 @@ function arrEq(a, b) {
 
 /**
  * 类数组集合的值级比对:length 差、逐项字段差均为 TELL(可被检测器识破的"谎言",如 plugins.length=0)。
- * 走部分基线纪律:基线未给 length/items 时不判。项数差由 length 覆盖,逐项只比交集长度内的项,避免越界。
+ * 部分基线纪律见模块头;项数差由 length 覆盖,逐项只比交集长度内的项,避免越界。
  */
 function diffCollection(target, base, mim, out) {
   if (base.length !== undefined && mim.length !== undefined && base.length !== mim.length) {

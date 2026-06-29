@@ -8,7 +8,7 @@
  * 行为多为可信壳(检测器主要看 typeof + toString + 形态);需要真实语义处就近实现。
  */
 
-// 缺失 window 方法表:[名, arity, 实现, gate?]。length 取自真机基线,与箭头实参个数解耦(由 fn 校正)。
+// 缺失 window 方法表:[名, arity, 实现, gate?]。arity = 真机基线 length(fn 校正,根因见 mask.fn)。
 // gate(traits)→bool:平台差异方法的门控(缺省=全平台);谓词共享自 ./gates(见该文件:门控是一致性约束)。
 import { chromeHost, desktopOnly } from './gates.js';
 
