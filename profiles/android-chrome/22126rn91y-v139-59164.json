@@ -160,6 +160,68 @@
       "WEBGL_multi_draw"
     ],
     "unmaskedVendor": "ARM",
-    "unmaskedRenderer": "Mali-G52 MC2"
+    "unmaskedRenderer": "Mali-G52 MC2",
+    "shaderPrecision": {
+      "35632-36336": {
+        "precision": 10,
+        "rangeMax": 15,
+        "rangeMin": 15
+      },
+      "35632-36337": {
+        "precision": 10,
+        "rangeMax": 15,
+        "rangeMin": 15
+      },
+      "35632-36338": {
+        "precision": 23,
+        "rangeMax": 127,
+        "rangeMin": 127
+      },
+      "35632-36339": {
+        "precision": 0,
+        "rangeMax": 14,
+        "rangeMin": 15
+      },
+      "35632-36340": {
+        "precision": 0,
+        "rangeMax": 14,
+        "rangeMin": 15
+      },
+      "35632-36341": {
+        "precision": 0,
+        "rangeMax": 30,
+        "rangeMin": 31
+      },
+      "35633-36336": {
+        "precision": 10,
+        "rangeMax": 15,
+        "rangeMin": 15
+      },
+      "35633-36337": {
+        "precision": 10,
+        "rangeMax": 15,
+        "rangeMin": 15
+      },
+      "35633-36338": {
+        "precision": 23,
+        "rangeMax": 127,
+        "rangeMin": 127
+      },
+      "35633-36339": {
+        "precision": 0,
+        "rangeMax": 14,
+        "rangeMin": 15
+      },
+      "35633-36340": {
+        "precision": 0,
+        "rangeMax": 14,
+        "rangeMin": 15
+      },
+      "35633-36341": {
+        "precision": 0,
+        "rangeMax": 30,
+        "rangeMin": 31
+      }
+    }
   }
 }

@@ -24,6 +24,22 @@ const CODE = `(() => {
   const gl2 = cv.getContext('webgl2');
   const gl1 = cv.getContext('webgl');
   const dbg = gl2.getExtension('WEBGL_debug_renderer_info');
+  // getShaderPrecisionFormat:profile 有 shaderPrecision 则查表,否则返 null
+  const spf = gl2.getShaderPrecisionFormat(gl2.VERTEX_SHADER, gl2.HIGH_FLOAT);
+  const spf2 = gl2.getShaderPrecisionFormat(gl2.FRAGMENT_SHADER, gl2.LOW_INT);
+  const spfBad = gl2.getShaderPrecisionFormat(99999, 99999);
+  const spfResult = { spfBad, hasGlobalSPF: typeof WebGLShaderPrecisionFormat,
+    spf_native: gl2.getShaderPrecisionFormat.toString() };
+  if (spf) {
+    Object.assign(spfResult, {
+      spf_notNull: true,
+      spf_tag: Object.prototype.toString.call(spf),
+      spf_instanceof: spf instanceof WebGLShaderPrecisionFormat,
+      spf_precision: spf.precision, spf_rangeMin: spf.rangeMin, spf_rangeMax: spf.rangeMax,
+      spf_ownKeys: Object.getOwnPropertyNames(spf).length,
+      spf2_precision: spf2.precision, spf2_rangeMin: spf2.rangeMin,
+    });
+  }
   return {
     gl2_notNull: !!gl2, gl1_notNull: !!gl1,
     tag2: Object.prototype.toString.call(gl2),
@@ -49,10 +65,11 @@ const CODE = `(() => {
     canvas_identity: gl2.canvas === cv,
     sameCtx: gl2 === cv.getContext('webgl2'),
     unknownParam: gl2.getParameter(999999),
+    ...spfResult,
   };
 })()`;
 
-for (const profName of ['macos-chrome-v148', 'android-webview-v138']) {
+for (const profName of ['macos-chrome-v148', 'android-webview-v138', 'android-chrome/22126rn91y-v139-59164']) {
   const exp = JSON.parse(fs.readFileSync(path.join(PROFILES, `${profName}.json`), 'utf8')).webgl;
   const realm = await Realm.create({ profile: profName });
   const r = realm.run(CODE);
@@ -81,6 +98,24 @@ for (const profName of ['macos-chrome-v148', 'android-webview-v138']) {
   ok('gl.canvas === 创建它的 canvas', v.canvas_identity === true);
   ok('同 canvas 同 type 单例', v.sameCtx === true);
   ok('未知 enum getParameter → null', v.unknownParam === null);
+  // getShaderPrecisionFormat — 方法形态(不依赖数据)
+  ok('getShaderPrecisionFormat toString 为 native', v.spf_native === 'function getShaderPrecisionFormat() { [native code] }');
+  ok('未知 shaderType/precisionType → null', v.spfBad === null);
+  ok('有 window.WebGLShaderPrecisionFormat 全局', v.hasGlobalSPF === 'function');
+  // 值验证(仅当 profile 含 shaderPrecision 数据)
+  const sp = exp.shaderPrecision;
+  if (sp) {
+    ok('spf 非 null', v.spf_notNull === true);
+    ok('spf tag [object WebGLShaderPrecisionFormat]', v.spf_tag === '[object WebGLShaderPrecisionFormat]');
+    ok('spf instanceof WebGLShaderPrecisionFormat', v.spf_instanceof === true);
+    ok('spf precision=profile(VERTEX+HIGH_FLOAT)', v.spf_precision === sp['35633-36338']?.precision);
+    ok('spf rangeMin=profile', v.spf_rangeMin === sp['35633-36338']?.rangeMin);
+    ok('spf rangeMax=profile', v.spf_rangeMax === sp['35633-36338']?.rangeMax);
+    ok('[陷阱] spf own keys 为空(属性在 prototype)', v.spf_ownKeys === 0);
+    ok('spf2(FRAG+LOW_INT) precision=profile', v.spf2_precision === sp['35632-36339']?.precision);
+  } else {
+    console.log('  ⊘ shaderPrecision 数据缺,跳过值验证');
+  }
   realm.dispose();
 }
 
