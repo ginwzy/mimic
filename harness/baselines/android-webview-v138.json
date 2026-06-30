@@ -16902,9 +16902,21 @@
         "Navigator.prototype",
         "Object.prototype"
       ],
-      "ownKeys": [],
+      "ownKeys": [
+        "mediaSession"
+      ],
       "symbolKeys": [],
-      "keys": {}
+      "keys": {
+        "mediaSession": {
+          "type": "data",
+          "flags": {
+            "writable": true,
+            "enumerable": true,
+            "configurable": true
+          },
+          "valueType": "object"
+        }
+      }
     },
     {
       "id": "screen",
@@ -16940,6 +16952,121 @@
       "id": "window.chrome",
       "category": "object",
       "kind": "instance",
+      "resolved": false
+    },
+    {
+      "id": "navigator.plugins",
+      "category": "object",
+      "kind": "collection",
+      "resolved": true,
+      "tag": "[object PluginArray]",
+      "protoChain": [
+        "PluginArray.prototype",
+        "Object.prototype"
+      ],
+      "ownKeys": [],
+      "symbolKeys": [],
+      "keys": {},
+      "collection": {
+        "length": 0,
+        "items": []
+      }
+    },
+    {
+      "id": "navigator.mimeTypes",
+      "category": "object",
+      "kind": "collection",
+      "resolved": true,
+      "tag": "[object MimeTypeArray]",
+      "protoChain": [
+        "MimeTypeArray.prototype",
+        "Object.prototype"
+      ],
+      "ownKeys": [],
+      "symbolKeys": [],
+      "keys": {},
+      "collection": {
+        "length": 0,
+        "items": []
+      }
+    },
+    {
+      "id": "navigator.userAgentData",
+      "category": "object",
+      "kind": "instance",
+      "resolved": true,
+      "tag": "[object NavigatorUAData]",
+      "protoChain": [
+        "NavigatorUAData.prototype",
+        "Object.prototype"
+      ],
+      "ownKeys": [],
+      "symbolKeys": [],
+      "keys": {}
+    },
+    {
+      "id": "window.visualViewport",
+      "category": "object",
+      "kind": "instance",
+      "resolved": true,
+      "tag": "[object VisualViewport]",
+      "protoChain": [
+        "VisualViewport.prototype",
+        "EventTarget.prototype",
+        "Object.prototype"
+      ],
+      "ownKeys": [],
+      "symbolKeys": [],
+      "keys": {}
+    },
+    {
+      "id": "window.indexedDB",
+      "category": "object",
+      "kind": "instance",
+      "resolved": true,
+      "tag": "[object IDBFactory]",
+      "protoChain": [
+        "IDBFactory.prototype",
+        "Object.prototype"
+      ],
+      "ownKeys": [],
+      "symbolKeys": [],
+      "keys": {}
+    },
+    {
+      "id": "window.Worker",
+      "category": "function",
+      "t1": true,
+      "resolved": true,
+      "fn": {
+        "name": "Worker",
+        "length": 1,
+        "toStringNative": true,
+        "toStringSrc": "",
+        "hasOwnToString": false,
+        "hasPrototype": true,
+        "ownNames": "length,name,prototype"
+      }
+    },
+    {
+      "id": "window.RTCPeerConnection",
+      "category": "function",
+      "t1": true,
+      "resolved": true,
+      "fn": {
+        "name": "RTCPeerConnection",
+        "length": 0,
+        "toStringNative": true,
+        "toStringSrc": "",
+        "hasOwnToString": false,
+        "hasPrototype": true,
+        "ownNames": "generateCertificate,length,name,prototype"
+      }
+    },
+    {
+      "id": "window.Notification",
+      "category": "function",
+      "t1": true,
       "resolved": false
     }
   ]

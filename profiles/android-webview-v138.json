@@ -34,11 +34,36 @@
       "en-US"
     ],
     "hardwareConcurrency": 8,
+    "deviceMemory": 8,
     "maxTouchPoints": 5,
     "cookieEnabled": true,
+    "userAgentData": {
+      "brands": [
+        {
+          "brand": "Not)A;Brand",
+          "version": "8"
+        },
+        {
+          "brand": "Chromium",
+          "version": "138"
+        },
+        {
+          "brand": "Android WebView",
+          "version": "138"
+        }
+      ],
+      "mobile": true,
+      "platform": "Android",
+      "architecture": "",
+      "bitness": "",
+      "fullVersionList": [],
+      "model": "",
+      "platformVersion": "",
+      "uaFullVersion": ""
+    },
     "connection": {
       "effectiveType": "4g",
-      "downlink": 10,
+      "downlink": 9.1,
       "rtt": 0,
       "saveData": false
     }
@@ -57,9 +82,9 @@
   },
   "window": {
     "innerWidth": 394,
-    "innerHeight": 717,
+    "innerHeight": 749,
     "outerWidth": 393,
-    "outerHeight": 715,
+    "outerHeight": 747,
     "devicePixelRatio": 2.75,
     "chrome": null
   },
