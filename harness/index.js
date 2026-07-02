@@ -14,27 +14,25 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const BASELINES_DIR = path.join(HERE, 'baselines');
 const PROFILES_DIR = path.resolve(HERE, '../profiles');
 
-// profile→baseline 规范配对里"名不同"的人工对(同名/前缀对由 pairedBaseline 自动解出)。
-// 与 diff-gate.test.js 的 PAIRS 同源规约;那里为回归防护刻意各自钉死,故此处独立列而非共享。
+// profile→baseline 里"名不同"的人工对(diff-gate.test.js 的 PAIRS 另各自钉死作回归防护,故不共享)。
 const PROFILE_BASELINE = {
   'chrome-mac': 'macos-chrome-v148', // demo profile 无同名基线,host/formFactor 同 v148
 };
 
-/** profile 的配对基线名:显式映射 → 同名 → 唯一 `profile-*` 前缀。无解返回 null,多解抛(逼显式 --baseline)。 */
+/** profile 的配对基线名:显式映射 → 同名 → 唯一 `profile-*` 前缀(linux-chrome→…-v143)。无解返回 null,多解抛(逼 --baseline)。 */
 function pairedBaseline(profile) {
   if (PROFILE_BASELINE[profile]) return PROFILE_BASELINE[profile];
   const all = listBaselines();
-  if (all.includes(profile)) return profile;                    // 同名对(采集服务一次落盘)
-  const pref = all.filter((b) => b.startsWith(`${profile}-`));  // 版本后缀对(linux-chrome→linux-chrome-v143)
+  if (all.includes(profile)) return profile;
+  const pref = all.filter((b) => b.startsWith(`${profile}-`));
   if (pref.length === 1) return pref[0];
   if (pref.length > 1) throw new Error(`profile "${profile}" 有多个候选基线 [${pref.join(', ')}],请 --baseline 指定`);
   return null;
 }
 
 /**
- * 解析 baseline:绝对/相对路径直用;裸名到 baselines/<name>.json。
- * 省略 baseline 但给了 profile → 据 profile 反查配对基线(不回落字母序第一,否则桌面 profile 套 mobile 基线产 host 错配的假 EXTRA/MISSING)。
- * 两者皆省 → 取 baselines/ 下第一个(内置 seed 已移除,需先经真机采集)。
+ * 解析 baseline:路径直用;裸名→baselines/<name>.json;省 baseline 但有 profile → 反查配对基线
+ * (不回落字母序第一,否则桌面 profile 套 mobile 基线产 host 错配假 EXTRA/MISSING);皆省 → 首个基线。
  */
 function resolveBaseline(ref, profile) {
   if (ref) {
