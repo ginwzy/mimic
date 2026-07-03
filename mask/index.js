@@ -227,7 +227,7 @@ export function createMask(window) {
     return reg;
   }
 
-  /** iface 的可构造对偶:无 new 才抛,带 new 则 init(self, args)。opts = { parent?, methods?, accessors?, statics?, props? }。 */
+  /** iface 的可构造对偶:无 new 才抛,带 new 则 init(self, args)。opts = { parent?, methods?, accessors?, eventHandlers?, statics?, props? }。 */
   function ctorIface(name, len, init, opts = {}) {
     const ctor = native(function (...args) {
       if (!new.target) {
@@ -242,6 +242,7 @@ export function createMask(window) {
     Object.defineProperty(proto, 'constructor', { value: ctor, configurable: true, enumerable: false });
     if (opts.methods) methods(proto, opts.methods);
     if (opts.accessors) accessors(proto, opts.accessors);
+    if (opts.eventHandlers) for (const h of opts.eventHandlers) eventHandler(proto, h);
     if (opts.statics) methods(ctor, opts.statics);
     Object.defineProperty(window, name, { value: ctor, writable: true, configurable: true, enumerable: false });
     markCtorProto(proto);
@@ -255,6 +256,7 @@ export function createMask(window) {
     if (opts.parent) setParent(proto, opts.parent); // parent=ETP 时自动登记 brandless
     methods(proto, opts.methods || {});
     accessors(proto, opts.accessors || {});
+    for (const h of opts.eventHandlers || []) eventHandler(proto, h);
     return create(opts.props || {});
   }
 

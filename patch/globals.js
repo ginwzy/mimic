@@ -73,7 +73,7 @@ export default {
     // Worker:postMessage/terminate 壳;length=1(真机仅首参必选)。
     if (typeof W.Worker !== 'function') {
       makeCtor('Worker', 1, {
-        init: (self) => { self.onmessage = null; self.onerror = null; self.onmessageerror = null; },
+        eventHandlers: ['onmessage', 'onerror', 'onmessageerror'],
         methods: { postMessage: [1, () => undefined], terminate: [0, () => undefined] },
       });
     }
@@ -97,7 +97,7 @@ export default {
     // Notification:Chrome 有、WebView 无 → host 门控。
     if (chromeHost(traits) && typeof W.Notification !== 'function') {
       makeCtor('Notification', 1, {
-        init: (self) => { self.onclick = null; self.onclose = null; self.onerror = null; self.onshow = null; },
+        eventHandlers: ['onclick', 'onclose', 'onerror', 'onshow'],
         methods: { close: [0, () => undefined] },
         statics: { requestPermission: [1, () => W.Promise.resolve('default')] },
       });
@@ -146,6 +146,7 @@ export default {
       const mql = mask.iface('MediaQueryList');
       // 插入 EventTarget 层对齐真机原型链。
       try { mask.eventTargetProto(mql.proto); } catch { /* noop */ }
+      mask.eventHandler(mql.proto, 'onchange');
 
       const coarse = traits.formFactor === 'mobile';
       const matchMedia = (query) => {
@@ -154,7 +155,7 @@ export default {
         let matches = false;
         if (/\(\s*(any-)?pointer\s*:\s*coarse\s*\)/.test(media)) matches = coarse;
         else if (/\(\s*(any-)?pointer\s*:\s*fine\s*\)/.test(media)) matches = !coarse;
-        return mql.create({ media, matches, onchange: null });
+        return mql.create({ media, matches });
       };
       window.matchMedia = native(matchMedia, 'matchMedia', 1);
     }

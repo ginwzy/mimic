@@ -157,6 +157,7 @@ export default {
       offState.set(self, { numCh, length, sampleRate });
     });
     installFactory(offline.proto, (self) => offState.get(self));
+    mask.eventHandler(offline.proto, 'oncomplete');
     mask.methods(offline.proto, {
       startRendering: [0, function startRendering() {
         const s = offState.get(this) || {};

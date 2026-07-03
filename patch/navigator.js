@@ -44,12 +44,12 @@ function methodTable(mask) {
 
 // 接口单例形状表:{ cls, methods?, props?, gate? } → mask.singleton,driver 透传。
 // eager 建实例保 === 不变量;刻意不插 EventTarget 层(避免 jsdom brand-check)。
-function ifaceTable(mask) {
+function ifaceTable(mask, createPermissionStatus) {
   const { promise, pending, adopt } = mask;
   return {
     // ── always:真机无条件存在 / secure-context chrome+webview 共有 ───────────────────────
     permissions: { cls: 'Permissions', methods: {
-      query: [1, (d) => promise(adopt({ name: d && d.name, state: 'prompt', onchange: null }))],
+      query: [1, (d) => promise(createPermissionStatus(d && d.name, 'prompt'))],
     } },
     geolocation: { cls: 'Geolocation', methods: {
       getCurrentPosition: [1, () => undefined], watchPosition: [1, () => 0], clearWatch: [1, () => undefined],
@@ -76,7 +76,7 @@ function ifaceTable(mask) {
     mediaDevices: { cls: 'MediaDevices', methods: {
       enumerateDevices: [0, () => promise(adopt([]))], getDisplayMedia: [1, () => pending()],
       getSupportedConstraints: [0, () => adopt({})], getUserMedia: [1, () => pending()],
-    }, props: { ondevicechange: null } },
+    }, eventHandlers: ['ondevicechange'] },
     storage: { cls: 'StorageManager', methods: {
       estimate: [0, () => promise(adopt({ quota: 0, usage: 0 }))], getDirectory: [0, () => pending()],
       persist: [0, () => promise(false)], persisted: [0, () => promise(false)],
@@ -84,7 +84,7 @@ function ifaceTable(mask) {
     serviceWorker: { cls: 'ServiceWorkerContainer', methods: {
       getRegistration: [0, () => pending()], getRegistrations: [0, () => promise(adopt([]))],
       register: [1, () => pending()], startMessages: [0, () => undefined],
-    }, props: { controller: null, oncontrollerchange: null, onmessage: null, onmessageerror: null } },
+    }, props: { controller: null }, eventHandlers: ['oncontrollerchange', 'onmessage', 'onmessageerror'] },
     virtualKeyboard: { cls: 'VirtualKeyboard', props: { overlaysContent: false } },
     wakeLock: { cls: 'WakeLock', methods: { request: [0, () => pending()] } },
     locks: { cls: 'LockManager', methods: { query: [0, () => pending()], request: [2, () => pending()] } },
@@ -161,9 +161,22 @@ export default {
 
     // ── 机制层 driver:接口单例 accessor(=== 不变量,见 ifaceTable 表注)。
     const accessors = {};
-    for (const [key, { cls, methods = {}, props = {}, gate }] of Object.entries(ifaceTable(mask))) {
+    const permissionState = new WeakMap();
+    const permissionStatus = mask.iface('PermissionStatus');
+    mask.instAccessors(permissionStatus.proto, {
+      name: function () { return permissionState.get(this)?.name; },
+      state: function () { return permissionState.get(this)?.state || 'prompt'; },
+    });
+    mask.eventHandler(permissionStatus.proto, 'onchange');
+    const createPermissionStatus = (name, state) => {
+      const status = permissionStatus.create();
+      permissionState.set(status, { name, state });
+      return status;
+    };
+
+    for (const [key, { cls, methods = {}, props = {}, eventHandlers = [], gate }] of Object.entries(ifaceTable(mask, createPermissionStatus))) {
       if (!passes(gate)) continue;
-      const inst = mask.singleton(cls, { methods, props });
+      const inst = mask.singleton(cls, { methods, props, eventHandlers });
       accessors[key] = () => inst;
     }
     // chrome-only 非接口标量(不入 ifaceTable)。

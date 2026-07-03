@@ -26,7 +26,11 @@ const CODE = `(async () => {
   osc.start(0);
   // FingerprintJS2 主路径:oncomplete / addEventListener('complete'),非 await
   let ocRan = false, ocBufferOk = false, listenerRan = false;
+  const ocDefaultNull = ctx.oncomplete === null;
+  const ocOwnBefore = Object.prototype.hasOwnProperty.call(ctx, 'oncomplete');
   ctx.oncomplete = (e) => { ocRan = true; ocBufferOk = e.renderedBuffer instanceof AudioBuffer; };
+  const ocOwnAfter = Object.prototype.hasOwnProperty.call(ctx, 'oncomplete');
+  const ocProtoDesc = Object.getOwnPropertyDescriptor(OfflineAudioContext.prototype, 'oncomplete');
   ctx.addEventListener('complete', () => { listenerRan = true; });
   const rendering = ctx.startRendering();
   const buffer = await rendering;
@@ -45,7 +49,8 @@ const CODE = `(async () => {
   return {
     offline_state_after, rt_state, rt_baseLatency, rt_osc_ok, rt_suspend_p, rt_resume_p, rt_close_p,
     has_addEventListener: typeof ctx.addEventListener,
-    ocRan, ocBufferOk, listenerRan,
+    ocRan, ocBufferOk, listenerRan, ocDefaultNull, ocOwnBefore, ocOwnAfter,
+    ocProtoAccessor: !!ocProtoDesc && typeof ocProtoDesc.get === 'function' && typeof ocProtoDesc.set === 'function',
     typeof_OfflineAudioContext: typeof OfflineAudioContext,
     typeof_AudioContext: typeof AudioContext,
     typeof_AudioBuffer: typeof AudioBuffer,
@@ -130,6 +135,8 @@ ok('OscillatorNode.prototype own 键 constructor 在末位', v.ctorlast_osc === 
 ok('AudioParam.prototype own 键 constructor 在末位', v.ctorlast_param === true);
 console.log('\n[oncomplete/addEventListener 主对手路径 — FingerprintJS2]');
 ok('ctx.addEventListener 存在(非 undefined → 不崩)', v.has_addEventListener === 'function');
+ok('oncomplete 默认 null 且 prototype accessor 可写', v.ocDefaultNull === true && v.ocProtoAccessor === true);
+ok('oncomplete 赋值不产生实例 own key', v.ocOwnBefore === false && v.ocOwnAfter === false);
 ok('oncomplete 回调触发(非静默 no-op)', v.ocRan === true);
 ok('oncomplete 事件 e.renderedBuffer instanceof AudioBuffer', v.ocBufferOk === true);
 ok('addEventListener("complete") 监听触发', v.listenerRan === true);
