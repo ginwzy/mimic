@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Profile } from '../core/profile.js';
 import { finalize, deriveTraits, suggestName } from './derive.js';
-import { saveBaseline } from '../harness/server.js';
+import { saveBaseline } from '../harness/baseline-store.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROFILES_DIR = path.resolve(HERE, '../profiles');

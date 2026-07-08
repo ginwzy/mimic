@@ -9,20 +9,20 @@
  *     其真值留在 collect1,是日后键到检测器实际探针时的回放源/校验目标,不计入本轮失分。
  *
  * 用法(语料目录为必填绝对路径参数,取 ground truth):
- *   node fp_env_verify.mjs /abs/path/to/fp_env                 # 池等距抽样验证(默认 40 条)
- *   node fp_env_verify.mjs /abs/path/to/fp_env --all           # 验全池
- *   node fp_env_verify.mjs /abs/path/to/fp_env --sample 100
- *   node fp_env_verify.mjs /abs/path/to/fp_env android-chrome/sm-a556b-v139-11387 --verbose
+ *   node tools/fp-env/verify.mjs /abs/path/to/fp_env                 # 池等距抽样验证(默认 40 条)
+ *   node tools/fp-env/verify.mjs /abs/path/to/fp_env --all           # 验全池
+ *   node tools/fp-env/verify.mjs /abs/path/to/fp_env --sample 100
+ *   node tools/fp-env/verify.mjs /abs/path/to/fp_env android-chrome/sm-a556b-v139-11387 --verbose
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Realm } from './core/realm.js';
+import { Realm } from '../../core/realm.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const FP_ENV_DIR = argv.find((a) => a.startsWith('/')); // 语料目录:取 ground truth,显式给(必填)
-const PROFILES_DIR = path.join(__dirname, 'profiles');
+const PROFILES_DIR = path.resolve(__dirname, '../../profiles');
 const POOL_DIR = path.join(PROFILES_DIR, 'android-chrome');
 const VERBOSE = argv.includes('--verbose');
 const ALL = argv.includes('--all');
@@ -30,7 +30,7 @@ const SAMPLE = (() => { const i = argv.indexOf('--sample'); return i >= 0 ? Numb
 const named = argv.filter((a) => !a.startsWith('-') && !a.startsWith('/') && !/^\d+$/.test(a));
 
 if (!FP_ENV_DIR) {
-  console.error('用法:node fp_env_verify.mjs /abs/path/to/fp_env [profile…] [--all|--sample N] [--verbose]\n需把 fp_env 采集目录作为绝对路径参数传入(取每个 profile 的 meta.captureFile 作真值对照)。');
+  console.error('用法:node tools/fp-env/verify.mjs /abs/path/to/fp_env [profile…] [--all|--sample N] [--verbose]\n需把 fp_env 采集目录作为绝对路径参数传入(取每个 profile 的 meta.captureFile 作真值对照)。');
   process.exit(1);
 }
 
@@ -169,7 +169,7 @@ async function main() {
       console.log(`池 ${all.length} 条,等距抽样 ${names.length}(--all 验全量)\n`);
     } else { names = all; }
   }
-  if (!names.length) { console.error('无 profiles/android-chrome/ profile,先跑 fp_env_adapt.mjs'); process.exit(1); }
+  if (!names.length) { console.error('无 profiles/android-chrome/ profile,先跑 tools/fp-env/adapt.mjs'); process.exit(1); }
 
   let gTotal = 0, gOk = 0; const perfect = [];
   for (const name of names) {

@@ -4,7 +4,7 @@
  */
 import { diff, summarize } from './diff.js';
 import { classify } from './whitelist.js';
-import { hostOf } from './server.js';
+import { hostOf } from './baseline-store.js';
 
 let pass = 0; let failed = 0;
 function ok(name, cond) {

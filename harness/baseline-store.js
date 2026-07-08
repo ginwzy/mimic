@@ -1,5 +1,5 @@
 /**
- * harness/server.js —— 结构基线落盘 + host/命名派生(库模块,非独立服务)。
+ * harness/baseline-store.js —— 结构基线落盘 + host/命名派生。
  *
  * 原为与 capture/server.js 镜像的第二个 HTTP 服务(probe-only,端口 8971),已并入统一采集服务(合一
  * 动机见 capture/server.js 头注)。本文件遂退化为纯库:saveBaseline 由统一服务调用,hostOf 供

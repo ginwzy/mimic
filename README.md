@@ -79,7 +79,9 @@ patch/   navigator / screen / viewport / timezone / chrome / touch / canvas / we
 trace/   detector / monitor
 entry/   index(API) / cli / server
 capture/ 真机采集(collect 浏览器端 / derive 派生 traits / server 托管回传落盘)
+harness/ 结构探针 / 真机基线 / mimic-vs-真机 diff gate
 profiles/  _base/ + 各设备 profile;android-chrome/ 为真机身份池(运行时按 Profile.list() 挑一条轮换)
+tools/   语料导入与验证等开发工具
 reference/ legacy(旧实现归档) + sdenv/sdenv-extend(已 vendored 的第三方参考实现)
 ```
 

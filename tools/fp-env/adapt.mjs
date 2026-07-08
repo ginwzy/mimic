@@ -21,26 +21,26 @@
  *  - navigator.vendor/cookieEnabled:移动 Chrome 固定值,补默认。
  *
  * 用法(语料目录为必填的绝对路径参数):
- *   node fp_env_adapt.mjs /abs/path/to/fp_env            # 全量不同身份 → profiles/android-chrome/
- *   node fp_env_adapt.mjs /abs/path/to/fp_env --limit 50 # 只导前 50 条(冒烟用)
- *   node fp_env_adapt.mjs /abs/path/to/fp_env --dry      # 只跑映射+validate,不落盘
+ *   node tools/fp-env/adapt.mjs /abs/path/to/fp_env            # 全量不同身份 → profiles/android-chrome/
+ *   node tools/fp-env/adapt.mjs /abs/path/to/fp_env --limit 50 # 只导前 50 条(冒烟用)
+ *   node tools/fp-env/adapt.mjs /abs/path/to/fp_env --dry      # 只跑映射+validate,不落盘
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Profile } from './core/profile.js';
-import { deriveTraits } from './capture/derive.js';
+import { Profile } from '../../core/profile.js';
+import { deriveTraits } from '../../capture/derive.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const argv = process.argv.slice(2);
 const FP_ENV_DIR = argv.find((a) => a.startsWith('/')); // 语料目录:导入时显式给,不写死、不走 env
-const OUT_DIR = path.join(__dirname, 'profiles', 'android-chrome');
+const OUT_DIR = path.resolve(__dirname, '../../profiles/android-chrome');
 const DRY = argv.includes('--dry');
 const LIMIT = (() => { const i = argv.indexOf('--limit'); return i >= 0 ? Number(argv[i + 1]) : Infinity; })();
 
 if (!FP_ENV_DIR) {
-  console.error('用法:node fp_env_adapt.mjs /abs/path/to/fp_env [--limit N] [--dry]\n需把 fp_env 采集目录作为绝对路径参数传入。');
+  console.error('用法:node tools/fp-env/adapt.mjs /abs/path/to/fp_env [--limit N] [--dry]\n需把 fp_env 采集目录作为绝对路径参数传入。');
   process.exit(1);
 }
 
@@ -142,7 +142,7 @@ function fpToProfile(d, captureFile, id) {
   const name = `android-chrome/${base}`;
   const meta = {
     source: 'fp_env-akamai',
-    captureFile, // 配对真机采集文件名 —— 供 fp_env_verify.mjs 取 ground truth
+    captureFile, // 配对真机采集文件名 —— 供 tools/fp-env/verify.mjs 取 ground truth
     hygiene: { devicePixelRatio: d.devicePixelRatio, issues: [] },
     fidelity: {
       navigator: 'real', screen: 'real', window: 'real', timezone: 'real',
