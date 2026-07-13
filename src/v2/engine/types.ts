@@ -8,6 +8,8 @@ export interface Port {
   source(path: string): unknown;
   error(name: 'Error' | 'TypeError' | 'RangeError', message: string): Error;
   resolve(value?: JsonValue): Promise<unknown>;
+  record(value: JsonValue): void;
+  realm(): number;
   now(): number;
   origin(): number;
 }

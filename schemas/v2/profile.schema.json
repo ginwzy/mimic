@@ -4,11 +4,12 @@
   "title": "Profile",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "id", "hash", "shape", "source", "navigator", "screen", "evidence"],
+  "required": ["schema", "id", "hash", "target", "shape", "source", "navigator", "screen", "evidence"],
   "properties": {
     "schema": { "const": 2 },
     "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._/-]*$" },
     "hash": { "$ref": "#/definitions/hash" },
+    "target": { "$ref": "#/definitions/target" },
     "shape": { "$ref": "#/definitions/shapeRef" },
     "source": { "$ref": "#/definitions/source" },
     "navigator": { "$ref": "#/definitions/navigator" },
@@ -20,6 +21,18 @@
   },
   "definitions": {
     "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "host", "platform", "form", "version"],
+      "properties": {
+        "engine": { "const": "chromium" },
+        "host": { "enum": ["chrome", "webview"] },
+        "platform": { "enum": ["android", "linux", "macos", "windows"] },
+        "form": { "enum": ["desktop", "mobile"] },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
     "shapeRef": {
       "type": "object",
       "additionalProperties": false,

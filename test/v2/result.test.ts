@@ -113,6 +113,42 @@ test('encodeResult retains an independently safe report when value encoding fail
   assert.equal(Object.isFrozen(encoded.report?.trace), true);
 });
 
+test('Result codec preserves the synthetic marker through encode failure', () => {
+  const input = { ok: true, value: 1n, plan, support, synthetic: true } as unknown as Result<unknown>;
+
+  assert.deepEqual(encodeResult(input), {
+    ok: false,
+    error: {
+      name: 'MimicError', phase: 'encode', code: 'ENCODE_FAILED',
+      message: 'Result 无法编码为 JSON', plan,
+    },
+    plan,
+    support,
+    synthetic: true,
+  });
+  assert.deepEqual(parseResult({ ok: true, plan, support, synthetic: true }), {
+    ok: true, plan, support, synthetic: true,
+  });
+  assert.throws(
+    () => parseResult({ ok: true, plan, support, synthetic: false }),
+    (error: unknown) => error instanceof MimicError && error.code === 'BAD_RESULT',
+  );
+
+  const cycle: Record<string, unknown> = {};
+  cycle.self = cycle;
+  const failed = {
+    ok: false,
+    error: { name: 'MimicError', phase: 'run', code: 'RUN_FAILED', message: 'failed' },
+    report: cycle,
+    synthetic: true,
+  } as unknown as Result<unknown>;
+  assert.deepEqual(encodeResult(failed), {
+    ok: false,
+    error: { name: 'MimicError', phase: 'encode', code: 'ENCODE_FAILED', message: 'Result 无法编码为 JSON' },
+    synthetic: true,
+  });
+});
+
 test('encodeResult does not read proxied array properties through get traps', () => {
   let reads = 0;
   const value = new Proxy([1, 2], {

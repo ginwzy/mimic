@@ -7,6 +7,7 @@ export type Phase = 'parse' | 'compile' | 'install' | 'run' | 'encode';
 
 export type ErrorCode =
   | 'BAD_JOB'
+  | 'BAD_COLLECT'
   | 'BAD_PROFILE'
   | 'BAD_PAGE'
   | 'BAD_SHAPE'
@@ -18,6 +19,7 @@ export type ErrorCode =
   | 'WRITE_CONFLICT'
   | 'NO_DRIVER'
   | 'LOW_SUPPORT'
+  | 'SYNTHETIC_REQUIRED'
   | 'ENGINE_BLOCKED'
   | 'INSTALL_FAILED'
   | 'RUN_FAILED'
@@ -163,6 +165,7 @@ export interface Profile {
   schema: 2;
   id: string;
   hash: Hash;
+  target: Target;
   shape: ShapeRef;
   source: Source;
   navigator: NavigatorData;
@@ -237,6 +240,7 @@ export interface Boot {
 export interface Plan<Operation = JsonValue, Binding extends Bind = Bind> {
   readonly schema: 2;
   readonly id: string;
+  readonly synthetic?: true;
   readonly profile: Readonly<{ id: string; hash: string }>;
   readonly shape: Readonly<{ id: string; hash: Hash; level: Shape['level'] }>;
   readonly page?: Readonly<{ id: string; hash: string }>;
@@ -260,5 +264,5 @@ export interface ErrorInfo {
 }
 
 export type Result<Value = JsonValue> =
-  | { ok: true; value?: Value; report?: Data; plan: string; support: SupportMap }
-  | { ok: false; error: ErrorInfo; report?: Data; plan?: string; support?: SupportMap };
+  | { ok: true; value?: Value; report?: Data; plan: string; support: SupportMap; synthetic?: true }
+  | { ok: false; error: ErrorInfo; report?: Data; plan?: string; support?: SupportMap; synthetic?: true };

@@ -158,7 +158,13 @@ function diffFn(
   mimic: FnTell | null | undefined,
   output: DiffEntry[],
 ): void {
-  if (!baseline) return;
+  if (baseline === undefined) return;
+  if (baseline === null) {
+    if (mimic !== undefined && mimic !== null) {
+      output.push(entry(target, key, `${prefix}.exists`, 'TELL', 'absent', 'present'));
+    }
+    return;
+  }
   if (!mimic) {
     if (prefix.startsWith('accessor.')) {
       output.push(entry(target, key, `${prefix}.exists`, 'TELL', 'present', 'absent'));
@@ -178,22 +184,31 @@ function diffFn(
   }
 }
 
-function diffKey(target: ProbeTarget, key: string, baseline: ProbeKey, mimic: ProbeKey, output: DiffEntry[]): void {
-  if (baseline.type !== undefined && mimic.type !== undefined && baseline.type !== mimic.type) {
-    output.push(entry(target, key, 'key.type', 'TELL', baseline.type, mimic.type));
-    return;
+function diffScalar(
+  target: ProbeTarget,
+  key: string | null,
+  field: string,
+  baseline: unknown,
+  mimic: unknown,
+  output: DiffEntry[],
+): void {
+  if (baseline === undefined) return;
+  if (mimic === undefined) {
+    output.push(entry(target, key, field, 'MISSING', baseline, undefined));
+  } else if (baseline !== mimic) {
+    output.push(entry(target, key, field, 'TELL', baseline, mimic));
   }
-  if (baseline.flags && mimic.flags) {
+}
+
+function diffKey(target: ProbeTarget, key: string, baseline: ProbeKey, mimic: ProbeKey, output: DiffEntry[]): void {
+  diffScalar(target, key, 'key.type', baseline.type, mimic.type, output);
+  if (baseline.type !== undefined && mimic.type !== undefined && baseline.type !== mimic.type) return;
+  if (baseline.flags) {
     for (const field of FLAG_FIELDS) {
-      if (baseline.flags[field] === undefined) continue;
-      if (baseline.flags[field] !== mimic.flags[field]) {
-        output.push(entry(target, key, `flags.${field}`, 'TELL', baseline.flags[field], mimic.flags[field]));
-      }
+      diffScalar(target, key, `flags.${field}`, baseline.flags[field], mimic.flags?.[field], output);
     }
   }
-  if (baseline.valueType !== undefined && mimic.valueType !== undefined && baseline.valueType !== mimic.valueType) {
-    output.push(entry(target, key, 'valueType', 'TELL', baseline.valueType, mimic.valueType));
-  }
+  diffScalar(target, key, 'valueType', baseline.valueType, mimic.valueType, output);
   if (baseline.fn) diffFn(target, key, 'fn', baseline.fn, mimic.fn, output);
   if (baseline.accessor) {
     diffFn(target, key, 'accessor.get', baseline.accessor.get, mimic.accessor?.get, output);
@@ -211,17 +226,21 @@ function diffCollection(
   mimic: ProbeCollection,
   output: DiffEntry[],
 ): void {
-  if (baseline.length !== undefined && mimic.length !== undefined && baseline.length !== mimic.length) {
-    output.push(entry(target, null, 'collection.length', 'TELL', baseline.length, mimic.length));
-  }
+  diffScalar(target, null, 'collection.length', baseline.length, mimic.length, output);
   const baselineItems = baseline.items || [];
   const mimicItems = mimic.items || [];
-  const length = Math.min(baselineItems.length, mimicItems.length);
-  for (let index = 0; index < length; index++) {
+  for (let index = 0; index < baselineItems.length; index++) {
     const baselineItem = baselineItems[index]!;
-    const mimicItem = mimicItems[index]!;
+    const mimicItem = mimicItems[index];
+    if (!mimicItem) {
+      output.push(entry(target, `[${index}]`, 'collection.item', 'MISSING', baselineItem, undefined));
+      continue;
+    }
     for (const field of Object.keys(baselineItem)) {
-      if (mimicItem[field] === undefined) continue;
+      if (mimicItem[field] === undefined) {
+        output.push(entry(target, `[${index}].${field}`, 'collection.item', 'MISSING', baselineItem[field], undefined));
+        continue;
+      }
       if (baselineItem[field] !== mimicItem[field]) {
         output.push(entry(
           target,
@@ -243,18 +262,20 @@ function diffObject(
   complete: boolean,
   output: DiffEntry[],
 ): void {
-  if (baseline.tag !== undefined && mimic.tag !== undefined && baseline.tag !== mimic.tag) {
-    output.push(entry(target, null, 'tag', 'TELL', baseline.tag, mimic.tag));
-  }
-  if (baseline.protoChain && mimic.protoChain && !arraysEqual(baseline.protoChain, mimic.protoChain)) {
-    output.push(entry(
-      target,
-      null,
-      'protoChain',
-      'TELL',
-      baseline.protoChain.join(' \u2192 '),
-      mimic.protoChain.join(' \u2192 '),
-    ));
+  diffScalar(target, null, 'tag', baseline.tag, mimic.tag, output);
+  if (baseline.protoChain) {
+    if (!mimic.protoChain) {
+      output.push(entry(target, null, 'protoChain', 'MISSING', baseline.protoChain, undefined));
+    } else if (!arraysEqual(baseline.protoChain, mimic.protoChain)) {
+      output.push(entry(
+        target,
+        null,
+        'protoChain',
+        'TELL',
+        baseline.protoChain.join(' \u2192 '),
+        mimic.protoChain.join(' \u2192 '),
+      ));
+    }
   }
   const baselineKeys = baseline.keys || {};
   const mimicKeys = mimic.keys || {};
@@ -269,27 +290,37 @@ function diffObject(
     for (const key of Object.keys(mimicKeys)) {
       if (!(key in baselineKeys)) output.push(entry(target, key, 'key', 'EXTRA', 'absent', 'present'));
     }
-    if (baseline.ownKeys && mimic.ownKeys && !arraysEqual(baseline.ownKeys, mimic.ownKeys)) {
-      const sameSet = baseline.ownKeys.length === mimic.ownKeys.length
-        && baseline.ownKeys.every((key) => mimic.ownKeys!.includes(key));
-      if (sameSet) {
-        output.push(entry(
-          target,
-          null,
-          'ownKeys.order',
-          'TELL',
-          baseline.ownKeys.join(','),
-          mimic.ownKeys.join(','),
-        ));
+    if (baseline.ownKeys) {
+      if (!mimic.ownKeys) {
+        output.push(entry(target, null, 'ownKeys', 'MISSING', baseline.ownKeys, undefined));
+      } else if (!arraysEqual(baseline.ownKeys, mimic.ownKeys)) {
+        const sameSet = baseline.ownKeys.length === mimic.ownKeys.length
+          && baseline.ownKeys.every((key) => mimic.ownKeys!.includes(key));
+        if (sameSet) {
+          output.push(entry(
+            target,
+            null,
+            'ownKeys.order',
+            'TELL',
+            baseline.ownKeys.join(','),
+            mimic.ownKeys.join(','),
+          ));
+        }
       }
     }
     const baselineSymbols = baseline.symbolKeys || [];
     const mimicSymbols = mimic.symbolKeys || [];
+    for (const symbol of baselineSymbols) {
+      if (!mimicSymbols.includes(symbol)) output.push(entry(target, symbol, 'symbolKey', 'MISSING', 'present', 'absent'));
+    }
     for (const symbol of mimicSymbols) {
       if (!baselineSymbols.includes(symbol)) output.push(entry(target, symbol, 'symbolKey', 'EXTRA', 'absent', 'present'));
     }
   }
-  if (baseline.collection && mimic.collection) diffCollection(target, baseline.collection, mimic.collection, output);
+  if (baseline.collection) {
+    if (mimic.collection) diffCollection(target, baseline.collection, mimic.collection, output);
+    else output.push(entry(target, null, 'collection', 'MISSING', baseline.collection, undefined));
+  }
 }
 
 export function diff(baseline: ProbeSnapshot, mimic: ProbeSnapshot): DiffEntry[] {

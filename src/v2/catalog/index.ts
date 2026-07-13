@@ -1,7 +1,10 @@
+import { createHash } from 'node:crypto';
 import { MimicError } from '../core/error.js';
 import { parseCatalog } from '../core/parse.js';
 import { digest, seal } from '../core/seal.js';
-import type { CatalogDoc, Hash, Shape, ShapeRef } from '../core/types.js';
+import { canonical } from '../core/canonical.js';
+import { isTrustedShape } from '../core/trusted.js';
+import type { CatalogDoc, Hash, JsonValue, Shape, ShapeRef } from '../core/types.js';
 import type { CatalogPort, Feature } from '../shape/types.js';
 
 export class Catalog implements CatalogPort {
@@ -11,8 +14,8 @@ export class Catalog implements CatalogPort {
   private readonly shapes: ReadonlyMap<string, Shape>;
   private readonly features: ReadonlyMap<string, Feature>;
 
-  constructor(input: unknown, features: readonly Feature[] = []) {
-    this.data = parseCatalog(input);
+  constructor(input: unknown, features: readonly Feature[] = [], trusted = false) {
+    this.data = trusted ? input as CatalogDoc : parseCatalog(input);
     this.id = this.data.id;
     const featureMap = new Map<string, Feature>();
     for (const feature of features) {
@@ -55,6 +58,12 @@ export class Catalog implements CatalogPort {
 
   static create(id: string, shapes: readonly Shape[], features: readonly Feature[] = []): Catalog {
     const sorted = [...shapes].sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+    if (/^[a-z][a-z0-9.-]*$/.test(id) && sorted.every(isTrustedShape)
+      && new Set(sorted.map((shape) => shape.id)).size === sorted.length) {
+      const body = Object.freeze({ schema: 2 as const, id, shapes: Object.freeze(sorted) });
+      const hash = createHash('sha256').update(canonical(body as unknown as JsonValue)).digest('hex') as Hash;
+      return new Catalog(Object.freeze({ ...body, hash }), features, true);
+    }
     return new Catalog(seal({ schema: 2 as const, id, shapes: sorted }), features);
   }
 }

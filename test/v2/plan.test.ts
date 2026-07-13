@@ -109,6 +109,7 @@ test('compile creates a deterministic JSON Plan independent of feature registrat
   const replay = parsePlan(JSON.parse(JSON.stringify(first)));
   assert.deepEqual(replay, first);
   assert.ok(Object.isFrozen(replay.operations));
+  assert.equal(parsePlan(first), first);
 
   const { hash: _profileHash, ...profileBody } = selected.profile;
   const changed = compile({
@@ -130,6 +131,88 @@ test('compile creates a deterministic JSON Plan independent of feature registrat
     drivers: [],
     support: { structure: 'derived', oracle: 'emulated' },
   });
+});
+
+test('compile accepts non-canonical Shape feature order and normalizes Plan features', async () => {
+  const imported = await store.load('chrome-mac');
+  const canonicalShape = shapeFor(imported.shape, [base, child]);
+  const { hash: _shapeHash, ...shapeBody } = canonicalShape;
+  const reversedShape = parseShape(seal({
+    ...shapeBody,
+    features: [...canonicalShape.features].reverse(),
+  }));
+  const plan = compile({
+    profile: profileFor(imported.profile, reversedShape),
+    catalog: Catalog.create('test', [reversedShape], [child, base]),
+    ...(imported.page ? { page: imported.page } : {}),
+    job: parseJob({ kind: 'probe' }),
+    engine: { id: 'test', hash: 'engine-shape-v1', blocked: [] },
+    drivers: [],
+  });
+
+  assert.deepEqual(reversedShape.features, ['child', 'base']);
+  assert.deepEqual(plan.features, ['base', 'child']);
+});
+
+test('compile requires explicit authorization for a mismatched Shape target and marks the Plan', async () => {
+  const profileSource = await store.load('chrome-mac');
+  const shapeSource = await store.load('macos-chrome-v148');
+  const catalog = Catalog.create('test', [shapeSource.shape], builtFeatures);
+  const input = {
+    profile: profileSource.profile,
+    shape: { id: shapeSource.shape.id, hash: shapeSource.shape.hash },
+    catalog,
+    job: parseJob({ kind: 'probe' }),
+    engine: { id: 'test', hash: 'engine-shape-v1', blocked: [] },
+    drivers: Object.keys(builtDrivers),
+  };
+
+  assert.throws(
+    () => compile(input),
+    (error: unknown) => {
+      assert.ok(error instanceof MimicError);
+      assert.equal(error.phase, 'compile');
+      assert.equal(error.code, 'SYNTHETIC_REQUIRED');
+      assert.deepEqual(error.details, {
+        fields: ['version'],
+        profile: profileSource.shape.target,
+        shape: shapeSource.shape.target,
+      });
+      return true;
+    },
+  );
+  assert.throws(
+    () => compile({ ...input, synthetic: 'yes' } as unknown as CompileInput),
+    (error: unknown) => error instanceof MimicError && error.code === 'BAD_PLAN',
+  );
+
+  const plan = compile({ ...input, synthetic: true });
+  assert.equal((plan as unknown as { synthetic?: true }).synthetic, true);
+  assert.equal(plan.profile.id, profileSource.profile.id);
+  assert.equal(plan.shape.id, shapeSource.shape.id);
+  assert.deepEqual(parsePlan(JSON.parse(JSON.stringify(plan))), plan);
+  assert.throws(
+    () => parsePlan(forge(plan, (wire) => { wire.synthetic = false; })),
+    (error: unknown) => error instanceof MimicError && error.code === 'BAD_PLAN',
+  );
+  assert.equal((explain(plan) as unknown as { synthetic?: true }).synthetic, true);
+});
+
+test('redundant synthetic authorization does not change a non-synthetic Plan', async () => {
+  const imported = await store.load('macos-chrome-v148');
+  const input = {
+    profile: imported.profile,
+    shape: { id: imported.shape.id, hash: imported.shape.hash },
+    catalog: Catalog.create('test', [imported.shape], builtFeatures),
+    job: parseJob({ kind: 'probe' }),
+    engine: { id: 'test', hash: 'engine-shape-v1', blocked: [] },
+    drivers: Object.keys(builtDrivers),
+  };
+
+  const ordinary = compile(input);
+  const authorized = compile({ ...input, synthetic: true });
+  assert.deepEqual(authorized, ordinary);
+  assert.equal(Object.hasOwn(authorized, 'synthetic'), false);
 });
 
 test('compile fails before Runtime creation on invalid feature plans', async () => {
@@ -512,6 +595,7 @@ test('compile produces a unique base Plan for every migrated Profile', async () 
       drivers: Object.keys(builtDrivers),
     });
     plans.add(plan.id);
+    assert.equal(Object.hasOwn(plan, 'synthetic'), false, id);
     assert.doesNotThrow(() => JSON.stringify(plan), id);
   }
   assert.equal(plans.size, 1012);

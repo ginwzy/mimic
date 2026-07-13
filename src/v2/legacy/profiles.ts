@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { MimicError } from '../core/error.js';
+import { deepFreeze, jsonCopy } from '../core/json.js';
 import { parsePage, parseProfile, parseShape } from '../core/parse.js';
 import { digest, seal } from '../core/seal.js';
 import { shape as builtShape } from '../features/index.js';
@@ -72,6 +73,11 @@ interface Resolved {
   chain: string[];
   hashes: Hash[];
   origins: Record<string, { id: string; hash: Hash }>;
+}
+
+interface ShapeManifest {
+  schema: 1;
+  files: Record<string, { file: string; sha256: string }>;
 }
 
 const isData = (value: unknown): value is Data => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -157,7 +163,24 @@ function deriveTarget(data: Legacy): Target {
   return target;
 }
 
-function shapeOf(target: Target): Shape {
+function legacyData(input: unknown): Legacy {
+  let value: JsonValue;
+  try {
+    value = jsonCopy(input);
+  } catch (cause) {
+    throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: '旧 Profile 不是纯 JSON', cause });
+  }
+  if (!isData(value)) {
+    throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: '旧 Profile 不是对象' });
+  }
+  return value as Legacy;
+}
+
+export function legacyTarget(input: unknown): Target {
+  return deriveTarget(legacyData(input));
+}
+
+export function legacyShape(target: Target): Shape {
   const id = `chromium/${target.host}/${target.platform}/${target.form}/${target.version}`;
   const cached = SHAPES.get(id);
   if (cached) return cached;
@@ -469,11 +492,109 @@ function evidenceOf(data: Legacy, source: Source, derived: string[], sections: P
   return output;
 }
 
+function compatibleShape(shape: Shape, target: Target): Shape {
+  const parsed = parseShape(shape);
+  const id = `chromium/${target.host}/${target.platform}/${target.form}/${target.version}`;
+  const fields = ['engine', 'host', 'platform', 'form', 'version'] as const;
+  if (parsed.id !== id || fields.some((field) => parsed.target[field] !== target[field])) {
+    throw new MimicError({
+      phase: 'parse',
+      code: 'BAD_SHAPE',
+      message: `Shape 与旧 Profile target 不一致:${parsed.id}`,
+    });
+  }
+  return parsed;
+}
+
+export function importLegacyData(
+  id: string,
+  input: unknown,
+  options: { source?: Source; shape?: Shape } = {},
+): ImportedProfile {
+  const data = legacyData(input);
+  if (!isData(data.navigator) || !isData(data.screen)) {
+    throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: `旧 Profile 缺少 navigator 或 screen:${id}` });
+  }
+  const name = data.meta?.name;
+  if (name !== id) {
+    throw new MimicError({ phase: 'parse', code: 'LEGACY_NAME', message: `Profile 名称 ${String(name)} 与路径 ${id} 不符` });
+  }
+
+  const target = deriveTarget(data);
+  const shape = options.shape ? compatibleShape(options.shape, target) : legacyShape(target);
+  const inputHash = digest(data);
+  const source = options.source || sourceOf(id, data, [inputHash]);
+  const navigatorRaw = clone(data.navigator);
+  const connection = navigatorRaw.connection;
+  delete navigatorRaw.connection;
+  const windowData = data.window ? clone(data.window) : undefined;
+  if (windowData) delete windowData.chrome;
+  const derived: string[] = [];
+  const navigator = normalizeNavigator(navigatorRaw, target, derived);
+  const screen = normalizeScreen(data.screen, derived);
+  const window = normalizeWindow(windowData);
+  const timezone = normalizeTimezone(data.timezone);
+  const webgl = normalizeWebGl(data.webgl);
+  const sections: Partial<Record<Part, unknown>> = { navigator, screen, window, timezone, webgl };
+
+  const profile = parseProfile(seal({
+    schema: 2,
+    id,
+    target,
+    shape: { id: shape.id, hash: shape.hash },
+    source,
+    navigator,
+    screen,
+    ...(window ? { window } : {}),
+    ...(timezone ? { timezone } : {}),
+    ...(webgl ? { webgl } : {}),
+    evidence: evidenceOf(data, source, derived, sections),
+  }));
+
+  const hasPage = data.location !== undefined || data.timing !== undefined || isData(connection);
+  const page = hasPage ? parsePage(seal({
+    schema: 2,
+    id: `${id}:default`,
+    source,
+    ...(typeof data.location?.href === 'string' ? { url: data.location.href } : {}),
+    ...(isData(connection) ? { connection: {
+      effectiveType: text(connection, 'effectiveType', 'navigator.connection.effectiveType'),
+      downlink: number(connection, 'downlink', 'navigator.connection.downlink'),
+      rtt: number(connection, 'rtt', 'navigator.connection.rtt'),
+      saveData: boolean(connection, 'saveData', 'navigator.connection.saveData'),
+    } } : {}),
+    ...(data.timing ? { clock: {
+      now: number(data.timing, 'now', 'timing.now'),
+      seed: number(data.timing, 'seed', 'timing.seed'),
+    } } : {}),
+  })) : undefined;
+
+  const origins = originsOf(data, id, inputHash);
+  const ledger = ledgerOf(data, origins);
+  const unmapped = Object.entries(ledger).filter(([, entry]) => entry.status === 'raw-preserved').map(([pathName]) => pathName);
+  if (unmapped.length) {
+    throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: `旧 Profile 含未映射字段:${unmapped.join(',')}` });
+  }
+  const report: MigrationReport = {
+    id,
+    chain: [id],
+    meta: clone(data.meta || {}),
+    ledger,
+    warnings: warningsOf(data, ledger),
+    derived,
+  };
+  return { profile, ...(page ? { page } : {}), shape, report };
+}
+
 export class LegacyProfiles {
   readonly root: string;
+  readonly shapesRoot: string | undefined;
+  private manifestPromise: Promise<ShapeManifest> | undefined;
+  private readonly artifactShapes = new Map<string, Promise<Shape | undefined>>();
 
-  constructor(root: string) {
+  constructor(root: string, shapesRoot?: string) {
     this.root = path.resolve(root);
+    this.shapesRoot = shapesRoot === undefined ? undefined : path.resolve(shapesRoot);
   }
 
   async list(): Promise<string[]> {
@@ -537,76 +658,81 @@ export class LegacyProfiles {
     };
   }
 
+  private manifest(): Promise<ShapeManifest> {
+    if (!this.shapesRoot) throw new TypeError('Shape resource root is unavailable');
+    this.manifestPromise ??= (async () => {
+      const file = path.join(this.shapesRoot!, 'manifest.json');
+      let value: unknown;
+      try {
+        value = JSON.parse(await readFile(file, 'utf8')) as unknown;
+      } catch (cause) {
+        throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: `Shape manifest 不可读取:${file}`, cause });
+      }
+      if (!isData(value) || value.schema !== 1 || !isData(value.files)) {
+        throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: 'Shape manifest 非法' });
+      }
+      for (const entry of Object.values(value.files)) {
+        if (!isData(entry) || typeof entry.file !== 'string' || !entry.file
+          || typeof entry.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
+          throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: 'Shape manifest entry 非法' });
+        }
+      }
+      return value as unknown as ShapeManifest;
+    })();
+    return this.manifestPromise;
+  }
+
+  private async artifactShape(data: Legacy): Promise<Shape | undefined> {
+    if (!this.shapesRoot) return undefined;
+    const target = deriveTarget(data);
+    const id = `chromium/${target.host}/${target.platform}/${target.form}/${target.version}`;
+    let loading = this.artifactShapes.get(id);
+    if (!loading) {
+      loading = (async () => {
+        const entry = (await this.manifest()).files[id];
+        if (!entry) return undefined;
+        const file = path.resolve(this.shapesRoot!, entry.file);
+        if (!file.startsWith(`${this.shapesRoot}${path.sep}`)) {
+          throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: `Shape resource 路径越界:${id}` });
+        }
+        let text: string;
+        try {
+          text = await readFile(file, 'utf8');
+        } catch (cause) {
+          throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: `Shape resource 不可读取:${id}`, cause });
+        }
+        if (createHash('sha256').update(text).digest('hex') !== entry.sha256) {
+          throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: `Shape resource checksum 不匹配:${id}` });
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text) as unknown;
+        } catch (cause) {
+          throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: `Shape resource JSON 非法:${id}`, cause });
+        }
+        if (!isData(parsed) || parsed.schema !== 2 || parsed.id !== id || typeof parsed.hash !== 'string') {
+          throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: `Shape resource 内容非法:${id}` });
+        }
+        return compatibleShape(parseShape(parsed), target);
+      })();
+      this.artifactShapes.set(id, loading);
+    }
+    return loading;
+  }
+
   async load(id: string): Promise<ImportedProfile> {
     const resolved = await this.resolve(id);
-    if (!isData(resolved.data.navigator) || !isData(resolved.data.screen)) {
-      throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: `旧 Profile 缺少 navigator 或 screen:${id}` });
-    }
-    const name = resolved.data.meta?.name;
-    if (name !== id) {
-      throw new MimicError({ phase: 'parse', code: 'LEGACY_NAME', message: `Profile 名称 ${String(name)} 与路径 ${id} 不符` });
-    }
-
-    const target = deriveTarget(resolved.data);
-    const shape = shapeOf(target);
     const source = sourceOf(id, resolved.data, resolved.hashes);
-    const navigatorRaw = clone(resolved.data.navigator || {});
-    const connection = navigatorRaw.connection;
-    delete navigatorRaw.connection;
-    const windowData = resolved.data.window ? clone(resolved.data.window) : undefined;
-    if (windowData) delete windowData.chrome;
-    const derived: string[] = [];
-    const navigator = normalizeNavigator(navigatorRaw, target, derived);
-    const screen = normalizeScreen(resolved.data.screen, derived);
-    const window = normalizeWindow(windowData);
-    const timezone = normalizeTimezone(resolved.data.timezone);
-    const webgl = normalizeWebGl(resolved.data.webgl);
-    const sections: Partial<Record<Part, unknown>> = { navigator, screen, window, timezone, webgl };
-
-    const profile = parseProfile(seal({
-      schema: 2,
-      id,
-      shape: { id: shape.id, hash: shape.hash },
-      source,
-      navigator,
-      screen,
-      ...(window ? { window } : {}),
-      ...(timezone ? { timezone } : {}),
-      ...(webgl ? { webgl } : {}),
-      evidence: evidenceOf(resolved.data, source, derived, sections),
-    }));
-
-    const hasPage = resolved.data.location !== undefined || resolved.data.timing !== undefined || isData(connection);
-    const page = hasPage ? parsePage(seal({
-      schema: 2,
-      id: `${id}:default`,
-      source,
-      ...(typeof resolved.data.location?.href === 'string' ? { url: resolved.data.location.href } : {}),
-      ...(isData(connection) ? { connection: {
-        effectiveType: text(connection, 'effectiveType', 'navigator.connection.effectiveType'),
-        downlink: number(connection, 'downlink', 'navigator.connection.downlink'),
-        rtt: number(connection, 'rtt', 'navigator.connection.rtt'),
-        saveData: boolean(connection, 'saveData', 'navigator.connection.saveData'),
-      } } : {}),
-      ...(resolved.data.timing ? { clock: {
-        now: number(resolved.data.timing, 'now', 'timing.now'),
-        seed: number(resolved.data.timing, 'seed', 'timing.seed'),
-      } } : {}),
-    })) : undefined;
-
+    const shape = await this.artifactShape(resolved.data);
+    const imported = importLegacyData(id, resolved.data, { source, ...(shape === undefined ? {} : { shape }) });
     const ledger = ledgerOf(resolved.data, resolved.origins);
-    const unmapped = Object.entries(ledger).filter(([, entry]) => entry.status === 'raw-preserved').map(([pathName]) => pathName);
-    if (unmapped.length) {
-      throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: `旧 Profile 含未映射字段:${unmapped.join(',')}` });
-    }
     const report: MigrationReport = {
-      id,
+      ...imported.report,
       chain: resolved.chain,
       meta: clone(resolved.data.meta || {}),
       ledger,
       warnings: warningsOf(resolved.data, ledger),
-      derived,
     };
-    return { profile, ...(page ? { page } : {}), shape, report };
+    return { ...imported, report };
   }
 }

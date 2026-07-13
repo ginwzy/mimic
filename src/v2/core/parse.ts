@@ -1,4 +1,5 @@
 import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
+import collectSchema from '../../../schemas/v2/collect.schema.json' with { type: 'json' };
 import dataSchema from '../../../schemas/v2/data.schema.json' with { type: 'json' };
 import catalogSchema from '../../../schemas/v2/catalog.schema.json' with { type: 'json' };
 import irSchema from '../../../schemas/v2/ir.schema.json' with { type: 'json' };
@@ -9,13 +10,23 @@ import shapeSchema from '../../../schemas/v2/shape.schema.json' with { type: 'js
 import { MimicError } from './error.js';
 import { deepFreeze, jsonCopy } from './json.js';
 import { validHash } from './seal.js';
-import type { CatalogDoc, ErrorCode, Job, Page, ParseIssue, Profile, Shape } from './types.js';
+import type { CollectBundle } from '../collect/types.js';
+import type { CatalogDoc, ErrorCode, Job, Page, ParseIssue, Profile, Shape, Target } from './types.js';
+import {
+  isTrustedPage,
+  isTrustedProfile,
+  isTrustedShape,
+  trustPage,
+  trustProfile,
+  trustShape,
+} from './trusted.js';
 
 const ajv = new Ajv({ allErrors: true, strict: true });
 ajv.addSchema(dataSchema);
 ajv.addSchema(irSchema);
 ajv.addSchema(shapeSchema);
 const validateJob = ajv.compile<Job>(jobSchema);
+const validateCollect = ajv.compile<CollectBundle>(collectSchema);
 const validateShape = ajv.getSchema<Shape>(shapeSchema.$id) as ValidateFunction<Shape>;
 const validateProfile = ajv.compile<Profile>(profileSchema);
 const validatePage = ajv.compile<Page>(pageSchema);
@@ -56,8 +67,12 @@ function httpUrl(value: string, code: ErrorCode, name: string): void {
   }
 }
 
+function targetId(target: Target): string {
+  return `chromium/${target.host}/${target.platform}/${target.form}/${target.version}`;
+}
+
 function coherent(shape: Shape, code: ErrorCode): void {
-  const id = `chromium/${shape.target.host}/${shape.target.platform}/${shape.target.form}/${shape.target.version}`;
+  const id = targetId(shape.target);
   if (shape.id !== id) {
     throw new MimicError({ phase: 'parse', code, message: `Shape id 与字段不一致:${shape.id}` });
   }
@@ -69,24 +84,36 @@ export const parseJob = (input: unknown): Job => {
   return job;
 };
 
+export const parseCollect = (input: unknown): CollectBundle => {
+  const collect = parse(input, validateCollect, 'BAD_COLLECT', 'Collect');
+  if (!validHash(collect)) throw new MimicError({ phase: 'parse', code: 'BAD_COLLECT', message: 'Collect content hash 不匹配' });
+  return collect;
+};
+
 export const parseShape = (input: unknown): Shape => {
+  if (isTrustedShape(input)) return input;
   const shape = parse(input, validateShape, 'BAD_SHAPE', 'Shape');
   coherent(shape, 'BAD_SHAPE');
   if (!validHash(shape)) throw new MimicError({ phase: 'parse', code: 'BAD_SHAPE', message: 'Shape content hash 不匹配' });
-  return shape;
+  return trustShape(shape);
 };
 
 export const parseProfile = (input: unknown): Profile => {
+  if (isTrustedProfile(input)) return input;
   const profile = parse(input, validateProfile, 'BAD_PROFILE', 'Profile');
+  if (profile.shape.id !== targetId(profile.target)) {
+    throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: `Profile Shape 引用与设备 target 不一致:${profile.shape.id}` });
+  }
   if (!validHash(profile)) throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: 'Profile content hash 不匹配' });
-  return profile;
+  return trustProfile(profile);
 };
 
 export const parsePage = (input: unknown): Page => {
+  if (isTrustedPage(input)) return input;
   const page = parse(input, validatePage, 'BAD_PAGE', 'Page');
   if (page.url !== undefined) httpUrl(page.url, 'BAD_PAGE', 'Page.url');
   if (!validHash(page)) throw new MimicError({ phase: 'parse', code: 'BAD_PAGE', message: 'Page content hash 不匹配' });
-  return page;
+  return trustPage(page);
 };
 
 export const parseCatalog = (input: unknown): CatalogDoc => {

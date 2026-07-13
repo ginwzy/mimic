@@ -2,18 +2,78 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import { CookieJar, JSDOM } from 'jsdom';
-import packageJSON from '../../../package.json' with { type: 'json' };
 import { MimicError } from '../core/error.js';
 import { deepFreeze, jsonCopy } from '../core/json.js';
 import type { Data, JsonValue, Plan } from '../core/types.js';
 import type { DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult } from '../engine/types.js';
 import type { Desc, EngineManifest, FnShape, Key, Op, PlanBind, Ref, StoredValue } from '../shape/types.js';
 import { parsePlan } from '../compile/parse.js';
+import { REQUESTED_JSDOM_VERSION } from '../node/metadata.js';
 
 type BrowserWindow = Window & typeof globalThis;
 type Callable = (...args: unknown[]) => unknown;
 type FunctionOp = Extract<Op, { op: 'alloc'; kind: 'function' }>;
 type ShapeOp = Extract<Op, { op: 'fn' }>;
+
+export const JSDOM_ENGINE_ABI = 'mimic-jsdom-v2.7';
+
+const FRAME_OWNERS = new WeakMap<object, (child: unknown) => void>();
+const FRAME_ATTACH_HOOKS = new WeakSet<object>();
+const FRAME_ATTRIBUTE_HOOKS = new WeakSet<object>();
+
+function ownerOf(value: unknown, method: string): object | undefined {
+  let prototype = value !== null && typeof value === 'object' ? Object.getPrototypeOf(value) as object | null : null;
+  while (prototype && !Object.hasOwn(prototype, method)) prototype = Object.getPrototypeOf(prototype) as object | null;
+  return prototype ?? undefined;
+}
+
+function dispatchFrame(frame: unknown): void {
+  if (frame === null || typeof frame !== 'object') return;
+  const item = frame as {
+    _ownerDocument?: { _defaultView?: object };
+    contentWindow?: { _globalProxy?: unknown };
+  };
+  const owner = item._ownerDocument?._defaultView;
+  const install = owner && (FRAME_OWNERS.get(owner)
+    ?? FRAME_OWNERS.get((owner as { _globalProxy?: object })._globalProxy ?? owner));
+  const child = item.contentWindow;
+  if (install && child) install(child._globalProxy ?? child);
+}
+
+function hookFrameLifecycle(frame: unknown): void {
+  const attachOwner = ownerOf(frame, '_attach');
+  if (attachOwner && !FRAME_ATTACH_HOOKS.has(attachOwner)) {
+    const desc = Object.getOwnPropertyDescriptor(attachOwner, '_attach');
+    if (desc && typeof desc.value === 'function') {
+      const original = desc.value as (...args: unknown[]) => unknown;
+      Object.defineProperty(attachOwner, '_attach', {
+        ...desc,
+        value: function frameAttach(this: unknown, ...args: unknown[]) {
+          const result = Reflect.apply(original, this, args);
+          dispatchFrame(this);
+          return result;
+        },
+      });
+      FRAME_ATTACH_HOOKS.add(attachOwner);
+    }
+  }
+  const attributeOwner = ownerOf(frame, '_attrModified');
+  if (attributeOwner && !FRAME_ATTRIBUTE_HOOKS.has(attributeOwner)) {
+    const desc = Object.getOwnPropertyDescriptor(attributeOwner, '_attrModified');
+    if (desc && typeof desc.value === 'function') {
+      const original = desc.value as (...args: unknown[]) => unknown;
+      Object.defineProperty(attributeOwner, '_attrModified', {
+        ...desc,
+        value: function frameAttribute(this: unknown, ...args: unknown[]) {
+          const result = Reflect.apply(original, this, args);
+          dispatchFrame(this);
+          return result;
+        },
+      });
+      FRAME_ATTRIBUTE_HOOKS.add(attributeOwner);
+    }
+  }
+}
 
 interface FunctionProperty {
   owner: object;
@@ -28,7 +88,72 @@ interface Bound {
   config?: JsonValue;
 }
 
+interface RealmRegistry {
+  readonly nativeFunctions: WeakMap<Function, string>;
+  readonly hiddenSymbols: Set<symbol>;
+  readonly installers: WeakMap<object, Installer>;
+  readonly records: Map<string, JsonValue[]>;
+  nextRealm: number;
+}
+
 const refName = (ref: Ref): string => ('path' in ref ? `path:${ref.path}` : `node:${ref.node}`);
+
+function unsafeStackFrame(frame: string): boolean {
+  return /(?:node:|file:|node_modules[\\/]jsdom|build[\\/]v2)/i.test(frame)
+    || /(?:^|[\s(])\/(?!\/)/.test(frame)
+    || /(?:^|[\s(])[a-z]:[\\/]/i.test(frame);
+}
+
+function publicStack(stack: string, name: string, message: string): string {
+  const header = `${name || 'Error'}${message ? `: ${message}` : ''}`;
+  const lines = stack.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) => line === header);
+  const frames = lines
+    .slice(headerIndex < 0 ? 0 : headerIndex + 1)
+    .filter((line) => /^\s*at\s+/.test(line) && !unsafeStackFrame(line));
+  return [header, ...frames].join('\n');
+}
+
+function reportData(value: JsonValue | undefined): Data | undefined {
+  return value !== null && value !== undefined && !Array.isArray(value) && typeof value === 'object'
+    ? value as Data
+    : undefined;
+}
+
+function mergeRealmReport(id: string, current: JsonValue | undefined, child: JsonValue): JsonValue {
+  const left = reportData(current);
+  const right = reportData(child);
+  if (!left || !right) return current ?? child;
+  if (id === 'net') {
+    const leftPosts = Array.isArray(left.posts) ? left.posts : [];
+    const rightPosts = Array.isArray(right.posts) ? right.posts : [];
+    return {
+      ...left,
+      ...right,
+      body: typeof left.body === 'string' ? left.body : (typeof right.body === 'string' ? right.body : null),
+      posts: [...leftPosts, ...rightPosts],
+    };
+  }
+  if (id === 'trace') {
+    const leftCode = Array.isArray(left.dynamicCode) ? left.dynamicCode : [];
+    const rightCode = Array.isArray(right.dynamicCode) ? right.dynamicCode : [];
+    return { ...left, ...right, dynamicCode: [...leftCode, ...rightCode] };
+  }
+  return current ?? child;
+}
+
+function recordedNetReport(current: JsonValue | undefined, records: readonly JsonValue[]): JsonValue {
+  const data = reportData(current) ?? {};
+  const posts = records
+    .map((value) => jsonCopy(value))
+    .filter((value): value is Data => reportData(value) !== undefined);
+  const first = posts.find((post) => typeof post.len === 'number' && post.len > 0 && typeof post.body === 'string');
+  return {
+    ...data,
+    body: first && typeof first.body === 'string' ? first.body : null,
+    posts,
+  };
+}
 
 class JsdomRuntime implements Runtime {
   readonly plan: Plan<Op, PlanBind>;
@@ -64,9 +189,10 @@ class JsdomRuntime implements Runtime {
       });
       return { ok: true, value };
     } catch (error) {
-      const value = error as { message?: unknown; stack?: unknown } | null;
+      const value = error as { name?: unknown; message?: unknown; stack?: unknown } | null;
+      const name = value && typeof value.name === 'string' ? value.name : 'Error';
       const message = value && typeof value.message === 'string' ? value.message : String(error);
-      const stack = value && typeof value.stack === 'string' ? value.stack : undefined;
+      const stack = value && typeof value.stack === 'string' ? publicStack(value.stack, name, message) : undefined;
       return { ok: false, error: message, ...(stack ? { stack } : {}) };
     }
   }
@@ -107,25 +233,42 @@ class JsdomRuntime implements Runtime {
 
 class Installer {
   private readonly window: BrowserWindow;
+  private readonly realmEval: BrowserWindow['eval'];
   private readonly plan: Plan<Op, PlanBind>;
   private readonly drivers: Drivers;
   private readonly nodes = new Map<string, unknown>();
   private readonly trusted = new WeakSet<object>();
   private readonly binds = new Map<string, Bound>();
-  private readonly nativeFunctions = new WeakMap<Function, string>();
+  private readonly nativeFunctions: WeakMap<Function, string>;
+  private readonly registry: RealmRegistry;
+  private readonly children = new Set<Installer>();
   private readonly resolved = new Map<string, unknown>();
   private readonly resolvedKeys = new Map<string, string | symbol>();
   private readonly instances = new Map<string, DriverInstance>();
   private readonly opened: DriverInstance[] = [];
   private readonly sources = new Map<string, unknown>();
+  private readonly closeDescriptor: PropertyDescriptor | undefined;
+  private readonly realmOrdinal: number;
   private readonly timeOrigin: number;
   private closed = false;
 
-  constructor(window: BrowserWindow, plan: Plan<Op, PlanBind>, drivers: Drivers) {
+  constructor(window: BrowserWindow, plan: Plan<Op, PlanBind>, drivers: Drivers, registry?: RealmRegistry) {
     this.window = window;
+    this.realmEval = window.eval;
     this.plan = plan;
     this.drivers = drivers;
+    this.registry = registry ?? {
+      nativeFunctions: new WeakMap(),
+      hiddenSymbols: new Set(),
+      installers: new WeakMap(),
+      records: new Map(),
+      nextRealm: 0,
+    };
+    this.realmOrdinal = this.registry.nextRealm++;
+    this.nativeFunctions = this.registry.nativeFunctions;
+    this.registry.installers.set(window, this);
     this.timeOrigin = window.performance.timeOrigin;
+    this.closeDescriptor = Object.getOwnPropertyDescriptor(window, 'close');
   }
 
   install(): void {
@@ -139,6 +282,8 @@ class Installer {
     this.prepare();
     this.preflight();
     this.bootNativeToString();
+    this.bootSecuritySurface();
+    this.bootChildRealms();
     for (const operation of this.plan.operations) this.apply(operation);
     this.openDrivers();
   }
@@ -175,6 +320,15 @@ class Installer {
     if (this.closed) return;
     this.closed = true;
     let first: unknown;
+    for (const child of this.children) {
+      try {
+        child.close();
+      } catch (error) {
+        first ??= error;
+      }
+    }
+    this.children.clear();
+    if (this.closeDescriptor) Object.defineProperty(this.window, 'close', this.closeDescriptor);
     for (const instance of this.opened.slice().reverse()) {
       try {
         instance.close?.();
@@ -189,6 +343,7 @@ class Installer {
     this.resolved.clear();
     this.resolvedKeys.clear();
     this.sources.clear();
+    if (this.realmOrdinal === 0) this.registry.records.clear();
     if (first) throw first;
   }
 
@@ -210,6 +365,14 @@ class Installer {
           details: { driver: id }, plan: this.plan.id, cause,
         });
       }
+    }
+    for (const child of this.children) {
+      const nested = child.report();
+      for (const [id, value] of Object.entries(nested)) output[id] = mergeRealmReport(id, output[id], value);
+    }
+    if (this.realmOrdinal === 0) {
+      const records = this.registry.records.get('net');
+      if (records?.length) output.net = recordedNetReport(output.net, records);
     }
     return output;
   }
@@ -269,6 +432,15 @@ class Installer {
       },
       error: (name, message) => new this.window[name](message),
       resolve: (value) => this.window.Promise.resolve(value === undefined ? undefined : this.value({ json: value })),
+      record: (value) => {
+        let records = this.registry.records.get(driver);
+        if (!records) {
+          records = [];
+          this.registry.records.set(driver, records);
+        }
+        records.push(jsonCopy(value));
+      },
+      realm: () => this.realmOrdinal,
       now: () => this.window.Date.now(),
       origin: () => this.timeOrigin,
     });
@@ -291,7 +463,7 @@ class Installer {
   private bootNativeToString(): void {
     const original = this.window.Function.prototype.toString;
     const nativeFunctions = this.nativeFunctions;
-    const target = this.window.eval('({toString(){}}).toString') as Callable;
+    const target = this.evaluate('({toString(){}}).toString') as Callable;
     const nativeToString = new this.window.Proxy(target, {
       apply(_target, thisArg) {
         const source = typeof thisArg === 'function' ? nativeFunctions.get(thisArg) : undefined;
@@ -305,6 +477,112 @@ class Installer {
       enumerable: false,
       configurable: true,
     });
+  }
+
+  private bootSecuritySurface(): void {
+    // Native reflection validates Proxy own-key invariants before the browser-facing result is filtered.
+    const originalSymbols = this.window.Object.getOwnPropertySymbols;
+    const hiddenSymbols = this.registry.hiddenSymbols;
+    const remember = (value: object): void => {
+      for (const key of Reflect.apply(originalSymbols, this.window.Object, [value])) {
+        if (/webidl2js/i.test(key.description || '') || key.description === 'impl') hiddenSymbols.add(key);
+      }
+    };
+    remember(this.window);
+    remember(this.window.document);
+    remember(this.window.navigator);
+    remember(this.window.document.createElement('div'));
+    const internalSymbol = (key: string | symbol): boolean => typeof key === 'symbol' && hiddenSymbols.has(key);
+    const safeSymbols = new this.window.Proxy(originalSymbols, {
+      apply: (_target, self, args: [object]) => Reflect.apply(originalSymbols, self, args).filter((key) => !internalSymbol(key)),
+    });
+    Object.defineProperty(this.window.Object, 'getOwnPropertySymbols', {
+      ...Object.getOwnPropertyDescriptor(this.window.Object, 'getOwnPropertySymbols'),
+      value: safeSymbols,
+    });
+    this.nativeFunctions.set(safeSymbols, 'function getOwnPropertySymbols() { [native code] }');
+
+    const originalOwnKeys = this.window.Reflect.ownKeys;
+    const safeOwnKeys = new this.window.Proxy(originalOwnKeys, {
+      apply: (_target, self, args: [object]) => Reflect.apply(originalOwnKeys, self, args).filter((key) => !internalSymbol(key)),
+    });
+    Object.defineProperty(this.window.Reflect, 'ownKeys', {
+      ...Object.getOwnPropertyDescriptor(this.window.Reflect, 'ownKeys'),
+      value: safeOwnKeys,
+    });
+    this.nativeFunctions.set(safeOwnKeys, 'function ownKeys() { [native code] }');
+
+    const prepareStackTrace = this.evaluate(`(function prepareStackTrace(error, frames) {
+      const unsafe = (frame) => {
+        const file = String(frame.getFileName?.() ?? frame.getScriptNameOrSourceURL?.() ?? '');
+        const text = String(frame);
+        return /^(?:node:|file:|\\/|[a-z]:[\\\\/])/i.test(file)
+          || /(?:node:|file:|node_modules[\\\\/]jsdom|build[\\\\/]v2)/i.test(text)
+          || /(?:^|[\\s(])\\/(?!\\/)/.test(text)
+          || /(?:^|[\\s(])[a-z]:[\\\\/]/i.test(text);
+      };
+      const name = typeof error?.name === 'string' && error.name ? error.name : 'Error';
+      const message = typeof error?.message === 'string' ? error.message : '';
+      const header = name + (message ? ': ' + message : '');
+      return [header, ...frames.filter((frame) => !unsafe(frame)).map((frame) => '    at ' + String(frame))].join('\\n');
+    })`) as Callable;
+    Object.defineProperty(this.window.Error, 'prepareStackTrace', {
+      value: prepareStackTrace,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+    this.nativeFunctions.set(prepareStackTrace, 'function prepareStackTrace() { [native code] }');
+  }
+
+  private bootChildRealms(): void {
+    const prototype = this.window.HTMLIFrameElement?.prototype;
+    if (!prototype) return;
+    const internal = this.window as unknown as { _globalObject?: object; _globalProxy?: object };
+    const install = (child: unknown): void => this.installChild(child);
+    for (const owner of [this.window, internal._globalObject, internal._globalProxy]) {
+      if (owner !== undefined) FRAME_OWNERS.set(owner, install);
+    }
+    const sample = this.window.document.createElement('iframe');
+    const implKey = Object.getOwnPropertySymbols(sample).find((key) => key.description === 'impl');
+    if (implKey) hookFrameLifecycle((sample as unknown as Record<symbol, unknown>)[implKey]);
+    for (const name of ['contentWindow', 'contentDocument'] as const) {
+      const desc = Object.getOwnPropertyDescriptor(prototype, name);
+      if (!desc?.get) continue;
+      const original = desc.get;
+      const getter = new this.window.Proxy(original, {
+        apply: (target, self, args) => {
+          const value = Reflect.apply(target, self, args) as unknown;
+          const child = name === 'contentWindow'
+            ? value
+            : value !== null && typeof value === 'object'
+              ? (value as { defaultView?: unknown }).defaultView
+              : undefined;
+          this.installChild(child);
+          return value;
+        },
+      });
+      Object.defineProperty(prototype, name, { ...desc, get: getter });
+      this.nativeFunctions.set(getter, `function get ${name}() { [native code] }`);
+    }
+    for (const frame of this.window.document.querySelectorAll('iframe')) this.installChild(frame.contentWindow);
+  }
+
+  private installChild(value: unknown): void {
+    if ((typeof value !== 'object' && typeof value !== 'function') || value === null || value === this.window) return;
+    if (this.registry.installers.has(value as object)) return;
+    const childWindow = value as BrowserWindow;
+    if (typeof childWindow.eval !== 'function' || !childWindow.document) return;
+    const child = new Installer(childWindow, this.plan, this.drivers, this.registry);
+    this.children.add(child);
+    try {
+      child.install();
+    } catch (cause) {
+      this.children.delete(child);
+      this.registry.installers.delete(value as object);
+      try { child.close(); } catch { /* installation error is primary */ }
+      throw cause;
+    }
   }
 
   private allocate(operation: Extract<Op, { op: 'alloc' }>): void {
@@ -365,14 +643,19 @@ class Installer {
         return this.realmValue(bound.instance.call?.(bound.config, self, args));
       } catch (error) {
         if (error instanceof this.window.Error) throw error;
-        const value = error as { message?: unknown } | null;
-        throw new this.window.Error(value && typeof value.message === 'string' ? value.message : String(error));
+        const value = error as { name?: unknown; message?: unknown } | null;
+        const message = value && typeof value.message === 'string' ? value.message : String(error);
+        const name = value && typeof value.name === 'string' ? value.name : '';
+        const ctor = ['EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError'].includes(name)
+          ? this.window[name as 'TypeError']
+          : this.window.Error;
+        throw new ctor(message);
       }
     };
 
     const base = operation.shape.constructable
-      ? this.window.eval('(function(){}).bind(undefined)') as Callable
-      : this.window.eval('({call(){}}).call') as Callable;
+      ? this.evaluate('(function(){}).bind(undefined)') as Callable
+      : this.evaluate('({call(){}}).call') as Callable;
     let callable: Callable;
     const handler: ProxyHandler<Callable> = {
       apply: (_target, thisArg, args) => invoke(thisArg, args),
@@ -426,17 +709,20 @@ class Installer {
         const property = this.functionProperty(operation);
         const target = property?.value ?? this.resolve(operation.target);
         if (typeof target !== 'function') this.block(operation, 'fn target is not callable');
-        if (property && !this.sameFunctionShape(target, operation.shape)) {
+        if (property) {
           const replaceable = property.part === 'value'
             ? property.desc.configurable || property.desc.writable
             : property.desc.configurable;
-          if (!replaceable) this.block(operation, 'function property cannot be replaced');
+          if (!replaceable && !this.sameFunctionShape(target, operation.shape)) {
+            this.block(operation, 'function property cannot be replaced');
+          }
         }
       } else if (operation.op === 'order') {
         const target = this.resolve(operation.target);
         const actual = Reflect.ownKeys(target);
         const wanted = operation.keys.map((key) => this.key(key));
-        const sameSet = actual.length === wanted.length && actual.every((key) => wanted.includes(key));
+        const wantedSet = new Set(wanted);
+        const sameSet = actual.length === wanted.length && actual.every((key) => wantedSet.has(key));
         const already = actual.every((key, index) => key === wanted[index]);
         if (sameSet && !already && actual.some((key) => !Object.getOwnPropertyDescriptor(target, key)?.configurable)
           && !this.canRebuildPrototype(target)) {
@@ -477,7 +763,11 @@ class Installer {
     switch (operation.op) {
       case 'alloc': return;
       case 'proto':
-        Object.setPrototypeOf(this.resolve(operation.target), operation.value === null ? null : this.resolve(operation.value));
+        {
+          const target = this.resolve(operation.target);
+          const prototype = operation.value === null ? null : this.resolve(operation.value);
+          if (Object.getPrototypeOf(target) !== prototype) Object.setPrototypeOf(target, prototype);
+        }
         return;
       case 'prop':
         Object.defineProperty(this.resolve(operation.target), this.key(operation.key), this.descriptor(operation.desc));
@@ -505,8 +795,10 @@ class Installer {
       if (property.part === 'value') desc.value = target;
       else desc[property.part] = target;
       Object.defineProperty(property.owner, property.key, desc);
+      this.normalizeFunction(target, operation.shape, operation, true);
+      return;
     }
-    this.normalizeFunction(target, operation.shape, operation);
+    this.normalizeFunction(target, operation.shape, operation, false);
   }
 
   private functionProperty(operation: ShapeOp): FunctionProperty | undefined {
@@ -525,8 +817,8 @@ class Installer {
 
   private forward(source: Callable, shape: FnShape): Callable {
     const base = shape.constructable
-      ? this.window.eval('(function(){}).bind(undefined)') as Callable
-      : this.window.eval('({call(){}}).call') as Callable;
+      ? this.evaluate('(function(){}).bind(undefined)') as Callable
+      : this.evaluate('({call(){}}).call') as Callable;
     const handler: ProxyHandler<Callable> = {
       apply: (_target, self, args) => Reflect.apply(source, self, args),
       ...(shape.constructable ? {
@@ -549,12 +841,13 @@ class Installer {
     return target;
   }
 
-  private normalizeFunction(target: Callable, shape: FnShape, operation: ShapeOp): void {
+  private normalizeFunction(target: Callable, shape: FnShape, operation: ShapeOp, verify: boolean): void {
     if (!(target instanceof this.window.Function)) Object.setPrototypeOf(target, this.window.Function.prototype);
     if (!(target instanceof this.window.Function)) this.block(operation, 'function Realm prototype mismatch');
-    Object.defineProperty(target, 'name', { value: shape.name, configurable: true });
-    Object.defineProperty(target, 'length', { value: shape.length, configurable: true });
+    if (target.name !== shape.name) Object.defineProperty(target, 'name', { value: shape.name, configurable: true });
+    if (target.length !== shape.length) Object.defineProperty(target, 'length', { value: shape.length, configurable: true });
     if (shape.native) this.nativeFunctions.set(target, `function ${shape.name}() { [native code] }`);
+    if (!verify) return;
     const keys = Reflect.ownKeys(target);
     if (keys.length !== shape.keys.length || keys.some((key, index) => key !== shape.keys[index])) {
       this.block(operation, `function own keys mismatch:${keys.map(String).join(',')}`);
@@ -565,18 +858,18 @@ class Installer {
     const target = this.resolve(operation.target);
     const actual = Reflect.ownKeys(target);
     const wanted = operation.keys.map((key) => this.key(key));
-    const sameSet = actual.length === wanted.length && actual.every((key) => wanted.includes(key));
+    const wantedSet = new Set(wanted);
+    const actualSet = new Set(actual);
+    const sameSet = actual.length === wanted.length && actual.every((key) => wantedSet.has(key));
     if (!sameSet) {
-      const missing = wanted.filter((key) => !actual.includes(key)).slice(0, 8).map(String);
-      const extra = actual.filter((key) => !wanted.includes(key)).slice(0, 8).map(String);
+      const missing = wanted.filter((key) => !actualSet.has(key)).slice(0, 8).map(String);
+      const extra = actual.filter((key) => !wantedSet.has(key)).slice(0, 8).map(String);
       this.block(operation, `order key set mismatch;missing=${missing.join(',')};extra=${extra.join(',')}`);
     }
+    const already = actual.every((key, index) => key === wanted[index]);
+    if (already) return;
     if (actual.some((key) => !Object.getOwnPropertyDescriptor(target, key)?.configurable)) {
-      const already = actual.every((key, index) => key === wanted[index]);
-      if (!already) {
-        this.rebuildPrototype(operation, target, wanted);
-        return;
-      }
+      this.rebuildPrototype(operation, target, wanted);
       return;
     }
     const descriptors = new Map<string | symbol, PropertyDescriptor>(
@@ -656,7 +949,7 @@ class Installer {
   }
 
   private wrapConstructor(source: Callable, prototype: object): Callable {
-    const base = this.window.eval('(function(){}).bind(undefined)') as Callable;
+    const base = this.evaluate('(function(){}).bind(undefined)') as Callable;
     const wrapper = new this.window.Proxy(base, {
       apply: (_target, self, args) => Reflect.apply(source, self, args),
       construct: (_target: Callable, args: unknown[], newTarget: Function) => Reflect.construct(source, args, newTarget),
@@ -672,6 +965,10 @@ class Installer {
       Object.defineProperty(wrapper, key, Object.getOwnPropertyDescriptor(source, key)!);
     }
     return wrapper;
+  }
+
+  private evaluate(source: string): unknown {
+    return Reflect.apply(this.realmEval, this.window, [source]);
   }
 
   private resolve(ref: Ref): any {
@@ -695,13 +992,10 @@ class Installer {
   }
 
   private key(key: Key): string | symbol {
+    if (typeof key === 'string') return key;
     const cacheKey = JSON.stringify(key);
     const cached = this.resolvedKeys.get(cacheKey);
     if (cached !== undefined) return cached;
-    if (typeof key === 'string') {
-      this.resolvedKeys.set(cacheKey, key);
-      return key;
-    }
     if (key.symbol.startsWith('for:')) {
       const symbol = this.window.Symbol.for(key.symbol.slice(4));
       this.resolvedKeys.set(cacheKey, symbol);
@@ -732,6 +1026,7 @@ class Installer {
 
   private value(value: StoredValue): unknown {
     if ('ref' in value) return this.resolve(value.ref);
+    if (value.json === null || typeof value.json !== 'object') return value.json;
     return this.window.JSON.parse(JSON.stringify(value.json));
   }
 }
@@ -745,9 +1040,9 @@ export class JsdomEngine implements Engine {
     const jsdomVersion = (require('jsdom/package.json') as { version: string }).version;
     const source = {
       engine: 'jsdom',
-      abi: 'mimic-jsdom-v2.6',
+      abi: JSDOM_ENGINE_ABI,
       jsdom: jsdomVersion,
-      requestedJsdom: packageJSON.dependencies.jsdom,
+      requestedJsdom: REQUESTED_JSDOM_VERSION,
       node: process.versions.node.split('.')[0],
       v8: process.versions.v8,
       options: { runScripts: 'outside-only', pretendToBeVisual: true, cookieJar: true },

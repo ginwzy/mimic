@@ -1,4 +1,4 @@
-import type { Bind, Data, Job, JsonValue, Page, Profile, SupportMap } from '../core/types.js';
+import type { Bind, Data, Job, JsonValue, Page, Profile, ShapeRef, SupportMap } from '../core/types.js';
 
 export type Ref = { path: string } | { node: string };
 export type Key = string | { symbol: string };
@@ -90,6 +90,8 @@ export interface EngineManifest {
 
 export interface CompileInput {
   profile: Profile;
+  shape?: ShapeRef;
+  synthetic?: boolean;
   page?: Page;
   job: Job;
   catalog: CatalogPort;

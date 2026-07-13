@@ -40,9 +40,10 @@ export function parseResult(input: unknown): Result {
 }
 
 interface Meta {
-  readonly plan: string;
-  readonly support: SupportMap;
+  readonly plan?: string;
+  readonly support?: SupportMap;
   readonly report?: Data;
+  readonly synthetic?: true;
 }
 
 function plain(proto: object | null): boolean {
@@ -135,13 +136,15 @@ function failure(meta?: Meta): Result {
     phase: 'encode' as const,
     code: 'ENCODE_FAILED' as const,
     message: 'Result 无法编码为 JSON',
-    ...(meta === undefined ? {} : { plan: meta.plan }),
+    ...(meta?.plan === undefined ? {} : { plan: meta.plan }),
   };
   return deepFreeze({
     ok: false as const,
     error,
     ...(meta?.report === undefined ? {} : { report: meta.report }),
-    ...(meta === undefined ? {} : { plan: meta.plan, support: meta.support }),
+    ...(meta?.plan === undefined ? {} : { plan: meta.plan }),
+    ...(meta?.support === undefined ? {} : { support: meta.support }),
+    ...(meta?.synthetic ? { synthetic: true as const } : {}),
   });
 }
 
@@ -150,21 +153,26 @@ export function encodeResult(input: Result<unknown>): Result {
   try {
     if (input === null || typeof input !== 'object') return failure();
     const descriptors = fields(input);
+    const synthetic = data(descriptors, 'synthetic', false);
+    if (synthetic !== undefined && synthetic !== true) throw new TypeError('Result synthetic 非法');
+    if (synthetic === true) meta = { synthetic: true };
     const ok = data(descriptors, 'ok', true);
     if (ok === true) {
       const checked = parseResult({
         ok: true,
         plan: data(descriptors, 'plan', true),
         support: data(descriptors, 'support', true),
+        ...(synthetic === true ? { synthetic: true } : {}),
       });
       if (!checked.ok) return failure();
-      meta = { plan: checked.plan, support: checked.support };
+      meta = { plan: checked.plan, support: checked.support, ...(checked.synthetic ? { synthetic: true } : {}) };
       const report = data(descriptors, 'report', false);
       if (report !== undefined) {
         const withReport = parseResult({
           ok: true,
           plan: checked.plan,
           support: checked.support,
+          ...(checked.synthetic ? { synthetic: true } : {}),
           report: wireCopy(report),
         });
         if (!withReport.ok || withReport.report === undefined) return failure(meta);

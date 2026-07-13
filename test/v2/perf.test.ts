@@ -47,6 +47,7 @@ function profileFor(shape: Shape): Profile {
   return parseProfile(seal({
     schema: 2 as const,
     id: 'perf-profile',
+    target: shape.target,
     shape: { id: shape.id, hash: shape.hash },
     source,
     navigator: {

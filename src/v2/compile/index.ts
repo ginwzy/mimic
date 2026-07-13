@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto';
 import { MimicError } from '../core/error.js';
 import { deepFreeze, jsonCopy } from '../core/json.js';
 import { parseJob, parsePage, parseProfile, parseShape } from '../core/parse.js';
-import type { JsonValue, Plan, Shape, Support, SupportMap } from '../core/types.js';
+import type { JsonValue, Plan, Shape, ShapeRef, Support, SupportMap, Target } from '../core/types.js';
 import type { BlockRule, CompileInput, DraftOp, Feature, Key, Op, PlanBind, Ref } from '../shape/types.js';
 import { checkContribution, checkManifest, checkSupport } from '../shape/check.js';
 import { canonical } from '../core/canonical.js';
 import { STAGE, validateGraph } from './graph.js';
+import { trustPlan } from './trusted.js';
+import { isTrustedShape } from '../core/trusted.js';
 
 type SequencedOp = Op & { sequence: number };
 
@@ -19,6 +21,18 @@ interface PreparedShape {
 
 const PREPARED_SHAPES = new WeakMap<object, PreparedShape>();
 const EMPTY_COOKIES: readonly string[] = Object.freeze([]);
+const TARGET_FIELDS = ['engine', 'host', 'platform', 'form', 'version'] as const satisfies readonly (keyof Target)[];
+
+function shapeRef(input: unknown): ShapeRef {
+  const value = jsonCopy(input);
+  if (value === null || Array.isArray(value) || typeof value !== 'object') throw new TypeError('shape 必须是 ShapeRef');
+  const keys = Object.keys(value);
+  if (keys.length !== 2 || !keys.includes('id') || !keys.includes('hash')
+    || typeof value.id !== 'string' || !value.id || typeof value.hash !== 'string' || !/^[a-f0-9]{64}$/.test(value.hash)) {
+    throw new TypeError('shape 必须是 ShapeRef');
+  }
+  return Object.freeze({ id: value.id, hash: value.hash as ShapeRef['hash'] });
+}
 
 function frozenTree(value: unknown, seen = new Set<object>()): boolean {
   if (value === null || typeof value !== 'object' || seen.has(value)) return true;
@@ -37,7 +51,7 @@ function prepareShape(input: unknown): PreparedShape {
     if (cached) return cached;
   }
 
-  const shape = parseShape(jsonCopy(input));
+  const shape = isTrustedShape(input) ? input : parseShape(jsonCopy(input));
   const contribution = deepFreeze(checkContribution({ operations: shape.ops, support: shape.support }));
   const operations = deepFreeze((contribution.operations || []).map((operation, sequence) => ({
     ...operation,
@@ -122,6 +136,7 @@ const SUPPORT_RANK: Record<Support, number> = {
 };
 
 function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
+  if (input.synthetic !== undefined && typeof input.synthetic !== 'boolean') throw new TypeError('synthetic 必须是 boolean');
   if (!Array.isArray(input.drivers) || input.drivers.some((id) => typeof id !== 'string' || !id)) {
     throw new TypeError('drivers 必须是非空字符串数组');
   }
@@ -132,12 +147,21 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
     || typeof input.catalog.resolve !== 'function') {
     throw new TypeError('catalog 非法');
   }
-  const resolved = input.catalog.resolve(profile.shape);
+  const selectedShape = input.shape === undefined ? profile.shape : shapeRef(input.shape);
+  const resolved = input.catalog.resolve(selectedShape);
   if (resolved === null || typeof resolved !== 'object' || !Array.isArray(resolved.features)) throw new TypeError('catalog resolve 结果非法');
   const preparedShape = prepareShape(resolved.shape);
   const shape = preparedShape.shape;
-  if (profile.shape.id !== shape.id || profile.shape.hash !== shape.hash) {
-    throw new MimicError({ phase: 'compile', code: 'BAD_PLAN', message: 'Catalog 返回的 Shape 与 Profile 引用不匹配' });
+  if (selectedShape.id !== shape.id || selectedShape.hash !== shape.hash) {
+    throw new MimicError({ phase: 'compile', code: 'BAD_PLAN', message: 'Catalog 返回的 Shape 与请求引用不匹配' });
+  }
+  const mismatchFields = TARGET_FIELDS.filter((field) => profile.target[field] !== shape.target[field]);
+  const synthetic = mismatchFields.length > 0;
+  if (synthetic && input.synthetic !== true) {
+    throw new MimicError({
+      phase: 'compile', code: 'SYNTHETIC_REQUIRED', message: 'Profile 与 Shape target 不一致，必须显式启用 synthetic',
+      details: { fields: mismatchFields, profile: { ...profile.target }, shape: { ...shape.target } },
+    });
   }
   const featureList = resolved.features.map((feature) => Object.freeze({
     id: feature.id,
@@ -150,7 +174,7 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
   const engine = checkManifest(input.engine);
   const required = checkSupport(input.require === undefined ? {} : input.require);
   const features = orderFeatures(featureList);
-  const expectedFeatures = [...shape.features];
+  const expectedFeatures = [...shape.features].sort();
   const actualFeatures = features.map((feature) => feature.id).sort();
   if (expectedFeatures.length !== actualFeatures.length || expectedFeatures.some((id, index) => id !== actualFeatures[index])) {
     throw new MimicError({
@@ -220,6 +244,7 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
       .map(({ sequence: _sequence, ...operation }) => operation));
   const body = {
     schema: 2 as const,
+    ...(synthetic ? { synthetic: true as const } : {}),
     profile: Object.freeze({ id: profile.id, hash: profile.hash }),
     shape: Object.freeze({ id: shape.id, hash: shape.hash, level: shape.level }),
     ...(page ? { page: Object.freeze({ id: page.id, hash: page.hash }) } : {}),
@@ -238,7 +263,7 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
   } satisfies Omit<Plan<Op, PlanBind>, 'id'>;
   const json = canonical(body as unknown as JsonValue);
   const id = createHash('sha256').update(json).digest('hex');
-  return Object.freeze({ ...body, id });
+  return trustPlan(Object.freeze({ ...body, id }));
 }
 
 export function compile(input: CompileInput): Plan<Op, PlanBind> {
@@ -252,6 +277,7 @@ export function compile(input: CompileInput): Plan<Op, PlanBind> {
 
 export interface PlanExplanation {
   id: string;
+  synthetic?: true;
   profile: string;
   shape: string;
   page?: string;
@@ -269,6 +295,7 @@ export function explain(plan: Plan<Op, PlanBind>): PlanExplanation {
   for (const operation of plan.operations) operations[operation.op]++;
   return {
     id: plan.id,
+    ...(plan.synthetic ? { synthetic: true as const } : {}),
     profile: plan.profile.id,
     shape: plan.shape.id,
     ...(plan.page ? { page: plan.page.id } : {}),

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.v2.json",
+  "compilerOptions": {
+    "outDir": "build/v2-test",
+    "declaration": false
+  },
+  "include": ["src/v2/**/*.ts", "test/v2/**/*.ts"],
+  "exclude": ["build/**"]
+}

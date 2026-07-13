@@ -31,7 +31,7 @@ async function open(id: string) {
     engine: engine.manifest,
     drivers: Object.keys(drivers),
   });
-  return { imported, engine, runtime: engine.open(plan, drivers) };
+  return { imported, engine, plan, runtime: engine.open(plan, drivers) };
 }
 
 test('nav replays normalized scalar and connection data through prototype accessors', async () => {
@@ -74,6 +74,28 @@ test('nav replays normalized scalar and connection data through prototype access
     assert.deepEqual(value.connectionShape, ['[object NetworkInformation]', true, true, []]);
     assert.deepEqual(value.event, [['change'], 'changed', false]);
     assert.deepEqual(value.navigatorShape, [[], '[object Navigator]', false]);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
+test('nav leaves unknown connection capability absent for a real corpus profile', async () => {
+  const { imported, engine, plan, runtime } = await open('android-chrome/gpu-adreno-tm-610-v139-57987');
+  assert.equal(imported.page, undefined);
+  try {
+    assert.equal(plan.support['connection.data'], 'unsupported');
+    const result = runtime.run(`JSON.stringify({
+      navigator: 'connection' in navigator,
+      prototype: Object.hasOwn(Navigator.prototype, 'connection'),
+      constructor: 'NetworkInformation' in window,
+    })`);
+    assert.equal(result.ok, true);
+    assert.deepEqual(JSON.parse(String(result.value)), {
+      navigator: false,
+      prototype: false,
+      constructor: false,
+    });
   } finally {
     runtime.dispose();
   }

@@ -241,7 +241,9 @@ export const netDriver: Driver = {
         if (item.via === 'xhr') instance(port, self, XHR);
         if (item.via === 'beacon') instance(port, self, NAV);
         if (item.mode === 'capture') {
-          posts.push(post(item.via, requestBody(item.via, args)));
+          const entry = post(item.via, requestBody(item.via, args));
+          posts.push(entry);
+          port.record(entry);
           if (item.via === 'fetch') return resolvedResponse();
           return item.via === 'beacon' ? true : undefined;
         }

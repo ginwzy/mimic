@@ -16,8 +16,13 @@ import {
   type Profile,
   type Shape,
 } from '../../src/v2/index.js';
+import { JSDOM_ENGINE_ABI } from '../../src/v2/engines/jsdom.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
+
+test('JsdomEngine locks the v2 cutover ABI', () => {
+  assert.equal(JSDOM_ENGINE_ABI, 'mimic-jsdom-v2.7');
+});
 
 function shapeFor(shape: Shape, features: readonly Feature[]): Shape {
   const { hash: _hash, ...body } = shape;

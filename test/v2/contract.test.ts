@@ -94,12 +94,14 @@ const errorCodes: Record<ErrorCode, true> = {
   BAD_SHAPE: true,
   BAD_PLAN: true,
   BAD_RESULT: true,
+  BAD_COLLECT: true,
   FEATURE_CYCLE: true,
   DUPLICATE_FEATURE: true,
   NO_FEATURE: true,
   WRITE_CONFLICT: true,
   NO_DRIVER: true,
   LOW_SUPPORT: true,
+  SYNTHETIC_REQUIRED: true,
   ENGINE_BLOCKED: true,
   INSTALL_FAILED: true,
   RUN_FAILED: true,
@@ -260,6 +262,7 @@ test('parseProfile accepts device identity without page state', () => {
   const body = {
     schema: 2 as const,
     id: 'android/device-v140',
+    target: shape.target,
     shape: { id: shape.id, hash: shape.hash },
     source,
     navigator: {
@@ -287,8 +290,43 @@ test('parseProfile accepts device identity without page state', () => {
   const parsed = parseProfile(profile);
   assert.ok(Object.isFrozen(parsed));
   assert.ok(Object.isFrozen(parsed.navigator));
+  const { target: _target, ...withoutTarget } = body;
+  assert.throws(
+    () => parseProfile(seal(withoutTarget)),
+    (error: unknown) => error instanceof MimicError && error.code === 'BAD_PROFILE',
+  );
   body.navigator.userAgent = 'mutated';
   assert.equal(parsed.navigator.userAgent, 'Chrome/140');
+});
+
+test('parseProfile rejects a default Shape ref that contradicts its device target', () => {
+  const body = {
+    schema: 2 as const,
+    id: 'android/device-v140',
+    target: shape.target,
+    shape: { id: 'chromium/chrome/linux/desktop/140', hash: shape.hash },
+    source,
+    navigator: {
+      userAgent: 'Chrome/140', appVersion: 'Chrome/140', platform: 'Linux armv8l', vendor: 'Google Inc.',
+      language: 'en-US', languages: ['en-US'], hardwareConcurrency: 8, deviceMemory: 8,
+      maxTouchPoints: 5, cookieEnabled: true,
+      userAgentData: {
+        brands: [{ brand: 'Chromium', version: '140' }], mobile: true, platform: 'Android',
+        architecture: '', bitness: '', fullVersionList: [], model: '', platformVersion: '',
+        uaFullVersion: '140.0.0.0', wow64: false,
+      },
+    },
+    screen: {
+      width: 360, height: 780, availWidth: 360, availHeight: 780, availLeft: 0, availTop: 0,
+      colorDepth: 24, pixelDepth: 24, orientation: { type: 'portrait-primary', angle: 0 },
+    },
+    evidence,
+  };
+
+  assert.throws(
+    () => parseProfile(seal(body)),
+    (error: unknown) => error instanceof MimicError && error.phase === 'parse' && error.code === 'BAD_PROFILE',
+  );
 });
 
 test('parseProfile rejects identity without screen evidence', () => {
@@ -364,12 +402,15 @@ test('MimicError serializes a stable cross-process error contract', () => {
 
 test('Plan Schema accepts the complete serialized IR contract', () => {
   assert.equal(validatePlanSchema(planWire), true, JSON.stringify(validatePlanSchema.errors));
+  assert.equal(validatePlanSchema({ ...planWire, synthetic: true }), true, JSON.stringify(validatePlanSchema.errors));
 });
 
 test('Plan Schema rejects fields and values outside the compiler contract', () => {
   const cases = [
     { ...planWire, extra: true },
     { ...planWire, task: 'unknown' },
+    { ...planWire, synthetic: false },
+    { ...planWire, synthetic: 'yes' },
     { ...planWire, support: { structure: 'synthetic' } },
     { ...planWire, support: { BadName: 'derived' } },
     { ...planWire, operations: [{ op: 'unknown', feature: 'surface' }] },
@@ -421,6 +462,8 @@ test('Result Schema preserves success, undefined, report, and failure wire forms
   assert.equal(validateResultSchema(success), true, JSON.stringify(validateResultSchema.errors));
   assert.equal(validateResultSchema(undefinedSuccess), true, JSON.stringify(validateResultSchema.errors));
   assert.equal(validateResultSchema(failure), true, JSON.stringify(validateResultSchema.errors));
+  assert.equal(validateResultSchema({ ...success, synthetic: true }), true, JSON.stringify(validateResultSchema.errors));
+  assert.equal(validateResultSchema({ ...failure, synthetic: true }), true, JSON.stringify(validateResultSchema.errors));
   for (const code of Object.keys(errorCodes)) {
     assert.equal(validateResultSchema({ ok: false, error: { name: 'MimicError', phase: 'parse', code, message: '' } }), true);
   }
@@ -430,6 +473,8 @@ test('Result Schema rejects ambiguous or non-JSON protocol values', () => {
   const cases = [
     { ok: true, value: 1, plan: hash },
     { ok: true, value: 1, plan: hash, support: {}, error: {} },
+    { ok: true, value: 1, plan: hash, support: {}, synthetic: false },
+    { ok: false, error: { name: 'MimicError', phase: 'run', code: 'RUN_FAILED', message: 'failed' }, synthetic: false },
     { ok: false, error: { name: 'Error', phase: 'run', code: 'RUN_FAILED', message: 'failed' } },
     { ok: false, error: { name: 'MimicError', phase: 'unknown', code: 'RUN_FAILED', message: 'failed' } },
     { ok: false, error: { name: 'MimicError', phase: 'run', code: 'UNKNOWN', message: 'failed' } },

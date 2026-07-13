@@ -1,97 +1,119 @@
 # mimic
 
-基于 **jsdom** 的浏览器环境伪装框架。用真实 DOM 作基座,通过 **Profile/traits** 声明式驱动,把环境改造成指定设备的 Chrome,面向 JS 逆向反检测(Akamai 等)。
+基于 **jsdom** 的 Chromium 可观察环境回放框架。mimic 用真机采集的 `Profile` 与 `Shape` 编译不可变
+`Plan`,在一次性的隔离 Realm 中执行 JavaScript,面向浏览器环境复现、请求体捕获和反检测差分。
 
-## 设计
+```text
+Capture -> Profile
+Probe   -> Shape
 
+Profile + Shape + Page + Job -> Plan -> Engine -> Runtime -> Result
 ```
-┌──────────────────────────────────────────────┐
-│ entry    run / check / serve     命令与编程入口 │
-├──────────────────────────────────────────────┤
-│ realm    一个浏览器运行时实例(建→跑→毁)        │
-├──────────┬──────────┬──────────┬──────────────┤
-│ profile  │ patch    │ mask     │ trace        │
-│ 指纹配置  │ Chrome特性│ 反检测原语│ 监控/检测    │
-├──────────┴──────────┴──────────┴──────────────┤
-│ base: jsdom    真实 DOM / 解析 / 事件(黑盒依赖) │
-└──────────────────────────────────────────────┘
+
+当前默认包入口和 `mimic` 命令均为 v2。旧版 API 仅保留在 `mimic/legacy` 迁移入口,计划在下一发布
+周期删除。
+
+## 快速开始
+
+要求 Node.js `^20.19.0`、`^22.13.0` 或 `>=24.0.0`。
+
+```bash
+npm install mimic
 ```
+
+```js
+import { createMimic } from 'mimic';
+
+const mimic = createMimic({ profile: 'chrome-mac' });
+
+try {
+  const result = await mimic.run({
+    kind: 'run',
+    code: '({ ua: navigator.userAgent, width: screen.width })',
+  });
+
+  if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+  console.log(result.value);
+} finally {
+  await mimic.close();
+}
+```
+
+```bash
+# 在目标环境中执行脚本
+mimic run script.js --profile chrome-mac
+
+# 捕获脚本通过 fetch/XHR/sendBeacon 提交的请求体
+mimic capture script.js --profile chrome-mac
+
+# 生成 Plan、运行结构探针、列出内置数据
+mimic plan script.js --profile chrome-mac
+mimic probe --profile chrome-mac
+mimic list profiles
+
+# 执行 HTTP API,默认仅监听 127.0.0.1:3000
+mimic serve
+
+# 真机采集服务,默认监听 0.0.0.0:8970 并写入 ./mimic-data
+mimic collect
+```
+
+SDK、CLI、HTTP 路由、采集产物与全部参数见[《v2 使用指南》](docs/v2-usage.md)。
+
+## 核心概念
 
 | 概念 | 含义 |
 |---|---|
-| **Realm** | 一套完整的浏览器全局世界 + 一次脚本执行 |
-| **Profile** | 声明式指纹配置,一个 JSON = 一个身份;`extends` 继承结构、`traits` 声明特征 |
-| **Patch** | 把 jsdom 改造成"真 Chrome"的特性单元,`applies(traits)` 决定何时生效 |
-| **Mask** | 反检测原语(`fn`/`tag`/`iface`/`mixin`),收敛所有伪装逻辑 |
-| **Trace** | 缺失 API 检测 + 访问监控(可选) |
+| **Capture** | 真机原始证据,按内容寻址且只追加 |
+| **Profile** | 一次采集内保持相关性的设备身份数据 |
+| **Shape** | 浏览器版本、平台与宿主的可观察结构 |
+| **Page** | URL、HTML、cookie、网络和时钟等页面上下文 |
+| **Job** | `run`、`capture`、`probe` 或 `diagnose` 任务 |
+| **Plan** | 完整校验后生成的纯数据安装计划 |
+| **Engine / Runtime** | 底层适配器与完成原子安装的一次性执行环境 |
+| **Result** | JSON 安全的成功值或带稳定阶段/错误码的失败结果 |
 
-## 用法
+Profile 负责 UA、屏幕、GPU 等身份值;Shape 负责属性归属、描述符、函数形态、原型链、键序和接口
+有无等结构事实。手工组合不匹配的 Profile/Shape 必须显式设置 `synthetic`,结果也会永久保留该标记。
+
+## 公共入口
+
+| 入口 | 用途 |
+|---|---|
+| `mimic` | 稳定 SDK:`createMimic`、`run/capture/plan/list` 与公共数据类型 |
+| `mimic/http` | 执行 HTTP 服务的 `startServer` |
+| `mimic/advanced` | 自定义 Engine、Driver、采集存储和迁移等高级接缝 |
+| `mimic/legacy` | 短期保留的 v1 编程 API |
+
+默认入口不会暴露 Engine 内部操作或 Shape 安装原语。
+
+## 安全边界
+
+mimic 的 worker watchdog 用于终止超时任务,**不是多租户安全沙箱**。`run`、`capture`、`serve` 会执行
+调用方提供的 JavaScript;生产环境应把不可信任务放进独立进程或容器,并在 HTTP 前置层提供认证、TLS、
+限流和资源配额。执行服务因此默认只绑定 loopback。
+
+`collect` 为方便真机访问默认绑定所有网络接口,且没有认证;只应在受信网络短时开启,完成采集后立即关闭。
+
+## 开发验证
 
 ```bash
-npm install
-
-# 编程 API
-node -e "import('./entry/index.js').then(async ({Realm}) => {
-  const r = await Realm.create({ profile: 'chrome-mac' });
-  console.log(r.run('navigator.userAgent').value);
-})"
-
-# 命令行
-npm run mimic -- run   <script> --profile chrome-mac [--trace]
-npm run mimic -- check <script>            # 缺失 API + 建议 patch
-npm run mimic -- capture                   # 起采集服务,目标设备(含手机/WebView)访问后落盘 profile
-npm run mimic -- profiles                  # 列出可用指纹
-npm run mimic -- serve                     # HTTP API,默认仅监听 127.0.0.1:3000
-
-# 冒烟测试(含跨 realm 身份 + 平台差异验证)
-npm run smoke
+npm test                 # v2 + legacy
+npm run typecheck:v2
+npm run check
+npm run build:v2
 ```
-
-`Realm.run(code, { timeoutMs })` 可为同步求值设置毫秒级执行上限;直接编程调用省略时保持无上限。对不可信
-脚本应使用 `RealmPool`/HTTP,其 worker watchdog 还会覆盖求值后 microtask 卡死。HTTP worker 默认限制为
-5000ms,等待队列默认最多 100 个任务。服务参数可用
-`--host <地址> --port <端口> --timeout <毫秒> --pool-size <数量> --max-queue <数量>` 显式调整。
-
-`serve` 会执行请求方提交的 JavaScript,不是多租户安全沙箱,因此默认只绑定 loopback。仅应在可信网络中通过
-`--host` 对外暴露,并在前置服务补充认证、TLS、请求限流和进程级资源隔离。
-
-## 平台差异
-
-环境差异分两类,各用一种机制:
-
-- **值差异**(UA / 屏幕 / GPU)→ Profile 数据,经 `extends` 复用结构。
-- **结构差异**(有无 `window.chrome` / 触摸形态)→ Patch + `traits` 门控。
-
-`traits` 是真实采集的投影(非独立旋钮),`profile.validate()` 守住自洽。host 校验以**结构事实**(有无 `window.chrome` 键)为准:profile 带该键时,`host=chrome` 须有、`host=webview` 须无;不带时仅对 `host=chrome` 单向兜底(UA 不得含 `wv`)。它**不**强制 `host=webview` 必带 `wv`——以容纳改了 UA 的合法 WebView(如 via)。同一套 patch 由 traits 驱动出不同环境:
-
-```
-chrome-mac      host=chrome  → window.chrome 存在;touch 删桌面误带的 ontouch*
-android-webview host=webview → window.chrome 不存在(chrome 跳过);touch 置 window.orientation
-```
-
-`realm.describe()` 可内省某环境由哪些 patch 组成 / 跳过。
-
-## 设计纪律
-
-1. 只有 `base/jsdom.js` 接触 jsdom —— 换引擎只改一处。
-2. patch 只调 `mask.*`,不写裸伪装 —— 反检测正确性(含跨 realm 身份)收敛一层。
-3. 身份段(canvas/webgl/audio/fonts)整段来自单次真实采集,不跨层拼装。
-4. traits 由真机采集驱动,拿到新数据点前不投机扩展特征轴。
 
 ## 目录
 
-```
-base/    jsdom 封装
-core/    realm / profile / pipeline
-mask/    反检测原语
-patch/   navigator / screen / viewport / timezone / chrome / touch / canvas / webgl / audio / clock
-trace/   detector / monitor
-entry/   index(API) / cli / server
-capture/ 真机采集(collect 浏览器端 / derive 派生 traits / server 托管回传落盘)
-harness/ 结构探针 / 真机基线 / mimic-vs-真机 diff gate
-profiles/  _base/ + 各设备 profile;android-chrome/ 为真机身份池(运行时按 Profile.list() 挑一条轮换)
-tools/   语料导入与验证等开发工具
-reference/ legacy(旧实现归档) + sdenv/sdenv-extend(已 vendored 的第三方参考实现)
+```text
+src/v2/       v2 领域、编译器、Engine、SDK、CLI、HTTP 与采集实现
+schemas/v2/   Profile/Shape/Page/Job/Plan/Result/Collect JSON Schema
+profiles/     legacy 真机身份语料,由 v2 importer 读取
+harness/      结构探针、真机基线与 v1 Oracle
+docs/spec/    v2 架构和迁移阶段门
+entry/ core/ mask/ patch/ base/ trace/
+              临时保留的 v1 实现,仅供 mimic/legacy 使用
 ```
 
 ## License

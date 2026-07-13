@@ -1,0 +1,1 @@
+export const REQUESTED_JSDOM_VERSION = '29.1.1';

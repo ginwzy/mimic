@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/collect.json",
+  "title": "CollectBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "hash", "profileRaw", "probeSnapshot"],
+  "properties": {
+    "schema": { "const": 2 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "profileRaw": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "https://mimic.local/schema/v2/data.json" }
+      ]
+    },
+    "probeSnapshot": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "https://mimic.local/schema/v2/data.json" }
+      ]
+    }
+  },
+  "not": {
+    "required": ["profileRaw", "probeSnapshot"],
+    "properties": {
+      "profileRaw": { "type": "null" },
+      "probeSnapshot": { "type": "null" }
+    }
+  }
+}

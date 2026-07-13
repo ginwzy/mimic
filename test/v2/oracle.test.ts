@@ -82,6 +82,89 @@ test('probe diff keeps tells, coverage gaps, leaks, and source notes distinct', 
   assert.equal(t1.blockers.length, 2);
 });
 
+test('probe diff reports missing nested evidence instead of accepting an empty object shell', () => {
+  const baseline = fixture({
+    meta: { complete: true },
+    targets: [{
+      id: 'navigator.plugins',
+      category: 'object',
+      resolved: true,
+      tag: '[object PluginArray]',
+      protoChain: ['PluginArray.prototype', 'Object.prototype'],
+      ownKeys: ['length'],
+      symbolKeys: ['Symbol(Symbol.iterator)'],
+      keys: {
+        length: {
+          type: 'data',
+          flags: { writable: false, enumerable: false, configurable: true },
+          valueType: 'number',
+        },
+      },
+      collection: { length: 1, items: [{ name: 'Chrome PDF Viewer' }] },
+    }],
+  });
+  const mimic = fixture({
+    targets: [{
+      id: 'navigator.plugins',
+      category: 'object',
+      resolved: true,
+      keys: { length: {} },
+      collection: { items: [{}] },
+    }],
+  });
+
+  const entries = diff(baseline, mimic);
+  assert.deepEqual(
+    entries.map(({ field, bucket, key }) => ({ field, bucket, key })),
+    [
+      { field: 'tag', bucket: 'MISSING', key: null },
+      { field: 'protoChain', bucket: 'MISSING', key: null },
+      { field: 'key.type', bucket: 'MISSING', key: 'length' },
+      { field: 'flags.writable', bucket: 'MISSING', key: 'length' },
+      { field: 'flags.enumerable', bucket: 'MISSING', key: 'length' },
+      { field: 'flags.configurable', bucket: 'MISSING', key: 'length' },
+      { field: 'valueType', bucket: 'MISSING', key: 'length' },
+      { field: 'ownKeys', bucket: 'MISSING', key: null },
+      { field: 'symbolKey', bucket: 'MISSING', key: 'Symbol(Symbol.iterator)' },
+      { field: 'collection.length', bucket: 'MISSING', key: null },
+      { field: 'collection.item', bucket: 'MISSING', key: '[0].name' },
+    ],
+  );
+  assert.deepEqual(summarize(entries).counts, { TELL: 0, MISSING: 11, EXTRA: 0, INFO: 0 });
+});
+
+test('probe diff treats an unexpected accessor half as a tell', () => {
+  const baseline = fixture({
+    targets: [{
+      id: 'Navigator.prototype',
+      category: 'object',
+      resolved: true,
+      keys: {
+        language: { type: 'accessor', accessor: { get: null, set: null } },
+      },
+    }],
+  });
+  const mimic = fixture({
+    targets: [{
+      id: 'Navigator.prototype',
+      category: 'object',
+      resolved: true,
+      keys: {
+        language: {
+          type: 'accessor',
+          accessor: { get: { name: 'get language', length: 0, toStringNative: true }, set: null },
+        },
+      },
+    }],
+  });
+
+  const entries = diff(baseline, mimic);
+  assert.deepEqual(
+    entries.map(({ field, bucket, key }) => ({ field, bucket, key })),
+    [{ field: 'accessor.get.exists', bucket: 'TELL', key: 'language' }],
+  );
+});
+
 async function snapshot(id: string): Promise<ProbeSnapshot> {
   const imported = await profiles.load(id);
   const engine = new JsdomEngine();

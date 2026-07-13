@@ -8,6 +8,7 @@
   "properties": {
     "schema": { "const": 2 },
     "id": { "$ref": "#/definitions/hash" },
+    "synthetic": { "const": true },
     "profile": { "$ref": "#/definitions/ref" },
     "shape": { "$ref": "#/definitions/shape" },
     "page": { "$ref": "#/definitions/ref" },

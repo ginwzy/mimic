@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "files": {
+    "chromium/chrome/android/desktop/139": {
+      "file": "chromium/chrome/android/desktop/139.json",
+      "sha256": "5e6c31db62214396ff843b81703040cab805e1b60675e78d848ed7a6c605b2a6"
+    },
+    "chromium/chrome/android/mobile/130": {
+      "file": "chromium/chrome/android/mobile/130.json",
+      "sha256": "76ba01ad5469be97fb65cc1b6e3accefa920e9b4959711110eaf66aedb463855"
+    },
+    "chromium/chrome/android/mobile/138": {
+      "file": "chromium/chrome/android/mobile/138.json",
+      "sha256": "917dd5cb7e675d69230ed9f724a1e8a63e3f939739645a41c8de97d6ed211d73"
+    },
+    "chromium/chrome/android/mobile/139": {
+      "file": "chromium/chrome/android/mobile/139.json",
+      "sha256": "687b6975aca4f5e56db82a45e5ad59d92aa2781e648df01910a19f0e24eb186a"
+    },
+    "chromium/chrome/android/mobile/140": {
+      "file": "chromium/chrome/android/mobile/140.json",
+      "sha256": "07953467f40a2743e060a2449a24d59e454dd9923ae9e18d3e532da8dc99ee64"
+    },
+    "chromium/chrome/android/mobile/141": {
+      "file": "chromium/chrome/android/mobile/141.json",
+      "sha256": "d0126bf4c5ff07d075db8824c0d88931657848b53df3c08f60a7ac566526e69d"
+    },
+    "chromium/chrome/linux/desktop/143": {
+      "file": "chromium/chrome/linux/desktop/143.json",
+      "sha256": "abb8b7baac359964ed105b022e1d22c34c7cbdf95308364e60d411ceb7be6026"
+    },
+    "chromium/chrome/macos/desktop/131": {
+      "file": "chromium/chrome/macos/desktop/131.json",
+      "sha256": "85c3d7bc8551cc99838d6dc171a076be553bf485bf95d080e4a6913789310239"
+    },
+    "chromium/chrome/macos/desktop/148": {
+      "file": "chromium/chrome/macos/desktop/148.json",
+      "sha256": "5e016b17bf5175f870fb9bea62c53b35e912eaf7c11a2dba2a59677a94d32aeb"
+    },
+    "chromium/chrome/macos/desktop/149": {
+      "file": "chromium/chrome/macos/desktop/149.json",
+      "sha256": "04e9e940d6dfbd62420f2d647a36a1a2fd9dd9e64ca9dad143ce5941ca5bdeee"
+    },
+    "chromium/webview/android/mobile/131": {
+      "file": "chromium/webview/android/mobile/131.json",
+      "sha256": "3ff3da8068289ce78590c31971b61b5572190261d19ca88391571c2d4c15f7ff"
+    },
+    "chromium/webview/android/mobile/138": {
+      "file": "chromium/webview/android/mobile/138.json",
+      "sha256": "2fbee766aaf86916708cc9c07482b337ffe332a7b6cd2c3ae9202d1fea1b45af"
+    }
+  }
+}

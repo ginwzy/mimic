@@ -21,6 +21,7 @@
       "required": ["ok", "plan", "support"],
       "properties": {
         "ok": { "const": true },
+        "synthetic": { "const": true },
         "value": { "$ref": "https://mimic.local/schema/v2/data.json#/definitions/value" },
         "report": { "$ref": "https://mimic.local/schema/v2/data.json" },
         "plan": { "$ref": "#/definitions/hash" },
@@ -33,6 +34,7 @@
       "required": ["ok", "error"],
       "properties": {
         "ok": { "const": false },
+        "synthetic": { "const": true },
         "error": { "$ref": "#/definitions/error" },
         "report": { "$ref": "https://mimic.local/schema/v2/data.json" },
         "plan": { "$ref": "#/definitions/hash" },
@@ -48,9 +50,9 @@
         "phase": { "enum": ["parse", "compile", "install", "run", "encode"] },
         "code": {
           "enum": [
-            "BAD_JOB", "BAD_PROFILE", "BAD_PAGE", "BAD_SHAPE", "BAD_PLAN", "BAD_RESULT",
+            "BAD_JOB", "BAD_PROFILE", "BAD_PAGE", "BAD_SHAPE", "BAD_PLAN", "BAD_RESULT", "BAD_COLLECT",
             "FEATURE_CYCLE", "DUPLICATE_FEATURE", "NO_FEATURE", "WRITE_CONFLICT", "NO_DRIVER",
-            "LOW_SUPPORT", "ENGINE_BLOCKED", "INSTALL_FAILED", "RUN_FAILED", "ENCODE_FAILED",
+            "LOW_SUPPORT", "SYNTHETIC_REQUIRED", "ENGINE_BLOCKED", "INSTALL_FAILED", "RUN_FAILED", "ENCODE_FAILED",
             "LEGACY_PATH", "LEGACY_PARENT", "LEGACY_CYCLE", "LEGACY_NAME", "LEGACY_TRAITS", "LEGACY_ENGINE"
           ]
         },

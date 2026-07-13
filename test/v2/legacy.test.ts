@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +14,7 @@ test('LegacyProfiles splits an inherited WebView profile without inventing data'
   assert.equal(imported.profile.id, 'android-webview');
   assert.equal(imported.profile.shape.id, 'chromium/webview/android/mobile/131');
   assert.equal(imported.profile.shape.hash, imported.shape.hash);
+  assert.deepEqual((imported.profile as unknown as { target: unknown }).target, imported.shape.target);
   assert.deepEqual(imported.shape.target, {
     engine: 'chromium', host: 'webview', platform: 'android', form: 'mobile', version: 131,
   });
@@ -47,6 +49,7 @@ test('LegacyProfiles imports the complete v1 corpus into twelve explicit Shapes'
   let captured = 0;
   let pages = 0;
   for (const item of imported) {
+    assert.deepEqual((item.profile as unknown as { target: unknown }).target, item.shape.target, item.profile.id);
     shapes.set(item.shape.id, (shapes.get(item.shape.id) || 0) + 1);
     sources.set(item.profile.source.kind, (sources.get(item.profile.source.kind) || 0) + 1);
     if (item.shape.level === 'captured') captured++;
@@ -177,6 +180,39 @@ test('LegacyProfiles wraps malformed JSON in the stable profile error contract',
     );
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('LegacyProfiles validates checksum-matched Shape artifacts through the strict codec', async () => {
+  const profilesRoot = await mkdtemp(path.join(os.tmpdir(), 'mimic-v2-profile-artifact-'));
+  const shapesRoot = await mkdtemp(path.join(os.tmpdir(), 'mimic-v2-shape-artifact-'));
+  try {
+    await writeFile(path.join(profilesRoot, 'base.json'), JSON.stringify(baseProfile));
+    const generated = await new LegacyProfiles(profilesRoot).load('base');
+    const relative = `${generated.shape.id}.json`;
+    const file = path.join(shapesRoot, relative);
+    const tampered = JSON.stringify({ ...generated.shape, ops: [{ op: 'invalid' }] });
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, tampered);
+    await writeFile(path.join(shapesRoot, 'manifest.json'), JSON.stringify({
+      schema: 1,
+      files: {
+        [generated.shape.id]: {
+          file: relative,
+          sha256: createHash('sha256').update(tampered).digest('hex'),
+        },
+      },
+    }));
+
+    await assert.rejects(
+      new LegacyProfiles(profilesRoot, shapesRoot).load('base'),
+      (error: unknown) => error instanceof MimicError && error.code === 'BAD_SHAPE',
+    );
+  } finally {
+    await Promise.all([
+      rm(profilesRoot, { recursive: true, force: true }),
+      rm(shapesRoot, { recursive: true, force: true }),
+    ]);
   }
 });
 

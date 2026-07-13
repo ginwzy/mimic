@@ -19,5 +19,6 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["src/v2/**/*.ts", "test/v2/**/*.ts"]
+  "include": ["src/v2/**/*.ts"],
+  "exclude": ["build/**", "test/**"]
 }

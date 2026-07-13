@@ -6,6 +6,7 @@ import type { JsonValue, Plan } from '../core/types.js';
 import { checkContribution } from '../shape/check.js';
 import type { Op, PlanBind } from '../shape/types.js';
 import { validateGraph } from './graph.js';
+import { isTrustedPlan, trustPlan } from './trusted.js';
 
 type ObjectValue = Record<string, JsonValue>;
 
@@ -36,6 +37,7 @@ function ref(value: JsonValue | undefined, name: string): { id: string; hash: st
 }
 
 export function parsePlan(input: unknown): Plan<Op, PlanBind> {
+  if (isTrustedPlan(input)) return input;
   let clean: JsonValue;
   try {
     clean = jsonCopy(input);
@@ -44,10 +46,11 @@ export function parsePlan(input: unknown): Plan<Op, PlanBind> {
   }
   const root = object(clean, 'plan');
   exact(root,
-    ['schema', 'id', 'profile', 'shape', 'page', 'boot', 'task', 'engine', 'catalog', 'features', 'operations', 'binds', 'support'],
+    ['schema', 'id', 'synthetic', 'profile', 'shape', 'page', 'boot', 'task', 'engine', 'catalog', 'features', 'operations', 'binds', 'support'],
     ['schema', 'id', 'profile', 'shape', 'boot', 'task', 'engine', 'catalog', 'features', 'operations', 'binds', 'support'],
     'plan');
   if (root.schema !== 2) fail('schema 必须为 2');
+  if ('synthetic' in root && root.synthetic !== true) fail('plan.synthetic 非法');
   const id = text(root.id, 'plan.id', /^[a-f0-9]{64}$/);
   ref(root.profile, 'plan.profile');
   if ('page' in root) ref(root.page, 'plan.page');
@@ -109,10 +112,10 @@ export function parsePlan(input: unknown): Plan<Op, PlanBind> {
   if (expected !== id) fail('content id 不匹配');
   validateGraph(operations, binds, { phase: 'parse', ordered: true });
 
-  return deepFreeze(jsonCopy({
+  return trustPlan(deepFreeze(jsonCopy({
     ...root,
     operations,
     binds,
     support: contribution.support || {},
-  }) as unknown as Plan<Op, PlanBind>);
+  }) as unknown as Plan<Op, PlanBind>));
 }

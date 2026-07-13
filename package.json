@@ -1,47 +1,77 @@
 {
   "name": "mimic",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "基于 jsdom 的浏览器环境伪装框架 —— Profile/traits 驱动,面向 JS 逆向反检测",
   "type": "module",
-  "main": "entry/index.js",
+  "main": "./build/v2/src/v2/public.js",
+  "types": "./build/v2/src/v2/public.d.ts",
   "exports": {
-    ".": "./entry/index.js"
+    ".": {
+      "types": "./build/v2/src/v2/public.d.ts",
+      "import": "./build/v2/src/v2/public.js",
+      "default": "./build/v2/src/v2/public.js"
+    },
+    "./advanced": {
+      "types": "./build/v2/src/v2/advanced.d.ts",
+      "import": "./build/v2/src/v2/advanced.js",
+      "default": "./build/v2/src/v2/advanced.js"
+    },
+    "./http": {
+      "types": "./build/v2/src/v2/http/public.d.ts",
+      "import": "./build/v2/src/v2/http/public.js",
+      "default": "./build/v2/src/v2/http/public.js"
+    },
+    "./legacy": {
+      "types": "./types/legacy.d.ts",
+      "import": "./entry/index.js",
+      "default": "./entry/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
-    "mimic": "entry/cli.js"
+    "mimic": "build/v2/src/v2/cli.js"
   },
   "files": [
+    "build/v2/",
     "entry/",
     "core/",
     "mask/",
     "patch/",
     "base/",
     "trace/",
-    "capture/",
-    "harness/",
     "profiles/",
-    "scripts/",
-    "tools/",
-    "smoke.js",
-    "README.md"
+    "types/legacy.d.ts",
+    "docs/v2-usage.md",
+    "README.md",
+    "LICENSE",
+    "!**/*.test.js"
   ],
   "scripts": {
-    "mimic": "node entry/cli.js",
+    "mimic": "node build/v2/src/v2/cli.js",
     "smoke": "node smoke.js",
-    "diff": "node entry/cli.js diff",
+    "diff": "node build/v2/src/v2/cli.js diff",
     "baseline": "node entry/cli.js baseline",
     "gen:keyorder": "node harness/gen-keyorder.mjs",
     "fp-env:adapt": "node tools/fp-env/adapt.mjs",
     "fp-env:verify": "node tools/fp-env/verify.mjs",
     "oracle:v1": "node scripts/v1-oracle.js",
     "bench:v1": "node scripts/v1-bench.js",
-    "build:v2": "tsc -p tsconfig.v2.json",
-    "typecheck:v2": "tsc -p tsconfig.v2.json --noEmit",
-    "test:v2": "npm run build:v2 && node --test build/v2/test/v2/*.test.js",
+    "build:v2": "node scripts/build-v2.js production",
+    "build:v2:test": "node scripts/build-v2.js test",
+    "generate:v2:shapes:compiled": "node scripts/generate-v2-shapes.js",
+    "generate:v2:shapes": "npm run build:v2 && npm run generate:v2:shapes:compiled",
+    "check:v2:shapes:compiled": "node scripts/generate-v2-shapes.js --check",
+    "check:v2:shapes": "npm run build:v2 && npm run check:v2:shapes:compiled",
+    "prepack": "npm run build:v2 && npm run check:v2:shapes:compiled",
+    "typecheck:v2": "tsc -p tsconfig.v2.test.json --noEmit",
+    "test:v2": "npm run build:v2 && npm run build:v2:test && node --test build/v2-test/test/v2/*.test.js",
     "test:legacy": "node scripts/test.js",
     "check:legacy": "node scripts/check.js",
-    "check": "npm run typecheck:v2 && npm run check:legacy",
-    "test": "npm run test:v2 && npm run test:legacy"
+    "check": "npm run typecheck:v2 && npm run check:v2:shapes && npm run check:legacy",
+    "test": "npm run test:v2 && npm run test:legacy",
+    "gate:v2:performance": "npm run build:v2 && node build/v2/src/v2/quality/bench.js",
+    "gate:v2:leak": "npm run build:v2 && node build/v2/src/v2/quality/leak.js",
+    "gate:v2:cutover": "npm run check && npm test && npm run gate:v2:performance && npm run gate:v2:leak"
   },
   "keywords": [
     "jsdom",

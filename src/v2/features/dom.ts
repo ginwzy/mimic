@@ -19,7 +19,8 @@ const EVENT_KEYS = ['length', 'name', 'prototype', 'NONE', 'CAPTURING_PHASE', 'A
 
 const token = (owner: string, key: string, part: FnPart): string => `${owner}\u0000${key}\u0000${part}`;
 
-const NET_WRITES = [
+const DEFERRED_WRITES = [
+  token('window.Navigator.prototype', 'connection', 'get'),
   token('window.XMLHttpRequest.prototype', 'send', 'value'),
   token('window.Navigator.prototype', 'sendBeacon', 'value'),
 ] as const;
@@ -51,7 +52,7 @@ function owned(shape: Shape): Set<string> {
 
 function operations(shape: Shape): DraftOp[] {
   const writes = owned(shape);
-  for (const write of NET_WRITES) writes.add(write);
+  for (const write of DEFERRED_WRITES) writes.add(write);
   const ops: DraftOp[] = [];
   const add = (owner: string, key: string, part: FnPart, length: number): void => {
     if (writes.has(token(owner, key, part))) return;
