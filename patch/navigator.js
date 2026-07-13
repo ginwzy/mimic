@@ -9,7 +9,7 @@
  *   机制层  —— mask 原语 + apply 内的通用 driver 循环;不含任何"哪个 API/哪个值"的知识。
  * 新增/删改成员 = 改对应表一行,driver 不动。
  */
-import { chromeHost, mobileOnly, desktopOnly } from './gates.js';
+import { chromeHost, mobileOnly, desktopOnly, macosChrome } from './gates.js';
 
 // data 方法形状表:[名, arity, 实现, gate?]。壳语义:void→resolve、复杂对象→pending、回调签名→无返回。
 function methodTable(mask) {
@@ -39,11 +39,13 @@ function methodTable(mask) {
     ['getInterestGroupAdAuctionData', 1, () => pending(), chromeHost],
     ['registerProtocolHandler', 2, () => undefined, chromeHost],
     ['unregisterProtocolHandler', 2, () => undefined, chromeHost],
+    ['canShare', 0, () => false, macosChrome],
+    ['share', 0, () => pending(), macosChrome],
   ];
 }
 
 // 接口单例形状表:{ cls, methods?, props?, gate? } → mask.singleton,driver 透传。
-// eager 建实例保 === 不变量;刻意不插 EventTarget 层(避免 jsdom brand-check)。
+// eager 建实例保 === 不变量;多数刻意不插 EventTarget 层(避免 jsdom brand-check)。
 function ifaceTable(mask, createPermissionStatus) {
   const { promise, pending, adopt } = mask;
   return {
@@ -102,6 +104,10 @@ function ifaceTable(mask, createPermissionStatus) {
       getDevices: [0, () => promise(adopt([]))], requestDevice: [1, () => promise(adopt([]))],
     }, gate: chromeHost },
     presentation: { cls: 'Presentation', props: { defaultRequest: null, receiver: null }, gate: chromeHost },
+    bluetooth: { cls: 'Bluetooth', methods: {
+      getAvailability: [0, () => promise(false)], getDevices: [0, () => promise(adopt([]))],
+      requestDevice: [0, () => pending()],
+    }, eventHandlers: ['onavailabilitychanged'], parentEventTarget: true, gate: macosChrome },
     serial: { cls: 'Serial', methods: {
       getPorts: [0, () => promise(adopt([]))], requestPort: [0, () => pending()],
     }, gate: chromeHost },
@@ -174,9 +180,12 @@ export default {
       return status;
     };
 
-    for (const [key, { cls, methods = {}, props = {}, eventHandlers = [], gate }] of Object.entries(ifaceTable(mask, createPermissionStatus))) {
+    for (const [key, { cls, methods = {}, props = {}, eventHandlers = [], parentEventTarget = false, gate }] of Object.entries(ifaceTable(mask, createPermissionStatus))) {
       if (!passes(gate)) continue;
-      const inst = mask.singleton(cls, { methods, props, eventHandlers });
+      const inst = mask.singleton(cls, {
+        methods, props, eventHandlers,
+        ...(parentEventTarget ? { parent: window.EventTarget.prototype } : {}),
+      });
       accessors[key] = () => inst;
     }
     // chrome-only 非接口标量(不入 ifaceTable)。

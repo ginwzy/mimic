@@ -5,6 +5,8 @@
  *   GET  /profiles                                                → string[]
  *
  * 返回句柄 { server, pool, close() } 供编程调用优雅关闭;CLI(mimic serve)走 SIGINT。
+ * 默认只监听 127.0.0.1,且 worker 同步脚本有执行上限、等待队列有容量上限。对外暴露须显式传 host,
+ * 并由部署层承担认证、TLS 与更细粒度的资源隔离。
  * /check(missing + suggest)待 worker 侧透传 trace.suggest 后补。
  */
 import http from 'node:http';
@@ -13,8 +15,16 @@ import { Profile } from '../core/profile.js';
 
 const MAX_BODY = 4 << 20; // 4MB
 
-export function startServer({ port = 3000, size } = {}) {
-  const pool = new RealmPool(size ? { size } : {});
+export function startServer({
+  port = 3000,
+  host = '127.0.0.1',
+  size,
+  timeoutMs,
+  maxQueue,
+} = {}) {
+  if (typeof host !== 'string' || !host.trim()) throw new TypeError('host 必须是非空字符串');
+  if (!Number.isInteger(port) || port < 0 || port > 65_535) throw new RangeError('port 必须是 0..65535 的整数');
+  const pool = new RealmPool({ size, timeoutMs, maxQueue });
 
   const readJSON = (req) => new Promise((resolve, reject) => {
     let buf = '';
@@ -39,13 +49,43 @@ export function startServer({ port = 3000, size } = {}) {
       }
       send(res, 404, { ok: false, error: `未知路由 ${req.method} ${req.url}` });
     } catch (e) {
-      send(res, 400, { ok: false, error: e?.message ?? String(e) });
+      const status = e?.code === 'ERR_REALM_POOL_QUEUE_FULL' ? 503 : 400;
+      send(res, status, { ok: false, error: e?.message ?? String(e) });
     }
   });
 
-  const close = async () => { await new Promise((r) => server.close(r)); await pool.destroy(); };
-  server.on('error', (e) => { console.error(`serve 启动失败:${e.message}`); process.exitCode = 1; });
-  process.once('SIGINT', () => { close().finally(() => process.exit(0)); });
-  server.listen(port, () => console.log(`mimic serve —— :${port}(pool size=${pool.size})`));
+  let closePromise = null;
+  const onSigint = () => { close().finally(() => process.exit(0)); };
+  const close = () => {
+    if (closePromise) return closePromise;
+    process.removeListener('SIGINT', onSigint);
+    closePromise = (async () => {
+      try {
+        if (server.listening) {
+          await new Promise((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())));
+        }
+      } finally {
+        await pool.destroy();
+      }
+    })();
+    return closePromise;
+  };
+  // listen 失败时调用方未必还会 close();server 自身必须释放已启动的 worker 与进程级信号监听器。
+  server.on('error', () => {
+    process.removeListener('SIGINT', onSigint);
+    void pool.destroy();
+  });
+  process.once('SIGINT', onSigint);
+  try {
+    server.listen(port, host, () => {
+      const address = server.address();
+      const boundPort = typeof address === 'object' && address ? address.port : port;
+      console.log(`mimic serve —— http://${host}:${boundPort}(pool size=${pool.size}, timeout=${pool.timeoutMs}ms, max queue=${pool.maxQueue})`);
+    });
+  } catch (e) {
+    process.removeListener('SIGINT', onSigint);
+    void pool.destroy();
+    throw e;
+  }
   return { server, pool, close };
 }

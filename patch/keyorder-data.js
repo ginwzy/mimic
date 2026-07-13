@@ -4,9 +4,9 @@
  * 三原型均 per-host:事件处理器密集的 Document/HTMLElement.prototype 真机序随 host 而异(实测 chrome-v143 vs
  * webview-v138 共享键 100+ 处错位);Element.prototype 共享序虽 host 一致,但 host 门控键(ariaNotify webview 无)
  * 致键集不同,故同取 per-host 表 —— 令 reorderOwnKeys 的键集与各 host 注入集精确相等,不触发漂移告警。
- * chrome 序取 linux-chrome-v143、webview 序取 android-webview-v138。注:更高版本(v148/v149)基线键集与 v143
- * 漂移(customElementRegistry/onanimationcancel 等),mimic 据 v143 注入故对其键集不全 → order 检测休眠
- * (sameSet=false),无需也不应为这些版本建表。
+ * chrome 序取 linux-chrome-v143、webview 序取 android-webview-v138。Android Chrome 暂无结构 baseline;
+ * Document/HTMLElement 的 androidChrome 表由 chrome 表追加已知 mobile touch 键组成,只消除未受控 append
+ * 漂移,不声称已证明真机完整顺序。更高版本(v148/v149)基线键集与 v143 漂移,DOM 表仍不按版本扩张。
  */
 
 export const ELEMENT_ORDER = {
@@ -204,3 +204,9 @@ export const HTML_ELEMENT_ORDER = {
     "ontouchcancel", "ontouchend", "ontouchmove", "ontouchstart",
   ],
 };
+
+// Android Chrome 是 Chrome host + mobile touch 面。WebView 真机基线确认四键相对序为 cancel/end/move/start;
+// 缺 Android Chrome baseline,因此仅把该已知 mobile 尾段叠加到 Chrome host 表,并由代表性 profile 锁稳定性。
+const ANDROID_TOUCH_ORDER = ['ontouchcancel', 'ontouchend', 'ontouchmove', 'ontouchstart'];
+DOCUMENT_ORDER.androidChrome = [...DOCUMENT_ORDER.chrome, ...ANDROID_TOUCH_ORDER];
+HTML_ELEMENT_ORDER.androidChrome = [...HTML_ELEMENT_ORDER.chrome, ...ANDROID_TOUCH_ORDER];

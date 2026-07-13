@@ -41,10 +41,19 @@ npm run mimic -- run   <script> --profile chrome-mac [--trace]
 npm run mimic -- check <script>            # 缺失 API + 建议 patch
 npm run mimic -- capture                   # 起采集服务,目标设备(含手机/WebView)访问后落盘 profile
 npm run mimic -- profiles                  # 列出可用指纹
+npm run mimic -- serve                     # HTTP API,默认仅监听 127.0.0.1:3000
 
 # 冒烟测试(含跨 realm 身份 + 平台差异验证)
 npm run smoke
 ```
+
+`Realm.run(code, { timeoutMs })` 可为同步求值设置毫秒级执行上限;直接编程调用省略时保持无上限。对不可信
+脚本应使用 `RealmPool`/HTTP,其 worker watchdog 还会覆盖求值后 microtask 卡死。HTTP worker 默认限制为
+5000ms,等待队列默认最多 100 个任务。服务参数可用
+`--host <地址> --port <端口> --timeout <毫秒> --pool-size <数量> --max-queue <数量>` 显式调整。
+
+`serve` 会执行请求方提交的 JavaScript,不是多租户安全沙箱,因此默认只绑定 loopback。仅应在可信网络中通过
+`--host` 对外暴露,并在前置服务补充认证、TLS、请求限流和进程级资源隔离。
 
 ## 平台差异
 

@@ -13,6 +13,8 @@ import { Detector } from '../trace/detector.js';
 export class Realm {
   constructor({ window, context, profile, mask, traits, trace, url, jsdomErrors }) {
     this.window = window;
+    // 页面可改写 window.close；销毁必须持有 create 期可信引用，否则 untrusted code 能在 dispose 阶段卡死 worker。
+    this._closeWindow = typeof window?.close === 'function' ? window.close.bind(window) : null;
     this.context = context; // window 的 vm context,供 run() 用 vm.runInContext 执行
     this.profile = profile;
     this.mask = mask;
@@ -68,7 +70,7 @@ export class Realm {
     try {
       realm.decisions = runPipeline(patches, realm);
     } catch (e) {
-      try { window.close?.(); } catch { /* noop */ }
+      realm.dispose();
       throw e;
     }
     return realm;
@@ -82,13 +84,18 @@ export class Realm {
    * @param {object} [opts]
    * @param {string} [opts.url]  该脚本在 stack 帧中显示的来源 URL;默认回退到文档 URL(this.url)。
    *   真机里每段脚本的 stack 帧 URL 是其真实 src,故执行抓取的目标脚本时应传入其原始 URL。
+   * @param {number} [opts.timeoutMs] 同步脚本执行上限(ms);省略时保持无上限的原有编程 API 语义。
    */
-  run(code, { url } = {}) {
+  run(code, { url, timeoutMs } = {}) {
     // vm.runInContext 的 options.filename 只接 string|undefined,绝不接 null —— 默认值仅对 undefined 生效。
     // 直接 new Realm 不传 url 时 this.url 为 null,这里收口成 undefined,让 vm 退回默认 filename 而非抛错。
     const filename = url || this.url || undefined;
     try {
-      const value = vm.runInContext(code, this.context, { filename });
+      const options = { filename };
+      // 不把 undefined 传给 vm:timeout 一旦存在就必须是正整数。显式非法值交由 vm 产生一致的 TypeError,
+      // 并按 Realm.run 的既有结构化错误契约返回。
+      if (timeoutMs !== undefined) options.timeout = timeoutMs;
+      const value = vm.runInContext(code, this.context, options);
       return { ok: true, value, missing: this.trace?.missing() ?? [] };
     } catch (e) {
       this.trace?.captureError?.(e);
@@ -113,11 +120,12 @@ export class Realm {
    */
   dispose() {
     try {
-      this.window?.close?.();
+      this._closeWindow?.();
     } catch {
       /* noop */
     }
     this.window = null;
+    this._closeWindow = null;
     this.context = null;
     this.mask = null;
     this.trace = null;

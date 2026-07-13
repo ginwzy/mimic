@@ -8,3 +8,4 @@
 export const chromeHost = (t) => t.host === 'chrome';        // Chrome-vs-WebView 特性差(WebView 缺的 secure-context Chrome 专属)
 export const mobileOnly = (t) => t.formFactor === 'mobile';
 export const desktopOnly = (t) => t.formFactor === 'desktop';
+export const macosChrome = (t) => chromeHost(t) && t.platform === 'macos';

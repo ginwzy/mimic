@@ -11,11 +11,15 @@ const tests = [
   'patch/webgl.test.js',
   'patch/canvas.test.js',
   'patch/audio.test.js',
+  'patch/clock.test.js',
   'patch/chrome.test.js',
+  'patch/navigator.test.js',
   'patch/ctoriface.test.js',
   'patch/eventtarget.test.js',
   'patch/domproto.test.js',
+  'patch/trace.test.js',
   'entry/pool.test.js',
+  'entry/server.test.js',
 ];
 
 for (const test of tests) {

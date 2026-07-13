@@ -17,13 +17,27 @@ function ok(name, cond) {
   else { failed++; console.log(`  ✗ ${name}`); }
 }
 
-const r = await Realm.create({ profile: 'chrome-mac' });
+const r = await Realm.create({ profile: 'macos-chrome-v149' });
 const R = r.run(`(function(){
   const noThrow = (fn) => { try { fn(); return true; } catch (e) { return false; } };
   const el = document.createElement('div');
   const itGet = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'innerText').get;
   const itSet = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'innerText').set;
+  const parsed = Document.parseHTML('<title>x</title><main id="ok">body</main>');
+  const safe = Document.parseHTML('<script id="bad"></script><img id="img" onerror="boom()" src="javascript:boom()"><p id="kept">ok</p>');
+  const unsafe = Document.parseHTMLUnsafe('<script id="bad"></script><img id="img" onerror="boom()">');
   return {
+    parse_type: typeof Document.parseHTML,
+    parse_name: Document.parseHTML.name,
+    parse_length: Document.parseHTML.length,
+    parse_native: Function.prototype.toString.call(Document.parseHTML).includes('[native code]'),
+    parse_ownNames: Object.getOwnPropertyNames(Document).sort().join(','),
+      parse_completeDocument: parsed instanceof Document && parsed.head && parsed.body &&
+        parsed.title === 'x' && parsed.body.querySelector('#ok').textContent === 'body',
+      parse_removesActiveContent: !safe.querySelector('#bad') && !safe.querySelector('#img').hasAttribute('onerror') &&
+        !safe.querySelector('#img').hasAttribute('src') && safe.querySelector('#kept').textContent === 'ok',
+      unsafe_preservesActiveContent: !!unsafe.querySelector('#bad') && unsafe.querySelector('#img').hasAttribute('onerror'),
+
     // adoptedStyleSheets (Document) —— null 上 for...of/展开抛
     ass_type: typeof document.adoptedStyleSheets,
     ass_isArray: Array.isArray(document.adoptedStyleSheets),
@@ -144,6 +158,21 @@ ok('Array.isArray 成立', R.ass_isArray === true);
 ok('for...of 不抛', R.ass_iter === true);
 ok('展开不抛', R.ass_spread === true);
 ok('赋值不抛', R.ass_assign === true);
+
+console.log('\n[Document.parseHTML Sanitizer 安全变体]');
+ok('typeof Document.parseHTML === function', R.parse_type === 'function');
+ok("Document.parseHTML.name === 'parseHTML'", R.parse_name === 'parseHTML');
+ok('Document.parseHTML.length === 1', R.parse_length === 1);
+ok('Document.parseHTML.toString 为 native', R.parse_native === true);
+ok('Document ownNames 含 parseHTML + parseHTMLUnsafe',
+  R.parse_ownNames === 'length,name,parseHTML,parseHTMLUnsafe,prototype');
+ok('parseHTML 返回完整 Document(head/body 可用)', R.parse_completeDocument === true);
+ok('parseHTML 移除 active content/事件属性/javascript URL', R.parse_removesActiveContent === true);
+ok('parseHTMLUnsafe 保留相同 active content', R.unsafe_preservesActiveContent === true);
+const chrome131 = await Realm.create({ profile: 'chrome-mac' });
+ok('Chrome 131 不注入仅由 v148+ 基线证实的 parseHTML',
+  chrome131.run('typeof Document.parseHTML').value === 'undefined');
+chrome131.dispose();
 
 console.log('\n[part:真实 DOMTokenList,.add()/.contains()/for...of 不抛]');
 ok('typeof 为 object', R.part_type === 'object');

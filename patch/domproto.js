@@ -5,7 +5,7 @@
  * 补成员后 keyorder 须注册真机序(键集补全 → 激活 order 检测)。
  * arity = 真机基线 fn.length;chromeHost 门控 = WebView 无的 Chrome 实验面。
  */
-import { chromeHost } from './gates.js';
+import { chromeHost, macosChrome } from './gates.js';
 import { makeTokenList, refreshTokenList } from '../base/jsdom.js';
 
 const hasOwn = Object.prototype.hasOwnProperty;
@@ -230,16 +230,37 @@ export default {
     installGetOnly(W.Element.prototype, elementGetOnly);
     installGetOnly(W.HTMLElement.prototype, htmlElementGetOnly);
 
-    // Document 构造器静态方法:真机 ownNames 含 parseHTMLUnsafe(Chrome 124+, 含 WebView)。
-    // prototype non-configurable → parseHTMLUnsafe 出现在 prototype 之后(键序 warn TELL,同 Node/Event 键序轴)。
-    if (!W.Document.parseHTMLUnsafe) {
-      Object.defineProperty(W.Document, 'parseHTMLUnsafe', {
+    // Document 静态 HTML 解析器:parseHTMLUnsafe 自 Chrome 124 起跨 host 存在;Sanitizer 安全变体 parseHTML
+    // 由 macOS v148/v149 真机基线实证。两个包装须各建独立函数对象(mask.native 会原地校正 name/length)。
+    const sanitizeDocument = (doc) => {
+      // 最小安全面:锁住 active-content、事件属性与 javascript: URL 这三类核心差异。mimic 不是安全边界，
+      // 这里复刻浏览器默认 Sanitizer 的可观察结果，不把该壳宣传为通用 HTML 净化器。
+      for (const el of doc.querySelectorAll('script,iframe,object,embed,base')) el.remove();
+      for (const el of doc.querySelectorAll('*')) {
+        for (const attr of [...el.attributes]) {
+          const name = attr.name.toLowerCase();
+          if (name.startsWith('on') || name === 'srcdoc') { el.removeAttribute(attr.name); continue; }
+          if (['href', 'src', 'xlink:href', 'action', 'formaction'].includes(name)
+            && /^[\u0000-\u0020]*javascript:/i.test(attr.value)) el.removeAttribute(attr.name);
+        }
+      }
+      for (const meta of doc.querySelectorAll('meta[http-equiv]')) {
+        if (meta.getAttribute('http-equiv')?.toLowerCase() === 'refresh') meta.remove();
+      }
+      return doc;
+    };
+    const defineHTMLParser = (name, sanitize = false) => {
+      if (W.Document[name]) return;
+      Object.defineProperty(W.Document, name, {
         value: mask.native((html) => {
           // DOMParser 得完整 html/head/body;documentElement.innerHTML 会丢 head/body(.body=null)被识破。
-          return new W.DOMParser().parseFromString(html == null ? '' : String(html), 'text/html');
-        }, 'parseHTMLUnsafe', 1),
+          const doc = new W.DOMParser().parseFromString(html == null ? '' : String(html), 'text/html');
+          return sanitize ? sanitizeDocument(doc) : doc;
+        }, name, 1),
         writable: true, configurable: true, enumerable: false,
       });
-    }
+    };
+    if (macosChrome(traits) && Number(traits.version) >= 148) defineHTMLParser('parseHTML', true);
+    defineHTMLParser('parseHTMLUnsafe');
   },
 };

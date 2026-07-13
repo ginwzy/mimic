@@ -5,10 +5,10 @@
  * navigator(标量 + 接口/方法)、uadata(userAgentData)、plugins(plugins/mimeTypes)。任一未跑完就重排,
  * 其后注入的键会 append 到已排好的序之后 → 再次错序。故 after 声明全部贡献者,且注册在 patch 列表末位。
  *
- * 顺序数据源:per-host 静态数组(per-(host,version) 常量,Blink IDL 序与平台无关),authoring 时从
- * harness/baselines 提取。刻意不在运行时读 baseline —— producer(patch)不依赖 verifier(harness)的 fixture。
- * chrome 序取自 linux-chrome-v143、webview 序取自 android-webview-v138;两序键集与对应 host 注入集一致
- * (集合正确性见 diff 的 sameSet),本 pass 只改顺序。
+ * 顺序数据源:per-host/platform/version 静态数组,authoring 时从 harness/baselines 提取。刻意不在运行时读
+ * baseline —— producer(patch)不依赖 verifier(harness)的 fixture。chrome 序取自 linux-chrome-v143、webview
+ * 序取自 android-webview-v138、macOS v148/v149 各取同版真机基线。Android Chrome 暂无结构基线,其表仅把
+ * Chrome host 序与已知 mobile 注入差异显式合成,防止把运行时 append 顺序误当成已验证真机序。
  *
  * 覆盖面:本 pass 是**后置重排**,delete-重建的键必 append 到残留键之后,故要求原型"全 configurable"。
  * Navigator/HTMLDivElement/Document/Element/HTMLElement/EventTarget.prototype 天然全 configurable。
@@ -38,6 +38,41 @@ export const NAVIGATOR_ORDER = {
     'deprecatedURNToURL', 'getInstalledRelatedApps', 'getInterestGroupAdAuctionData', 'registerProtocolHandler',
     'unregisterProtocolHandler',
   ],
+  // 两表逐字取自对应真机 baseline。v149 起 windowControlsOverlay 的 IDL 位置前移。
+  chromeMac148: [
+    'vendorSub', 'productSub', 'vendor', 'maxTouchPoints', 'scheduling', 'userActivation', 'geolocation',
+    'doNotTrack', 'webkitTemporaryStorage', 'webkitPersistentStorage', 'hardwareConcurrency', 'cookieEnabled',
+    'appCodeName', 'appName', 'appVersion', 'platform', 'product', 'userAgent', 'language', 'languages',
+    'onLine', 'webdriver', 'plugins', 'mimeTypes', 'pdfViewerEnabled', 'connection', 'getGamepads',
+    'javaEnabled', 'sendBeacon', 'vibrate', 'windowControlsOverlay', 'constructor',
+    'deprecatedRunAdAuctionEnforcesKAnonymity', 'protectedAudience', 'bluetooth', 'clipboard', 'credentials',
+    'keyboard', 'managed', 'mediaDevices', 'serviceWorker', 'virtualKeyboard', 'wakeLock', 'deviceMemory',
+    'userAgentData', 'locks', 'storage', 'gpu', 'login', 'ink', 'mediaCapabilities', 'permissions',
+    'devicePosture', 'hid', 'mediaSession', 'presentation', 'serial', 'usb', 'xr', 'storageBuckets',
+    'adAuctionComponents', 'runAdAuction', 'canLoadAdAuctionFencedFrame', 'canShare', 'share',
+    'clearAppBadge', 'getBattery', 'getUserMedia', 'requestMIDIAccess', 'requestMediaKeySystemAccess',
+    'setAppBadge', 'webkitGetUserMedia', 'clearOriginJoinedAdInterestGroups', 'createAuctionNonce',
+    'joinAdInterestGroup', 'leaveAdInterestGroup', 'updateAdInterestGroups', 'deprecatedReplaceInURN',
+    'deprecatedURNToURL', 'getInstalledRelatedApps', 'getInterestGroupAdAuctionData', 'registerProtocolHandler',
+    'unregisterProtocolHandler',
+  ],
+  chromeMac149: [
+    'vendorSub', 'productSub', 'vendor', 'maxTouchPoints', 'scheduling', 'userActivation', 'geolocation',
+    'doNotTrack', 'webkitTemporaryStorage', 'webkitPersistentStorage', 'windowControlsOverlay',
+    'hardwareConcurrency', 'cookieEnabled', 'appCodeName', 'appName', 'appVersion', 'platform', 'product',
+    'userAgent', 'language', 'languages', 'onLine', 'webdriver', 'plugins', 'mimeTypes', 'pdfViewerEnabled',
+    'connection', 'getGamepads', 'javaEnabled', 'sendBeacon', 'vibrate', 'constructor',
+    'deprecatedRunAdAuctionEnforcesKAnonymity', 'protectedAudience', 'bluetooth', 'clipboard', 'credentials',
+    'keyboard', 'managed', 'mediaDevices', 'serviceWorker', 'virtualKeyboard', 'wakeLock', 'deviceMemory',
+    'userAgentData', 'locks', 'storage', 'gpu', 'login', 'ink', 'mediaCapabilities', 'permissions',
+    'devicePosture', 'hid', 'mediaSession', 'presentation', 'serial', 'usb', 'xr', 'storageBuckets',
+    'adAuctionComponents', 'runAdAuction', 'canLoadAdAuctionFencedFrame', 'canShare', 'share',
+    'clearAppBadge', 'getBattery', 'getUserMedia', 'requestMIDIAccess', 'requestMediaKeySystemAccess',
+    'setAppBadge', 'webkitGetUserMedia', 'clearOriginJoinedAdInterestGroups', 'createAuctionNonce',
+    'joinAdInterestGroup', 'leaveAdInterestGroup', 'updateAdInterestGroups', 'deprecatedReplaceInURN',
+    'deprecatedURNToURL', 'getInstalledRelatedApps', 'getInterestGroupAdAuctionData', 'registerProtocolHandler',
+    'unregisterProtocolHandler',
+  ],
   webview: [
     'vendorSub', 'productSub', 'vendor', 'maxTouchPoints', 'scheduling', 'userActivation', 'doNotTrack',
     'geolocation', 'connection', 'plugins', 'mimeTypes', 'pdfViewerEnabled', 'webkitTemporaryStorage',
@@ -50,6 +85,23 @@ export const NAVIGATOR_ORDER = {
     'setAppBadge', 'webkitGetUserMedia',
   ],
 };
+
+// Android Chrome 沿用 Chrome host 能力集,但 mobile 轴用 contacts 替代 windowControlsOverlay。
+// contacts 的相对位置取 Android WebView 基线的 userAgentData 后位置;其余顺序待真机结构 baseline 校准。
+NAVIGATOR_ORDER.androidChrome = NAVIGATOR_ORDER.chrome.filter((key) => key !== 'windowControlsOverlay');
+NAVIGATOR_ORDER.androidChrome.splice(NAVIGATOR_ORDER.androidChrome.indexOf('userAgentData') + 1, 0, 'contacts');
+
+function navigatorOrder(traits) {
+  if (traits.host === 'chrome' && traits.platform === 'macos') {
+    return Number(traits.version) >= 149 ? NAVIGATOR_ORDER.chromeMac149 : NAVIGATOR_ORDER.chromeMac148;
+  }
+  if (traits.host === 'chrome' && traits.platform === 'android') return NAVIGATOR_ORDER.androidChrome;
+  return NAVIGATOR_ORDER[traits.host];
+}
+
+function domOrderKey(traits) {
+  return traits.host === 'chrome' && traits.platform === 'android' ? 'androidChrome' : traits.host;
+}
 
 // DOM 原型真机序(host 无关)。仅收"全 configurable"者(见上:Node/Event 受 non-configurable 常量阻塞,不入表)。
 const HTML_DIV_ELEMENT_ORDER = ['align', 'constructor'];
@@ -74,7 +126,7 @@ export default {
   // after domproto:EventTarget.prototype.when 须先补齐再重排(否则 order 缺 when)。
   after: ['window', 'navigator', 'uadata', 'plugins', 'domproto', 'screen'],
   apply({ window, mask, traits }) {
-    const navOrder = NAVIGATOR_ORDER[traits.host];
+    const navOrder = navigatorOrder(traits);
     if (navOrder) mask.reorderOwnKeys(window.Navigator.prototype, navOrder);
     mask.reorderOwnKeys(window.HTMLDivElement.prototype, HTML_DIV_ELEMENT_ORDER);
     mask.reorderOwnKeys(window.EventTarget.prototype, EVENT_TARGET_ORDER);
@@ -88,9 +140,10 @@ export default {
     // 仅在对应真机基线键集与 mimic 注入集相等时该原型 order 才被检视(更高版本因键集漂移而休眠,见 keyorder-data)。
     const elOrder = ELEMENT_ORDER[traits.host];
     if (elOrder) mask.reorderOwnKeys(window.Element.prototype, elOrder);
-    const docOrder = DOCUMENT_ORDER[traits.host];
+    const platformKey = domOrderKey(traits);
+    const docOrder = DOCUMENT_ORDER[platformKey];
     if (docOrder) mask.reorderOwnKeys(window.Document.prototype, docOrder);
-    const htmlOrder = HTML_ELEMENT_ORDER[traits.host];
+    const htmlOrder = HTML_ELEMENT_ORDER[platformKey];
     if (htmlOrder) mask.reorderOwnKeys(window.HTMLElement.prototype, htmlOrder);
   },
 };

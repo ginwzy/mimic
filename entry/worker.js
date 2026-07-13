@@ -13,17 +13,27 @@ import { serializeResult } from '../core/serialize.js';
 
 if (!parentPort) throw new Error('entry/worker.js 只能作为 worker_threads 加载(见 entry/pool.js)');
 
-// job:{ id, code, profile, url?, scriptUrl?, trace? }
+// job:{ id, code, profile, url?, scriptUrl?, trace?, timeoutMs? }
 //   url       —— 文档域(cookie/origin 落地);scriptUrl —— 脚本在 stack 帧中的来源 URL(见 Realm.run)。
-parentPort.on('message', async ({ id, code, profile, url, scriptUrl, trace }) => {
+parentPort.on('message', async ({ id, code, profile, url, scriptUrl, trace, timeoutMs }) => {
   let realm = null;
+  let result;
   try {
     realm = await Realm.create({ profile, url, trace: !!trace });
-    parentPort.postMessage({ id, result: serializeResult(realm.run(code, { url: scriptUrl })) });
+    parentPort.postMessage({ id, started: true });
+    result = serializeResult(realm.run(code, { url: scriptUrl, timeoutMs }));
   } catch (e) {
-    // 装配级失败(Realm.create 抛):也序列化回传,不让 worker 静默无响应(pool 靠回传解 pending)。
-    parentPort.postMessage({ id, result: { ok: false, error: e?.message ?? String(e), missing: [] } });
-  } finally {
-    realm?.dispose();
+    // 装配/序列化失败也必须走下方统一 checkpoint；否则恶意 Proxy 可在序列化 getter 中排入死 microtask，
+    // catch 先回包后令 pool 清 watchdog，把 worker 永久卡死。
+    let message = 'Worker task failed';
+    try { message = e?.message ?? String(e); } catch { /* 恶意错误对象 getter */ }
+    result = { ok: false, error: message, missing: [] };
   }
+  // 页面可改写 window.close；dispose 使用 create 期可信引用并先取消页面 timer，不能把用户回调带入 checkpoint。
+  realm?.dispose();
+  realm = null;
+  // 宏任务边界保证递归排入的 Promise microtask 全部耗尽；单次 await Promise.resolve 的 continuation 可能
+  // 插在后续 microtask 之前，仍可被绕过。卡死时 pool watchdog 会终止本 worker 并补位。
+  await new Promise((resolve) => setImmediate(resolve));
+  parentPort.postMessage({ id, result });
 });
