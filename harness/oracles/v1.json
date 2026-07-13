@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "source": {
+    "commit": "83624a22425c9178ff714d5ca90b332edc70dcf6",
+    "jsdom": "29.1.1",
+    "artifacts": {
+      "harness/probe.js": "4e77b6644b66ee48dc9fba8828e727b455af84d73c95ac8f90130b2d407b7f1c",
+      "harness/baselines/android-webview-v138.json": "bcd3ffb7b184eb61ab23827c1a6de256def5b3f4eb33b4bbbb9b01b7cc01bea5",
+      "harness/baselines/linux-chrome-v143.json": "8bb471bc084776b3988ef08d73d10ba0eeea6d19d3af061133b3a91c1f6e6d1d",
+      "harness/baselines/macos-chrome-v148.json": "1f747c9d2d4c0964f78e59014e7acef9c4b6fa506d5809857f741a624248f105",
+      "harness/baselines/macos-chrome-v149.json": "7d1c22a4af2c78df674f8268eead5fad0ee4c19855a486a45fb08aada415800d"
+    }
+  },
+  "inventory": {
+    "profiles": 1012,
+    "baselines": [
+      "android-webview-v138",
+      "linux-chrome-v143",
+      "macos-chrome-v148",
+      "macos-chrome-v149"
+    ]
+  },
+  "structure": [
+    {
+      "profile": "chrome-mac",
+      "baseline": "macos-chrome-v148",
+      "budget": { "extra": 0, "tell": 1, "missing": 7 },
+      "actual": { "extra": 0, "tell": 1, "missing": 7 }
+    },
+    {
+      "profile": "macos-chrome-v148",
+      "baseline": "macos-chrome-v148",
+      "budget": { "extra": 0, "tell": 0, "missing": 7 },
+      "actual": { "extra": 0, "tell": 0, "missing": 7 }
+    },
+    {
+      "profile": "macos-chrome-v149",
+      "baseline": "macos-chrome-v149",
+      "budget": { "extra": 0, "tell": 0, "missing": 8 },
+      "actual": { "extra": 0, "tell": 0, "missing": 8 }
+    },
+    {
+      "profile": "android-webview-v138",
+      "baseline": "android-webview-v138",
+      "budget": { "extra": 0, "tell": 0, "missing": 0 },
+      "actual": { "extra": 0, "tell": 0, "missing": 0 }
+    },
+    {
+      "profile": "linux-chrome",
+      "baseline": "linux-chrome-v143",
+      "budget": { "extra": 0, "tell": 0, "missing": 0 },
+      "actual": { "extra": 0, "tell": 0, "missing": 0 }
+    }
+  ],
+  "behavior": {
+    "chrome": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "hasChrome": true,
+      "maxTouchPoints": 0
+    },
+    "webview": {
+      "userAgent": "Mozilla/5.0 (Linux; Android 15; M2012K11AC Build/BP1A.250505.005) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36",
+      "hasChrome": false,
+      "maxTouchPoints": 5
+    }
+  },
+  "execution": {
+    "run": { "ok": true, "missing": [], "value": 2 },
+    "throw": { "ok": false, "missing": [], "error": "oracle boom" },
+    "timeout": { "ok": false, "missing": [], "error": "Script execution timed out after 10ms" },
+    "trace": { "missing": ["OracleMissing"], "dynamicCode": 1 },
+    "encode": { "ok": true, "missing": [], "value": "[unserializable: [object Window]]" },
+    "capture": {
+      "syncCaptured": true,
+      "first": "sync",
+      "segments": {
+        "sync": "xhr",
+        "load": "xhr",
+        "beacon": "beacon",
+        "fetch": "fetch",
+        "timer": "xhr"
+      }
+    }
+  }
+}

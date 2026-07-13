@@ -1,0 +1,182 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/profile.json",
+  "title": "Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "hash", "shape", "source", "navigator", "screen", "evidence"],
+  "properties": {
+    "schema": { "const": 2 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._/-]*$" },
+    "hash": { "$ref": "#/definitions/hash" },
+    "shape": { "$ref": "#/definitions/shapeRef" },
+    "source": { "$ref": "#/definitions/source" },
+    "navigator": { "$ref": "#/definitions/navigator" },
+    "screen": { "$ref": "#/definitions/screen" },
+    "window": { "$ref": "#/definitions/window" },
+    "timezone": { "$ref": "#/definitions/timezone" },
+    "webgl": { "$ref": "#/definitions/webgl" },
+    "evidence": { "$ref": "#/definitions/evidenceMap" }
+  },
+  "definitions": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "shapeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "hash"],
+      "properties": { "id": { "type": "string", "minLength": 1 }, "hash": { "$ref": "#/definitions/hash" } }
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "hash"],
+          "properties": {
+            "kind": { "enum": ["capture", "fp-env", "manual"] },
+            "hash": { "$ref": "#/definitions/hash" },
+            "file": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "hash", "rule"],
+          "properties": {
+            "kind": { "const": "derived" },
+            "hash": { "$ref": "#/definitions/hash" },
+            "rule": { "type": "string", "minLength": 1 },
+            "base": { "$ref": "#/definitions/shapeRef" }
+          }
+        }
+      ]
+    },
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brand", "version"],
+      "properties": { "brand": { "type": "string" }, "version": { "type": "string" } }
+    },
+    "uaData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brands", "mobile", "platform", "architecture", "bitness", "fullVersionList", "model", "platformVersion", "uaFullVersion", "wow64"],
+      "properties": {
+        "brands": { "type": "array", "items": { "$ref": "#/definitions/brand" } },
+        "mobile": { "type": "boolean" },
+        "platform": { "type": "string" },
+        "architecture": { "type": "string" },
+        "bitness": { "type": "string" },
+        "fullVersionList": { "type": "array", "items": { "$ref": "#/definitions/brand" } },
+        "model": { "type": "string" },
+        "platformVersion": { "type": "string" },
+        "uaFullVersion": { "type": "string" },
+        "wow64": { "type": "boolean" }
+      }
+    },
+    "navigator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["userAgent", "appVersion", "platform", "vendor", "language", "languages", "hardwareConcurrency", "deviceMemory", "maxTouchPoints", "cookieEnabled", "userAgentData"],
+      "properties": {
+        "userAgent": { "type": "string", "minLength": 1 },
+        "appVersion": { "type": "string", "minLength": 1 },
+        "platform": { "type": "string", "minLength": 1 },
+        "vendor": { "type": "string" },
+        "language": { "type": "string", "minLength": 1 },
+        "languages": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "hardwareConcurrency": { "type": "integer", "minimum": 1 },
+        "deviceMemory": { "type": "number", "exclusiveMinimum": 0 },
+        "maxTouchPoints": { "type": "integer", "minimum": 0 },
+        "cookieEnabled": { "type": "boolean" },
+        "userAgentData": { "$ref": "#/definitions/uaData" }
+      }
+    },
+    "orientation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "angle"],
+      "properties": { "type": { "type": "string", "minLength": 1 }, "angle": { "type": "number" } }
+    },
+    "screen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "availWidth", "availHeight", "availLeft", "availTop", "colorDepth", "pixelDepth", "orientation"],
+      "properties": {
+        "width": { "type": "number", "minimum": 0 },
+        "height": { "type": "number", "minimum": 0 },
+        "availWidth": { "type": "number", "minimum": 0 },
+        "availHeight": { "type": "number", "minimum": 0 },
+        "availLeft": { "type": "number" },
+        "availTop": { "type": "number" },
+        "colorDepth": { "type": "number", "minimum": 0 },
+        "pixelDepth": { "type": "number", "minimum": 0 },
+        "orientation": { "$ref": "#/definitions/orientation" }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["innerWidth", "innerHeight", "outerWidth", "outerHeight", "devicePixelRatio"],
+      "properties": {
+        "innerWidth": { "type": "number", "minimum": 0 },
+        "innerHeight": { "type": "number", "minimum": 0 },
+        "outerWidth": { "type": "number", "minimum": 0 },
+        "outerHeight": { "type": "number", "minimum": 0 },
+        "devicePixelRatio": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "timezone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeZone", "offset"],
+      "properties": { "timeZone": { "type": "string", "minLength": 1 }, "offset": { "type": "number" } }
+    },
+    "glValue": {
+      "oneOf": [
+        { "type": "null" }, { "type": "boolean" }, { "type": "number" }, { "type": "string" },
+        { "type": "array", "items": { "oneOf": [{ "type": "null" }, { "type": "boolean" }, { "type": "number" }, { "type": "string" }] } }
+      ]
+    },
+    "precision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rangeMin", "rangeMax", "precision"],
+      "properties": { "rangeMin": { "type": "number" }, "rangeMax": { "type": "number" }, "precision": { "type": "number" } }
+    },
+    "webgl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameters", "extensions", "unmaskedVendor", "unmaskedRenderer"],
+      "properties": {
+        "parameters": { "type": "object", "additionalProperties": { "$ref": "#/definitions/glValue" } },
+        "extensions": { "type": "array", "items": { "type": "string" } },
+        "unmaskedVendor": { "type": "string" },
+        "unmaskedRenderer": { "type": "string" },
+        "shaderPrecision": { "type": "object", "additionalProperties": { "$ref": "#/definitions/precision" } }
+      }
+    },
+    "support": { "enum": ["captured", "derived", "emulated", "shape-only", "unsupported"] },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["support", "fields", "source"],
+      "properties": {
+        "support": { "$ref": "#/definitions/support" },
+        "fields": { "type": "object", "additionalProperties": { "$ref": "#/definitions/support" } },
+        "source": { "$ref": "#/definitions/source" }
+      }
+    },
+    "evidenceMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["navigator", "screen", "window", "timezone", "webgl", "canvas", "audio", "fonts"],
+      "properties": {
+        "navigator": { "$ref": "#/definitions/evidence" }, "screen": { "$ref": "#/definitions/evidence" },
+        "window": { "$ref": "#/definitions/evidence" }, "timezone": { "$ref": "#/definitions/evidence" },
+        "webgl": { "$ref": "#/definitions/evidence" }, "canvas": { "$ref": "#/definitions/evidence" },
+        "audio": { "$ref": "#/definitions/evidence" }, "fonts": { "$ref": "#/definitions/evidence" }
+      }
+    }
+  }
+}

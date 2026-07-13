@@ -1,0 +1,343 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/plan.json",
+  "title": "Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "profile", "shape", "boot", "task", "engine", "catalog", "features", "operations", "binds", "support"],
+  "properties": {
+    "schema": { "const": 2 },
+    "id": { "$ref": "#/definitions/hash" },
+    "profile": { "$ref": "#/definitions/ref" },
+    "shape": { "$ref": "#/definitions/shape" },
+    "page": { "$ref": "#/definitions/ref" },
+    "boot": { "$ref": "#/definitions/boot" },
+    "task": { "enum": ["run", "capture", "diagnose", "probe"] },
+    "engine": { "$ref": "#/definitions/engine" },
+    "catalog": { "$ref": "#/definitions/ref" },
+    "features": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/definitions/featureId" }
+    },
+    "operations": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/operation" }
+    },
+    "binds": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/bind" }
+    },
+    "support": { "$ref": "#/definitions/supportMap" }
+  },
+  "definitions": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "featureId": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*$" },
+    "ownerId": {
+      "anyOf": [
+        { "const": "_shape" },
+        { "$ref": "#/definitions/featureId" }
+      ]
+    },
+    "support": { "enum": ["captured", "derived", "emulated", "shape-only", "unsupported"] },
+    "supportMap": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9.-]*$" },
+      "additionalProperties": { "$ref": "#/definitions/support" }
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "hash"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "hash": { "$ref": "#/definitions/hash" }
+      }
+    },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "hash", "level"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "hash": { "$ref": "#/definitions/hash" },
+        "level": { "enum": ["captured", "derived"] }
+      }
+    },
+    "boot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "html", "cookies"],
+      "properties": {
+        "url": { "type": "string", "minLength": 1 },
+        "html": { "type": "string" },
+        "cookies": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "hash"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "hash": { "type": "string", "minLength": 1 }
+      }
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^window(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*$"
+    },
+    "sourcePath": {
+      "type": "string",
+      "pattern": "^window(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)+$"
+    },
+    "target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path"],
+          "properties": { "path": { "$ref": "#/definitions/path" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["node"],
+          "properties": { "node": { "type": "string", "minLength": 1 } }
+        }
+      ]
+    },
+    "symbol": {
+      "type": "string",
+      "anyOf": [
+        { "pattern": "^for:" },
+        {
+          "enum": ["asyncIterator", "hasInstance", "isConcatSpreadable", "iterator", "match", "matchAll", "replace", "search", "species", "split", "toPrimitive", "toStringTag", "unscopables"]
+        }
+      ]
+    },
+    "key": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["symbol"],
+          "properties": { "symbol": { "$ref": "#/definitions/symbol" } }
+        }
+      ]
+    },
+    "storedValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["json"],
+          "properties": {
+            "json": { "$ref": "https://mimic.local/schema/v2/data.json#/definitions/value" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ref"],
+          "properties": { "ref": { "$ref": "#/definitions/target" } }
+        }
+      ]
+    },
+    "desc": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value", "writable", "enumerable", "configurable"],
+          "properties": {
+            "kind": { "const": "data" },
+            "value": { "$ref": "#/definitions/storedValue" },
+            "writable": { "type": "boolean" },
+            "enumerable": { "type": "boolean" },
+            "configurable": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "enumerable", "configurable"],
+          "properties": {
+            "kind": { "const": "accessor" },
+            "get": { "$ref": "#/definitions/target" },
+            "set": { "$ref": "#/definitions/target" },
+            "enumerable": { "type": "boolean" },
+            "configurable": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "fnShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "length", "native", "constructable", "hasPrototype", "keys"],
+      "properties": {
+        "name": { "type": "string" },
+        "length": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "native": { "type": "boolean" },
+        "constructable": { "type": "boolean" },
+        "hasPrototype": { "type": "boolean" },
+        "keys": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "allocObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id", "kind", "feature"],
+      "properties": {
+        "op": { "const": "alloc" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["object", "event"] },
+        "feature": { "$ref": "#/definitions/ownerId" }
+      }
+    },
+    "allocFunction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id", "kind", "shape", "feature"],
+      "properties": {
+        "op": { "const": "alloc" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "function" },
+        "shape": { "$ref": "#/definitions/fnShape" },
+        "slot": { "type": "string", "minLength": 1 },
+        "prototype": { "$ref": "#/definitions/target" },
+        "feature": { "$ref": "#/definitions/ownerId" }
+      },
+      "if": {
+        "type": "object",
+        "required": ["prototype"],
+        "properties": { "prototype": {} }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "shape": {
+            "type": "object",
+            "properties": { "hasPrototype": { "const": true } }
+          }
+        }
+      }
+    },
+    "allocProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id", "kind", "source", "symbols", "feature"],
+      "properties": {
+        "op": { "const": "alloc" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "proxy" },
+        "source": { "$ref": "#/definitions/target" },
+        "symbols": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "feature": { "$ref": "#/definitions/ownerId" }
+      }
+    },
+    "proto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target", "value", "feature"],
+      "properties": {
+        "op": { "const": "proto" },
+        "target": { "$ref": "#/definitions/target" },
+        "value": {
+          "oneOf": [
+            { "$ref": "#/definitions/target" },
+            { "type": "null" }
+          ]
+        },
+        "feature": { "$ref": "#/definitions/ownerId" }
+      }
+    },
+    "prop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target", "key", "desc", "feature"],
+      "properties": {
+        "op": { "const": "prop" },
+        "target": { "$ref": "#/definitions/target" },
+        "key": { "$ref": "#/definitions/key" },
+        "desc": { "$ref": "#/definitions/desc" },
+        "feature": { "$ref": "#/definitions/ownerId" }
+      }
+    },
+    "drop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target", "key", "feature"],
+      "properties": {
+        "op": { "const": "drop" },
+        "target": { "$ref": "#/definitions/target" },
+        "key": { "$ref": "#/definitions/key" },
+        "feature": { "$ref": "#/definitions/ownerId" }
+      }
+    },
+    "fn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target", "shape", "feature"],
+      "dependencies": {
+        "key": ["part"],
+        "part": ["key"]
+      },
+      "properties": {
+        "op": { "const": "fn" },
+        "target": { "$ref": "#/definitions/target" },
+        "key": { "$ref": "#/definitions/key" },
+        "part": { "enum": ["value", "get", "set"] },
+        "shape": { "$ref": "#/definitions/fnShape" },
+        "feature": { "$ref": "#/definitions/ownerId" }
+      }
+    },
+    "order": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target", "keys", "feature"],
+      "properties": {
+        "op": { "const": "order" },
+        "target": { "$ref": "#/definitions/target" },
+        "keys": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/key" } },
+        "feature": { "$ref": "#/definitions/ownerId" }
+      }
+    },
+    "operation": {
+      "oneOf": [
+        { "$ref": "#/definitions/allocObject" },
+        { "$ref": "#/definitions/allocFunction" },
+        { "$ref": "#/definitions/allocProxy" },
+        { "$ref": "#/definitions/proto" },
+        { "$ref": "#/definitions/prop" },
+        { "$ref": "#/definitions/drop" },
+        { "$ref": "#/definitions/fn" },
+        { "$ref": "#/definitions/order" }
+      ]
+    },
+    "bind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "driver", "feature"],
+      "properties": {
+        "slot": { "type": "string", "minLength": 1 },
+        "driver": { "type": "string", "minLength": 1 },
+        "config": { "$ref": "https://mimic.local/schema/v2/data.json#/definitions/value" },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/sourcePath" }
+        },
+        "feature": { "$ref": "#/definitions/featureId" }
+      }
+    }
+  }
+}

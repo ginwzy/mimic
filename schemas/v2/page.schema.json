@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/page.json",
+  "title": "Page",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "hash", "source"],
+  "properties": {
+    "schema": { "const": 2 },
+    "id": { "type": "string", "minLength": 1 },
+    "hash": { "$ref": "#/definitions/hash" },
+    "source": { "$ref": "#/definitions/source" },
+    "url": { "type": "string", "pattern": "^https?://" },
+    "html": { "type": "string" },
+    "cookies": { "type": "array", "items": { "type": "string" } },
+    "connection": { "$ref": "#/definitions/connection" },
+    "clock": { "$ref": "#/definitions/clock" }
+  },
+  "definitions": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "shapeRef": {
+      "type": "object", "additionalProperties": false, "required": ["id", "hash"],
+      "properties": { "id": { "type": "string" }, "hash": { "$ref": "#/definitions/hash" } }
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "hash"],
+          "properties": { "kind": { "enum": ["capture", "fp-env", "manual"] }, "hash": { "$ref": "#/definitions/hash" }, "file": { "type": "string", "minLength": 1 } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "hash", "rule"],
+          "properties": { "kind": { "const": "derived" }, "hash": { "$ref": "#/definitions/hash" }, "rule": { "type": "string", "minLength": 1 }, "base": { "$ref": "#/definitions/shapeRef" } }
+        }
+      ]
+    },
+    "connection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["effectiveType", "downlink", "rtt", "saveData"],
+      "properties": {
+        "effectiveType": { "type": "string", "minLength": 1 },
+        "downlink": { "type": "number", "minimum": 0 },
+        "rtt": { "type": "number", "minimum": 0 },
+        "saveData": { "type": "boolean" }
+      }
+    },
+    "clock": {
+      "type": "object", "additionalProperties": false, "required": ["now", "seed"],
+      "properties": { "now": { "type": "number" }, "seed": { "type": "integer", "minimum": 0 } }
+    }
+  }
+}

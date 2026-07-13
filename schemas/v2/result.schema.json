@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/result.json",
+  "title": "Result",
+  "oneOf": [
+    { "$ref": "#/definitions/success" },
+    { "$ref": "#/definitions/failure" }
+  ],
+  "definitions": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "support": { "enum": ["captured", "derived", "emulated", "shape-only", "unsupported"] },
+    "supportMap": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9.-]*$" },
+      "additionalProperties": { "$ref": "#/definitions/support" }
+    },
+    "success": {
+      "description": "A missing value property represents JavaScript undefined on the JSON wire.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "plan", "support"],
+      "properties": {
+        "ok": { "const": true },
+        "value": { "$ref": "https://mimic.local/schema/v2/data.json#/definitions/value" },
+        "report": { "$ref": "https://mimic.local/schema/v2/data.json" },
+        "plan": { "$ref": "#/definitions/hash" },
+        "support": { "$ref": "#/definitions/supportMap" }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "error"],
+      "properties": {
+        "ok": { "const": false },
+        "error": { "$ref": "#/definitions/error" },
+        "report": { "$ref": "https://mimic.local/schema/v2/data.json" },
+        "plan": { "$ref": "#/definitions/hash" },
+        "support": { "$ref": "#/definitions/supportMap" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "phase", "code", "message"],
+      "properties": {
+        "name": { "const": "MimicError" },
+        "phase": { "enum": ["parse", "compile", "install", "run", "encode"] },
+        "code": {
+          "enum": [
+            "BAD_JOB", "BAD_PROFILE", "BAD_PAGE", "BAD_SHAPE", "BAD_PLAN", "BAD_RESULT",
+            "FEATURE_CYCLE", "DUPLICATE_FEATURE", "NO_FEATURE", "WRITE_CONFLICT", "NO_DRIVER",
+            "LOW_SUPPORT", "ENGINE_BLOCKED", "INSTALL_FAILED", "RUN_FAILED", "ENCODE_FAILED",
+            "LEGACY_PATH", "LEGACY_PARENT", "LEGACY_CYCLE", "LEGACY_NAME", "LEGACY_TRAITS", "LEGACY_ENGINE"
+          ]
+        },
+        "message": { "type": "string" },
+        "details": { "$ref": "https://mimic.local/schema/v2/data.json#/definitions/value" },
+        "plan": { "$ref": "#/definitions/hash" }
+      }
+    }
+  }
+}

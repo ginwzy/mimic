@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "source": {
+    "commit": "83624a22425c9178ff714d5ca90b332edc70dcf6",
+    "jsdom": "29.1.1"
+  },
+  "runtime": {
+    "node": "v24.10.0",
+    "platform": "linux-x64",
+    "kernel": "5.15.0-139-generic",
+    "cpuModel": "13th Gen Intel(R) Core(TM) i5-13400",
+    "cpus": 16,
+    "totalMemory": 33325248512
+  },
+  "config": {
+    "iterations": 30,
+    "warmup": 5,
+    "rounds": 3,
+    "poolSize": 4,
+    "profiles": ["chrome-mac", "android-webview-v138"]
+  },
+  "profiles": {
+    "chrome-mac": {
+      "cycle": {
+        "createMs": { "median": 29.275490999999874, "p95": 48.60898199999974 },
+        "runMs": { "median": 0.03832299999976385, "p95": 0.11631599999964237 },
+        "disposeMs": { "median": 0.16465400000015507, "p95": 0.42305000000033033 },
+        "throughputPerSecond": 30.89976904616522
+      },
+      "pool": {
+        "coldStartMs": 554.633983,
+        "warmThroughputPerSecond": 89.620630315396
+      }
+    },
+    "android-webview-v138": {
+      "cycle": {
+        "createMs": { "median": 26.232287999999244, "p95": 49.59881199999927 },
+        "runMs": { "median": 0.03837299999941024, "p95": 0.1030350000000908 },
+        "disposeMs": { "median": 0.1415839999990567, "p95": 0.3278410000002623 },
+        "throughputPerSecond": 33.645267732083354
+      },
+      "pool": {
+        "coldStartMs": 620.1798999999992,
+        "warmThroughputPerSecond": 75.14139713620733
+      }
+    }
+  },
+  "memory": {
+    "rssStart": 157126656,
+    "rssEnd": 1886941184,
+    "rssMax": 1979772928,
+    "heapUsedStart": 71821104,
+    "heapUsedEnd": 495846272
+  }
+}

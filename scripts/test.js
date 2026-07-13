@@ -2,6 +2,8 @@
 import { spawnSync } from 'node:child_process';
 
 const tests = [
+  'scripts/v1-oracle.test.js',
+  'scripts/v1-bench.test.js',
   'harness/test.js',
   'harness/diff-gate.test.js',
   'harness/gen-keyorder.mjs',

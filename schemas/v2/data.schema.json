@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/data.json",
+  "title": "Data",
+  "type": "object",
+  "additionalProperties": { "$ref": "#/definitions/value" },
+  "definitions": {
+    "value": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/definitions/value" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/value" }
+        }
+      ]
+    }
+  }
+}

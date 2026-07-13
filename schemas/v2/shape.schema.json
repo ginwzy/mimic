@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/shape.json",
+  "title": "Shape",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "hash", "target", "level", "source", "features", "ops", "support"],
+  "properties": {
+    "schema": { "const": 2 },
+    "id": { "type": "string", "pattern": "^chromium/(chrome|webview)/[a-z]+/(desktop|mobile)/[1-9][0-9]*$" },
+    "hash": { "$ref": "#/definitions/hash" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "host", "platform", "form", "version"],
+      "properties": {
+        "engine": { "const": "chromium" },
+        "host": { "enum": ["chrome", "webview"] },
+        "platform": { "enum": ["android", "linux", "macos", "windows"] },
+        "form": { "enum": ["desktop", "mobile"] },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "level": { "enum": ["captured", "derived"] },
+    "source": { "$ref": "#/definitions/source" },
+    "features": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*$" }
+    },
+    "ops": {
+      "type": "array",
+      "items": { "$ref": "https://mimic.local/schema/v2/ir.json" }
+    },
+    "support": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/support" }
+    }
+  },
+  "definitions": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "support": { "enum": ["captured", "derived", "emulated", "shape-only", "unsupported"] },
+    "shapeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "hash"],
+      "properties": { "id": { "type": "string" }, "hash": { "$ref": "#/definitions/hash" } }
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "hash"],
+          "properties": {
+            "kind": { "enum": ["capture", "fp-env", "manual"] },
+            "hash": { "$ref": "#/definitions/hash" },
+            "file": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "hash", "rule"],
+          "properties": {
+            "kind": { "const": "derived" },
+            "hash": { "$ref": "#/definitions/hash" },
+            "rule": { "type": "string", "minLength": 1 },
+            "base": { "$ref": "#/definitions/shapeRef" }
+          }
+        }
+      ]
+    }
+  }
+}

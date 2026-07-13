@@ -9,7 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE_PATHS = [
   'base', 'capture', 'core', 'entry', 'harness', 'mask', 'patch', 'scripts', 'tools', 'trace', 'smoke.js',
 ];
-const JSON_PATHS = ['package.json', 'package-lock.json', 'profiles', 'harness/baselines'];
+const JSON_PATHS = ['package.json', 'package-lock.json', 'profiles', 'harness/baselines', 'harness/oracles', 'schemas'];
 
 function collect(relativePaths, extensions) {
   const files = [];

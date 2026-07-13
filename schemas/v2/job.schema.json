@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/job.json",
+  "title": "Job",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "code"],
+      "properties": {
+        "kind": { "enum": ["run", "capture", "diagnose"] },
+        "code": { "type": "string" },
+        "scriptUrl": { "type": "string", "pattern": "^https?://" },
+        "trace": { "type": "boolean" },
+        "timeout": { "type": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "probe" },
+        "timeout": { "type": "integer", "minimum": 1 }
+      }
+    }
+  ]
+}
