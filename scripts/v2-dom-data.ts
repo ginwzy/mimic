@@ -91,10 +91,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT = path.join(ROOT, 'src/v2/features/dom.data.ts');
 const MISSING_OUTPUT = path.join(ROOT, 'src/v2/features/dom.missing.data.ts');
 const BASELINES = [
-  { id: 'wv138', file: 'harness/baselines/android-webview-v138.json' },
-  { id: 'c143', file: 'harness/baselines/linux-chrome-v143.json' },
-  { id: 'c148', file: 'harness/baselines/macos-chrome-v148.json' },
-  { id: 'c149', file: 'harness/baselines/macos-chrome-v149.json' },
+  { id: 'wv138', file: 'resources/v2/baselines/android-webview-v138.json' },
+  { id: 'c143', file: 'resources/v2/baselines/linux-chrome-v143.json' },
+  { id: 'c148', file: 'resources/v2/baselines/macos-chrome-v148.json' },
+  { id: 'c149', file: 'resources/v2/baselines/macos-chrome-v149.json' },
 ] as const;
 type SurfaceId = typeof BASELINES[number]['id'];
 const OWNERS = [

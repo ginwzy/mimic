@@ -5,7 +5,7 @@ import { createNodeApplication } from '../../src/v2/node/app.js';
 import { createMimic } from '../../src/v2/sdk.js';
 
 const profilesRoot = path.resolve('profiles');
-const probePath = path.resolve('harness/probe.js');
+const probePath = path.resolve('resources/v2/probe.js');
 
 test('SDK and in-process Application preserve identical Job/Result semantics', async () => {
   const app = createNodeApplication({ profilesRoot, probePath });

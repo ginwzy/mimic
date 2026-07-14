@@ -5,7 +5,7 @@ import { parseResult } from '../../src/v2/index.js';
 import { QueueFullError, WorkerExecutor } from '../../src/v2/executor/pool.js';
 
 const profilesRoot = path.resolve('profiles');
-const probePath = path.resolve('harness/probe.js');
+const probePath = path.resolve('resources/v2/probe.js');
 const request = (code: string, timeout?: number) => ({
   profile: 'android-webview-v138',
   job: { kind: 'run' as const, code, ...(timeout === undefined ? {} : { timeout }) },

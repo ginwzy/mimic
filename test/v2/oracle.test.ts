@@ -27,7 +27,7 @@ const pairs: readonly Pair[] = [
 ];
 
 const profiles = new LegacyProfiles(path.resolve('profiles'));
-const probe = readFileSync(path.resolve('harness/probe.js'), 'utf8');
+const probe = readFileSync(path.resolve('resources/v2/probe.js'), 'utf8');
 
 function fixture(value: unknown): ProbeSnapshot {
   return value as ProbeSnapshot;
@@ -189,7 +189,7 @@ async function snapshot(id: string): Promise<ProbeSnapshot> {
 
 for (const pair of pairs) {
   test(`v2 stays within the P0 oracle budget for ${pair.profile} x ${pair.baseline}`, async () => {
-    const baseline = JSON.parse(readFileSync(path.resolve(`harness/baselines/${pair.baseline}.json`), 'utf8')) as ProbeSnapshot;
+    const baseline = JSON.parse(readFileSync(path.resolve(`resources/v2/baselines/${pair.baseline}.json`), 'utf8')) as ProbeSnapshot;
     const actual = summarize(diff(baseline, await snapshot(pair.profile))).counts;
     for (const bucket of ['TELL', 'EXTRA', 'MISSING'] as const) {
       assert.ok(

@@ -15,19 +15,19 @@ const IDENTITY = new Set(['canvas', 'webgl', 'audio', 'fonts']);
 const BASELINES: Record<string, { hash: Hash; file: string }> = {
   'chromium/chrome/linux/desktop/143': {
     hash: '8bb471bc084776b3988ef08d73d10ba0eeea6d19d3af061133b3a91c1f6e6d1d' as Hash,
-    file: 'harness/baselines/linux-chrome-v143.json',
+    file: 'resources/v2/baselines/linux-chrome-v143.json',
   },
   'chromium/chrome/macos/desktop/148': {
     hash: '1f747c9d2d4c0964f78e59014e7acef9c4b6fa506d5809857f741a624248f105' as Hash,
-    file: 'harness/baselines/macos-chrome-v148.json',
+    file: 'resources/v2/baselines/macos-chrome-v148.json',
   },
   'chromium/chrome/macos/desktop/149': {
     hash: '7d1c22a4af2c78df674f8268eead5fad0ee4c19855a486a45fb08aada415800d' as Hash,
-    file: 'harness/baselines/macos-chrome-v149.json',
+    file: 'resources/v2/baselines/macos-chrome-v149.json',
   },
   'chromium/webview/android/mobile/138': {
     hash: 'bcd3ffb7b184eb61ab23827c1a6de256def5b3f4eb33b4bbbb9b01b7cc01bea5' as Hash,
-    file: 'harness/baselines/android-webview-v138.json',
+    file: 'resources/v2/baselines/android-webview-v138.json',
   },
 };
 const SHAPES = new Map<string, Shape>();

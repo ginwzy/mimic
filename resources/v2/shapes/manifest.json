@@ -27,7 +27,7 @@
     },
     "chromium/chrome/linux/desktop/143": {
       "file": "chromium/chrome/linux/desktop/143.json",
-      "sha256": "abb8b7baac359964ed105b022e1d22c34c7cbdf95308364e60d411ceb7be6026"
+      "sha256": "4135787da3c98bf79b5128427d9a04e3fbb8fcb73ed17c1107e7ac293a71f122"
     },
     "chromium/chrome/macos/desktop/131": {
       "file": "chromium/chrome/macos/desktop/131.json",
@@ -35,11 +35,11 @@
     },
     "chromium/chrome/macos/desktop/148": {
       "file": "chromium/chrome/macos/desktop/148.json",
-      "sha256": "5e016b17bf5175f870fb9bea62c53b35e912eaf7c11a2dba2a59677a94d32aeb"
+      "sha256": "c667a4e80301f45ecd7160d950bfbdacf2dc9e2364d7e3bf82bc4d55ef7e97d8"
     },
     "chromium/chrome/macos/desktop/149": {
       "file": "chromium/chrome/macos/desktop/149.json",
-      "sha256": "04e9e940d6dfbd62420f2d647a36a1a2fd9dd9e64ca9dad143ce5941ca5bdeee"
+      "sha256": "903bca836d406f9696e66bef868a3677e911ceaffd267a75842d432a5cfb175c"
     },
     "chromium/webview/android/mobile/131": {
       "file": "chromium/webview/android/mobile/131.json",
@@ -47,7 +47,7 @@
     },
     "chromium/webview/android/mobile/138": {
       "file": "chromium/webview/android/mobile/138.json",
-      "sha256": "2fbee766aaf86916708cc9c07482b337ffe332a7b6cd2c3ae9202d1fea1b45af"
+      "sha256": "e529aca6edaac860cd46fb755ddc0a107ac82c3e1973426285df145fa7f5a1b7"
     }
   }
 }

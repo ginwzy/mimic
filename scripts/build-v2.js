@@ -35,8 +35,8 @@ const assets = path.join(output, 'assets');
 mkdirSync(assets, { recursive: true });
 cpSync(path.join(root, 'profiles'), path.join(assets, 'profiles'), { recursive: true });
 cpSync(path.join(root, 'resources/v2/shapes'), path.join(assets, 'shapes'), { recursive: true });
-cpSync(path.join(root, 'harness/baselines'), path.join(assets, 'baselines'), { recursive: true });
-copyFileSync(path.join(root, 'harness/probe.js'), path.join(assets, 'probe.js'));
+cpSync(path.join(root, 'resources/v2/baselines'), path.join(assets, 'baselines'), { recursive: true });
+copyFileSync(path.join(root, 'resources/v2/probe.js'), path.join(assets, 'probe.js'));
 
 if (mode === 'production' && existsSync(path.join(output, 'test'))) {
   console.error('production v2 build unexpectedly contains test output');

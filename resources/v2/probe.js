@@ -1,15 +1,15 @@
 /**
- * harness/probe.js —— 结构面探针(L1 diff harness 的"真相源")。
+ * resources/v2/probe.js —— 结构面探针与 diff 的真相源。
  *
  * 零依赖、自包含、可序列化:同一份代码两侧同源运行 ——
- *   (a) 真机 Chrome:经统一采集页(capture/page.html serve /probe.js)加载,window.__probe__() 回传基线;
- *   (b) mimic realm:被读成文本,realm.run(src + ';JSON.stringify(window.__probe__())') 执行。
+ *   (a) 真机 Chrome:经 collect 服务的 /probe.js 加载,window.__probe__() 回传基线;
+ *   (b) Runtime:被读成文本并在目标 Realm 中执行。
  *
  * 只采"结构/形态"(name/length/native toString/own-toString/描述符 flags/原型链/类型标签),
- * 不采"身份值"(UA/platform 串)—— 那是 profile 数据,由 profile.validate() 守自洽,不在结构 diff 范畴。
+ * 不采"身份值"(UA/platform 串)—— 那是 Profile 数据,由公共 codec 守自洽,不在结构 diff 范畴。
  *
- * 关键纪律(对照 mask 跨 realm 注释 + 契约核对):
- *  - 用"环境里的"Function.prototype.toString 判 native —— 这正是检测器的视角(mimic 里即 mask.nativeToString)。
+ * 关键纪律:
+ *  - 用"环境里的"Function.prototype.toString 判 native,保持检测器视角。
  *  - 快照只放 string/number/boolean/array,绝不放活引用 —— JSON.stringify 安全,跨回 Node 只过 primitive。
  *  - 每个 target 各自 try/catch,单点失败不毁整次快照。
  *
@@ -21,7 +21,7 @@
 
   var PROBE_VERSION = 1;
 
-  // 安全引用:在 mimic realm 里这就是 mask.nativeToString(检测器看到的同一个),正是我们要的视角。
+  // 安全引用:始终使用目标 Realm 中检测器看到的 Function.prototype.toString。
   var FToString = Function.prototype.toString;
   var OToString = Object.prototype.toString;
   var hasOwn = Object.prototype.hasOwnProperty;

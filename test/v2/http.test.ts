@@ -6,7 +6,7 @@ import test from 'node:test';
 import { startServer } from '../../src/v2/http/server.js';
 
 const profilesRoot = path.resolve('profiles');
-const probePath = path.resolve('harness/probe.js');
+const probePath = path.resolve('resources/v2/probe.js');
 
 interface Response {
   readonly status: number;

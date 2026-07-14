@@ -1,7 +1,7 @@
 # mimic v2 迁移与验收
 
-本文件是 v2 重写的阶段门。旧实现冻结为行为 Oracle;新实现放在 `src/v2`,达到全部切换门前不改变
-`entry/index.js` 的 v1 默认导出。
+状态:已完成。v2 在 0.2.0 通过全部切换门并成为默认运行时;0.3.0 删除兼容入口和旧运行实现。
+本文件保留阶段验收记录,冻结行为 Oracle 继续作为回归基线。
 
 ## P0 Oracle
 
@@ -77,7 +77,8 @@ Support 不足和不可执行操作全部 fail-fast。
 - 两轮持续运行无 Runtime/worker 泄漏。
 - SDK、CLI、HTTP 文档覆盖每个用户任务。
 
-达门后先切换默认入口并保留一个短期 `mimic/legacy` 适配层;下一发布周期删除旧 `patch/mask/pipeline`。
+全部门通过后先完成默认入口切换;0.3.0 已删除短期兼容层及旧 `entry/core/base/capture/mask/patch/trace`
+运行实现。旧格式 Profile 数据导入器仍作为 P2 数据边界保留,不属于已删除的运行时。
 
 ## 固定 Oracle
 

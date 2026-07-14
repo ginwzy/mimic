@@ -21,7 +21,7 @@ test('CLI collect starts the dedicated collector with explicit storage and close
   const code = await runCli([
     'collect',
     '--root', root,
-    '--probe', path.resolve('harness/probe.js'),
+    '--probe', path.resolve('resources/v2/probe.js'),
     '--host', '127.0.0.1',
     '--port', '0',
   ], io);

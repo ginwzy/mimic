@@ -7,7 +7,7 @@ import { runCli, type CliIo } from '../../src/v2/cli.js';
 import type { CliServerHandle } from '../../src/v2/cli.js';
 
 const profilesRoot = path.resolve('profiles');
-const probePath = path.resolve('harness/probe.js');
+const probePath = path.resolve('resources/v2/probe.js');
 
 function captureIo(cwd = process.cwd()): { readonly io: CliIo; readonly stdout: string[]; readonly stderr: string[] } {
   const stdout: string[] = [];

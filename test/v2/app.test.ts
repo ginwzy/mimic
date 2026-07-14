@@ -5,7 +5,7 @@ import { digest, JsdomEngine, parsePage, parseResult, seal } from '../../src/v2/
 import { createNodeApplication } from '../../src/v2/node/app.js';
 
 const profilesRoot = path.resolve('profiles');
-const probePath = path.resolve('harness/probe.js');
+const probePath = path.resolve('resources/v2/probe.js');
 
 function application() {
   const engine = new JsdomEngine();

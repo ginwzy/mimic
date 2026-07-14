@@ -130,7 +130,7 @@ TDD 只从以下已确认接缝观察行为:
 1. SDK `run/capture/plan/list`。
 2. CLI `run/capture/collect/probe/diff/plan/list/serve`。
 3. Legacy Profile 导入器。
-4. v1/v2 对同一 Probe 和代表脚本的差分结果。
+4. 冻结行为 Oracle、真机基线与当前 Runtime 对同一 Probe 和代表脚本的差分结果。
 5. HTTP/worker 的统一 Job/Result 协议。
 
 测试不得 mock Compiler 内部阶段或断言私有调用顺序。

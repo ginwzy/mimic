@@ -222,7 +222,7 @@ function flag(name: string): string | undefined {
 
 const direct = process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (direct) {
-  const baseline = path.resolve(flag('baseline') ?? 'harness/oracles/v1.json');
+  const baseline = path.resolve(flag('baseline') ?? 'resources/v2/oracles/v1.json');
   const profilesRoot = flag('profiles-root');
   const probePath = flag('probe-path');
   try {

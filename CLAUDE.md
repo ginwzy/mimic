@@ -85,15 +85,11 @@ complete until the git branch is pushed.
 源码注释里**禁止** issue-id(`yvq.N` 等)—— issue 瞬态而源码长寿。
 把"为什么"写成自解释散文。
 
-### 3. 例外:issue-id 作脚手架移除锚点
-
-仅限**代码字段**(非 prose),当前唯一用例:`harness/whitelist.js` 的 `issue:` 字段。
-
-### 4. 不写 inline TODO/FIXME;stub 只陈述现状
+### 3. 不写 inline TODO/FIXME;stub 只陈述现状
 
 **禁止** `TODO/FIXME/XXX/HACK`,未尽功能进 br issue。
 stub 只陈述事实("当前为 stub"),不写成待办祈使句。
 
-### 5. 保留的优秀实践
+### 4. 保留的优秀实践
 
 `[实测]` 标经验证根因;`对照 sdenv` 标移植来源;原语分工只在定义处讲全,调用点不重复。

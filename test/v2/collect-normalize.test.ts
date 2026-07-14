@@ -15,7 +15,7 @@ async function fixture() {
   delete profileRaw.meta.name;
   delete profileRaw.meta.traits;
 
-  const probeSnapshot = JSON.parse(await readFile(path.resolve('harness/baselines/android-webview-v138.json'), 'utf8')) as {
+  const probeSnapshot = JSON.parse(await readFile(path.resolve('resources/v2/baselines/android-webview-v138.json'), 'utf8')) as {
     meta: Record<string, unknown>;
     targets: Array<{ id: string; resolved: boolean }>;
   };
@@ -99,7 +99,7 @@ test('normalizeCollect lowers probe function, descriptor, prototype, and key-ord
       }),
       list: async () => [normalized.profile.id],
     },
-    probePath: path.resolve('harness/probe.js'),
+    probePath: path.resolve('resources/v2/probe.js'),
   });
   const result = await app.execute({
     profile: normalized.profile.id,

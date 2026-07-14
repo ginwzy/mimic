@@ -86,7 +86,7 @@ async function fixture(): Promise<{ profileRaw: Record<string, unknown>; probeSn
   delete profileRaw.meta.traits;
 
   const probeSnapshot = JSON.parse(
-    await readFile(path.resolve('harness/baselines/android-webview-v138.json'), 'utf8'),
+    await readFile(path.resolve('resources/v2/baselines/android-webview-v138.json'), 'utf8'),
   ) as { meta: Record<string, unknown> } & Record<string, unknown>;
   delete probeSnapshot.meta.profile;
   return { profileRaw, probeSnapshot };
@@ -94,7 +94,7 @@ async function fixture(): Promise<{ profileRaw: Record<string, unknown>; probeSn
 
 test('collect server serves the compiled collectors and one legacy POST creates immutable v2 artifacts', async (t) => {
   const root = await temporaryRoot(t);
-  const probePath = path.resolve('harness/probe.js');
+  const probePath = path.resolve('resources/v2/probe.js');
   const handle = startCollectServer({ root, probePath, port: 0 });
   try {
     await once(handle.server, 'listening');
@@ -162,7 +162,7 @@ test('collect server strictly bounds JSON requests, routes, and repeated shutdow
   const root = await temporaryRoot(t);
   const handle = startCollectServer({
     root,
-    probePath: path.resolve('harness/probe.js'),
+    probePath: path.resolve('resources/v2/probe.js'),
     port: 0,
     maxBodyBytes: 64,
   });

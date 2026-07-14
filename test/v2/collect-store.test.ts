@@ -20,7 +20,7 @@ async function fixture(name: keyof typeof FIXTURES = 'android-webview-v138') {
   };
   delete profileRaw.meta.name;
   delete profileRaw.meta.traits;
-  const probeSnapshot = JSON.parse(await readFile(path.resolve(`harness/baselines/${FIXTURES[name]}.json`), 'utf8')) as {
+  const probeSnapshot = JSON.parse(await readFile(path.resolve(`resources/v2/baselines/${FIXTURES[name]}.json`), 'utf8')) as {
     meta: Record<string, unknown>;
   };
   delete probeSnapshot.meta.profile;

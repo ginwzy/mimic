@@ -5,7 +5,7 @@ import { createNodeApplication, JsdomEngine } from '../../src/v2/index.js';
 import { drivers } from '../../src/v2/features/index.js';
 
 const profilesRoot = path.resolve('profiles');
-const probePath = path.resolve('harness/probe.js');
+const probePath = path.resolve('resources/v2/probe.js');
 const cwd = process.cwd();
 
 const forbiddenStackFragments = [

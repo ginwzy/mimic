@@ -101,7 +101,7 @@ function config(options: LeakOptions): LeakConfig & { timeoutMs: number } {
     timeoutMs,
     profile,
     profilesRoot: path.resolve(options.profilesRoot ?? 'profiles'),
-    probePath: path.resolve(options.probePath ?? 'harness/probe.js'),
+    probePath: path.resolve(options.probePath ?? 'resources/v2/probe.js'),
   };
 }
 

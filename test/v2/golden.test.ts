@@ -10,7 +10,7 @@ import {
   type V1Oracle,
 } from '../../src/v2/quality/oracle.js';
 
-const oraclePath = path.resolve('harness/oracles/v1.json');
+const oraclePath = path.resolve('resources/v2/oracles/v1.json');
 
 async function expected(): Promise<V1Oracle> {
   return JSON.parse(await readFile(oraclePath, 'utf8')) as V1Oracle;
@@ -21,7 +21,7 @@ function application() {
   const app = createNodeApplication({
     engine,
     profilesRoot: path.resolve('profiles'),
-    probePath: path.resolve('harness/probe.js'),
+    probePath: path.resolve('resources/v2/probe.js'),
     capture: { deadlineMs: 1_000, pollMs: 5, maxPosts: 5 },
   });
   return { app, engine };

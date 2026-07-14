@@ -1,11 +1,30 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 const root = process.cwd();
+
+const RETIRED_SOURCE_PATHS = [
+  'entry',
+  'core',
+  'base',
+  'capture',
+  'mask',
+  'patch',
+  'trace',
+  'harness',
+  'reference/legacy',
+  'types/legacy.d.ts',
+  'tools/fp-env',
+  'smoke.js',
+  'scripts/check.js',
+  'scripts/test.js',
+  'scripts/v1-bench.js',
+  'scripts/v1-oracle.js',
+] as const;
 
 function command(
   commandName: string,
@@ -27,7 +46,17 @@ function command(
   });
 }
 
-test('npm tarball exposes v2 by default with explicit advanced, HTTP, and legacy entries', async (t) => {
+test('retired v1 source surface does not return to the repository', async () => {
+  for (const relativePath of RETIRED_SOURCE_PATHS) {
+    await assert.rejects(
+      access(path.join(root, relativePath)),
+      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
+      `repository still contains ${relativePath}`,
+    );
+  }
+});
+
+test('npm tarball exposes only the v2 public surfaces', async (t) => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'mimic-v2-package-'));
   t.after(() => rm(temp, { recursive: true, force: true }));
   const packed = await command('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', temp], root, {
@@ -49,11 +78,13 @@ test('npm tarball exposes v2 by default with explicit advanced, HTTP, and legacy
     'build/v2/assets/shapes/manifest.json',
     'build/v2/assets/baselines/macos-chrome-v148.json',
     'build/v2/assets/probe.js',
-    'entry/index.js',
-    'types/legacy.d.ts',
     'docs/v2-usage.md',
   ]) assert.ok(names.has(expected), `tarball missing ${expected}`);
   assert.equal([...names].some((name) => name.includes('/test/') || name.endsWith('.test.js')), false);
+  for (const prefix of ['entry/', 'core/', 'mask/', 'patch/', 'base/', 'trace/', 'profiles/']) {
+    assert.equal([...names].some((name) => name.startsWith(prefix)), false, `tarball contains ${prefix}`);
+  }
+  assert.equal(names.has('types/legacy.d.ts'), false);
 
   const unpacked = path.join(temp, 'unpacked');
   await mkdir(unpacked);
@@ -70,10 +101,6 @@ test('npm tarball exposes v2 by default with explicit advanced, HTTP, and legacy
     import { createMimic } from 'mimic';
     import * as advanced from 'mimic/advanced';
     import * as http from 'mimic/http';
-    import * as legacy from 'mimic/legacy';
-    const realm = await legacy.Realm.create({ profile: 'chrome-mac' });
-    const legacyResult = realm.run('1 + 1');
-    realm.dispose();
     const mimic = createMimic({ size: 1, timeoutMs: 5000 });
     try {
       const result = await mimic.run({ kind: 'run', code: 'navigator.userAgent' });
@@ -81,8 +108,6 @@ test('npm tarball exposes v2 by default with explicit advanced, HTTP, and legacy
         ok: result.ok,
         advanced: typeof advanced.JsdomEngine,
         http: typeof http.startServer,
-        legacy: typeof legacy.Realm,
-        legacyOk: legacyResult.ok && legacyResult.value === 2,
       }));
     } finally {
       await mimic.close();
@@ -92,8 +117,6 @@ test('npm tarball exposes v2 by default with explicit advanced, HTTP, and legacy
     ok: true,
     advanced: 'function',
     http: 'function',
-    legacy: 'function',
-    legacyOk: true,
   });
 
   const privateImport = await command(process.execPath, ['--input-type=module', '-e', `
@@ -106,6 +129,16 @@ test('npm tarball exposes v2 by default with explicit advanced, HTTP, and legacy
   `], consumer);
   assert.equal(privateImport.stdout.trim(), 'ERR_PACKAGE_PATH_NOT_EXPORTED');
 
+  const legacyImport = await command(process.execPath, ['--input-type=module', '-e', `
+    try {
+      await import('mimic/legacy');
+      console.log('unexpected');
+    } catch (error) {
+      console.log(error.code);
+    }
+  `], consumer);
+  assert.equal(legacyImport.stdout.trim(), 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+
   const bin = await command(path.join(consumer, 'node_modules/.bin/mimic'), ['list', 'profiles'], consumer);
   assert.ok((JSON.parse(bin.stdout) as string[]).includes('chrome-mac'));
 
@@ -113,12 +146,10 @@ test('npm tarball exposes v2 by default with explicit advanced, HTTP, and legacy
     import { createMimic, type RunJob } from 'mimic';
     import { JsdomEngine } from 'mimic/advanced';
     import { startServer } from 'mimic/http';
-    import { Realm } from 'mimic/legacy';
     const job: RunJob = { kind: 'run', code: '1 + 1' };
     void createMimic;
     void JsdomEngine;
     void startServer;
-    void Realm;
     void job;
   `);
   await writeFile(path.join(consumer, 'tsconfig.json'), JSON.stringify({
@@ -135,10 +166,25 @@ test('npm tarball exposes v2 by default with explicit advanced, HTTP, and legacy
   }));
   await command(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], consumer);
 
+  await writeFile(path.join(consumer, 'legacy.ts'), `
+    import { Realm } from 'mimic/legacy';
+    void Realm;
+  `);
+  await assert.rejects(
+    command(process.execPath, [
+      path.join(root, 'node_modules/typescript/bin/tsc'),
+      '--ignoreConfig', '--noEmit', '--strict', '--module', 'NodeNext', '--moduleResolution', 'NodeNext',
+      '--target', 'ES2022', '--types', 'node', 'legacy.ts',
+    ], consumer),
+    /TS2307/,
+  );
+
   const packedPackage = JSON.parse(await readFile(path.join(packageRoot, 'package.json'), 'utf8')) as {
     version?: string;
     bin?: Record<string, string>;
+    exports?: Record<string, unknown>;
   };
-  assert.equal(packedPackage.version, '0.2.0');
+  assert.equal(packedPackage.version, '0.3.0');
   assert.equal(packedPackage.bin?.mimic, 'build/v2/src/v2/cli.js');
+  assert.equal(Object.hasOwn(packedPackage.exports ?? {}, './legacy'), false);
 });
