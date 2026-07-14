@@ -102,6 +102,60 @@ test('nav leaves unknown connection capability absent for a real corpus profile'
   assert.equal(engine.active, 0);
 });
 
+test('nav exposes a Realm-correct StorageManager with promise APIs', async () => {
+  const { engine, runtime } = await open('android-webview-v138');
+  try {
+    const result = runtime.run(`(() => {
+      const storage = navigator.storage;
+      const estimate = storage.estimate();
+      const persisted = storage.persisted();
+      const persist = storage.persist();
+      const directory = storage.getDirectory();
+      return Promise.all([estimate, persisted, persist, directory]).then(([value, isPersisted, didPersist, root]) => JSON.stringify({
+        same: storage === navigator.storage,
+        shape: [
+          Object.prototype.toString.call(storage),
+          storage instanceof StorageManager,
+          Reflect.ownKeys(storage),
+          Object.getPrototypeOf(storage) === StorageManager.prototype,
+        ],
+        prototypeKeys: Reflect.ownKeys(StorageManager.prototype).map(String),
+        promise: [estimate instanceof Promise, persisted instanceof Promise, persist instanceof Promise, directory instanceof Promise],
+        value,
+        persisted: isPersisted,
+        persist: didPersist,
+        directory: root,
+        methods: ['estimate', 'getDirectory', 'persist', 'persisted'].map(name => [
+          storage[name].name,
+          storage[name].length,
+          storage[name].toString(),
+        ]),
+      }));
+    })()`);
+    assert.equal(result.ok, true, result.ok ? undefined : result.error);
+    const value = JSON.parse(String(await result.value));
+    assert.equal(value.same, true);
+    assert.deepEqual(value.shape, ['[object StorageManager]', true, [], true]);
+    assert.deepEqual(value.prototypeKeys, [
+      'persisted', 'persist', 'estimate', 'getDirectory', 'constructor', 'Symbol(Symbol.toStringTag)',
+    ]);
+    assert.deepEqual(value.promise, [true, true, true, true]);
+    assert.deepEqual(value.value, { quota: 10_737_418_240, usage: 0 });
+    assert.equal(value.persisted, false);
+    assert.equal(value.persist, false);
+    assert.equal(value.directory, null);
+    assert.deepEqual(value.methods, [
+      ['estimate', 0, 'function estimate() { [native code] }'],
+      ['getDirectory', 0, 'function getDirectory() { [native code] }'],
+      ['persist', 0, 'function persist() { [native code] }'],
+      ['persisted', 0, 'function persisted() { [native code] }'],
+    ]);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
 test('ua preserves captured edge cases and returns target-Realm Promise/data', async () => {
   const { imported, engine, runtime } = await open('android-webview-v138');
   try {

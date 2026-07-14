@@ -188,6 +188,22 @@ export interface Clock {
   seed: number;
 }
 
+export interface PerformanceResource {
+  name: string;
+  initiatorType: string;
+  startTime: number;
+  duration: number;
+  nextHopProtocol: string;
+  transferSize: number;
+  encodedBodySize: number;
+  decodedBodySize: number;
+  responseStatus: number;
+}
+
+export interface PagePerformance {
+  resources: PerformanceResource[];
+}
+
 export interface Page {
   schema: 2;
   id: string;
@@ -198,6 +214,7 @@ export interface Page {
   cookies?: string[];
   connection?: Connection;
   clock?: Clock;
+  performance?: PagePerformance;
 }
 
 interface ScriptJob {

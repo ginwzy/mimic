@@ -50,7 +50,7 @@ try {
 | `size` | 最多 4 个 worker | 按需启动的最大并行 worker 数 |
 | `timeoutMs` | `5000` | worker watchdog;设为 `null` 可关闭 |
 | `maxQueue` | `100` | 所有 worker 忙碌时允许等待的任务数 |
-| `page` | Profile 自带 Page | 按字段覆盖页面 URL、HTML、cookie、网络或时钟;省略字段继承 Profile Page |
+| `page` | Profile 自带 Page | 按字段覆盖 URL、HTML、cookie、网络、时钟或 Performance 资源;省略字段继承 Profile Page |
 | `shape` | Profile 引用的 Shape | 显式 Shape;不匹配时还须设置 `synthetic: true` |
 | `require` | 无 | 按能力声明最低 Support 等级 |
 | `capture` | 见下文 | 请求捕获的等待时间、轮询间隔和目标 POST 数 |
@@ -97,9 +97,23 @@ if (result.ok) {
 
 ```js
 const mimic = createMimic({
-  capture: { deadlineMs: 1_000, pollMs: 10, maxPosts: 1 },
+  capture: {
+    deadlineMs: 1_000,
+    pollMs: 10,
+    maxPosts: 1,
+    lifecycle: 'auto', // 'none' 时不由 mimic 主动派发页面生命周期事件
+  },
 });
 ```
+
+`lifecycle` 默认为 `auto`,兼容原有行为:脚本求值后由 mimic 主动派发尚未完成的
+`readystatechange`、`DOMContentLoaded`、`load`,并派发 `pageshow`。设为 `none` 后只等待环境自然产生的
+事件和异步任务,不会抑制 jsdom 自身的生命周期事件。
+
+Performance resource 不再由 Runtime 猜测。需要回放 `performance.getEntriesByType('resource')` 时,在完整
+Page 数据的 `performance.resources` 中提供 `name`、`initiatorType`、`startTime`、`duration`、
+`nextHopProtocol`、三个 body/transfer size 和 `responseStatus`;字段缺省时资源列表为空,Result 中
+`perf.resources` 的 Support 为 `unsupported`。
 
 ### plan
 
@@ -171,6 +185,7 @@ mimic list drivers
 | `--capture-deadline <ms>` | `1000` | capture 最长等待时间 |
 | `--capture-poll <ms>` | `10` | capture 轮询间隔 |
 | `--capture-max-posts <n>` | `1` | capture 等待的非空请求数 |
+| `--capture-lifecycle <auto\|none>` | `auto` | 是否由 mimic 主动派发页面生命周期事件 |
 
 ### diff
 

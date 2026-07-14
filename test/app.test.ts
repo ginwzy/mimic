@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { digest, JsdomEngine, parsePage, parseResult, seal } from '../src/index.js';
+import { digest, JsdomEngine, parsePage, parseResult, seal, type CaptureOptions } from '../src/index.js';
 import { createNodeApplication } from '../src/node/app.js';
 
 const profilesRoot = path.resolve('profiles');
 const probePath = path.resolve('resources/probe.js');
 
-function application() {
+function application(capture: CaptureOptions = { deadlineMs: 100, pollMs: 5, maxPosts: 1 }) {
   const engine = new JsdomEngine();
   const app = createNodeApplication({
     engine,
     profilesRoot,
     probePath,
-    capture: { deadlineMs: 100, pollMs: 5, maxPosts: 1 },
+    capture,
   });
   return { app, engine };
 }
@@ -52,6 +52,28 @@ test('Application capture drives lifecycle events and returns the network report
     body: 'event-body',
     posts: [{ via: 'beacon', tag: '[object String]', len: 10, body: 'event-body' }],
   });
+  assert.equal(engine.active, 0);
+});
+
+test('Application capture can leave lifecycle events under page control', async () => {
+  const { app, engine } = application({ deadlineMs: 20, pollMs: 5, maxPosts: 1, lifecycle: 'none' });
+  const result = await app.execute({
+    profile: 'android-webview-v138',
+    job: {
+      kind: 'capture',
+      code: `(() => {
+        const dispatch = window.dispatchEvent;
+        window.dispatchEvent = function(event) {
+          if (event.type === 'pageshow') navigator.sendBeacon('/collect', 'forced');
+          return dispatch.call(this, event);
+        };
+        return 'ready';
+      })()`,
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value, { syncCaptured: false, captured: null, posts: [] });
   assert.equal(engine.active, 0);
 });
 

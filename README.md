@@ -66,7 +66,7 @@ SDK、CLI、HTTP 路由、采集产物与全部参数见[《使用指南》](doc
 | **Capture** | 真机原始证据,按内容寻址且只追加 |
 | **Profile** | 一次采集内保持相关性的设备身份数据 |
 | **Shape** | 浏览器版本、平台与宿主的可观察结构 |
-| **Page** | URL、HTML、cookie、网络和时钟等页面上下文 |
+| **Page** | URL、HTML、cookie、网络、时钟和 Performance 资源等页面上下文 |
 | **Job** | `run`、`capture`、`probe` 或 `diagnose` 任务 |
 | **Plan** | 完整校验后生成的纯数据安装计划 |
 | **Engine / Runtime** | 底层适配器与完成原子安装的一次性执行环境 |

@@ -74,6 +74,33 @@ test('CLI run-like commands read scripts, emit JSON, and close their SDK workers
   }
 });
 
+test('CLI capture lifecycle flag disables mimic-driven page events', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mimic-cli-'));
+  try {
+    const captureFile = path.join(temp, 'capture.js');
+    await fs.writeFile(captureFile, `(() => {
+      const dispatch = window.dispatchEvent;
+      window.dispatchEvent = function(event) {
+        if (event.type === 'pageshow') navigator.sendBeacon('/collect', 'forced');
+        return dispatch.call(this, event);
+      };
+    })()`);
+    const capture = captureIo(temp);
+    assert.equal(await runCli([
+      'capture', captureFile, ...common(),
+      '--capture-lifecycle', 'none',
+      '--capture-deadline', '20',
+      '--capture-poll', '5',
+    ], capture.io), 0);
+    assert.deepEqual(
+      (output(capture.stdout) as { value?: unknown }).value,
+      { syncCaptured: false, captured: null, posts: [] },
+    );
+  } finally {
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});
+
 test('CLI probe, plan, and list share profile/profiles/probe configuration', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mimic-cli-'));
   try {

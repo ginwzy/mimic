@@ -45,7 +45,9 @@ export type {
 export { JsdomEngine } from './engines/jsdom.js';
 export type { Driver, DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult } from './engine/types.js';
 export { Application } from './app/index.js';
-export type { ApplicationOptions, CaptureOptions, ListKind, ProfileRecord, ProfilesPort, TaskRequest } from './app/index.js';
+export type {
+  ApplicationOptions, CaptureLifecycle, CaptureOptions, ListKind, ProfileRecord, ProfilesPort, TaskRequest,
+} from './app/index.js';
 export { createNodeApplication } from './node/app.js';
 export type { NodeApplicationOptions } from './node/app.js';
 export { QueueFullError, WorkerExecutor } from './executor/pool.js';
@@ -65,10 +67,12 @@ export type {
   Job,
   JsonValue,
   Page,
+  PagePerformance,
   Part,
   ParseIssue,
   Phase,
   Platform,
+  PerformanceResource,
   Plan,
   Profile,
   Result,

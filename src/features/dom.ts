@@ -21,6 +21,7 @@ const token = (owner: string, key: string, part: FnPart): string => `${owner}\u0
 
 const DEFERRED_WRITES = [
   token('window.Navigator.prototype', 'connection', 'get'),
+  token('window.Navigator.prototype', 'storage', 'get'),
   token('window.XMLHttpRequest.prototype', 'send', 'value'),
   token('window.Navigator.prototype', 'sendBeacon', 'value'),
 ] as const;
@@ -237,7 +238,7 @@ export function domShape(input: Shape): Shape {
 
 export const domFeature: Feature = {
   id: 'dom',
-  rev: '1',
+  rev: '2',
   requires: ['globals'],
   build: () => ({}),
 };

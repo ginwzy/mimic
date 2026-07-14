@@ -50,6 +50,7 @@ const knownFlags = new Set([
   'capture-deadline',
   'capture-poll',
   'capture-max-posts',
+  'capture-lifecycle',
   'script-url',
   'trace',
   'port',
@@ -116,6 +117,12 @@ function booleanFlag(flags: Arguments['flags'], name: string): boolean | undefin
   throw new TypeError(`--${name} must be true or false`);
 }
 
+function captureLifecycle(flags: Arguments['flags']): 'auto' | 'none' {
+  const value = stringFlag(flags, 'capture-lifecycle', 'auto');
+  if (value !== 'auto' && value !== 'none') throw new TypeError('--capture-lifecycle must be auto or none');
+  return value;
+}
+
 function absolute(cwd: string, value: string): string {
   return path.resolve(cwd, value);
 }
@@ -153,6 +160,7 @@ function sharedOptions(args: Arguments, io: CliIo) {
       deadlineMs: integerFlag(args.flags, 'capture-deadline', 1_000, 1),
       pollMs: integerFlag(args.flags, 'capture-poll', 10, 1),
       maxPosts: integerFlag(args.flags, 'capture-max-posts', 1, 1),
+      lifecycle: captureLifecycle(args.flags),
     },
   };
 }

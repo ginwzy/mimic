@@ -1,6 +1,6 @@
 import { parseShape } from '../core/parse.js';
 import { seal } from '../core/seal.js';
-import type { JsonValue, Shape } from '../core/types.js';
+import type { JsonValue, Page, PerformanceResource, Shape, Support } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature, Ref } from '../shape/types.js';
 import { accessor, ctor, fn, fnShape, refProp, tag } from './ops.js';
@@ -139,8 +139,11 @@ export function perfShape(input: Shape): Shape {
   }));
 }
 
-function resourceNames(url: string): string[] {
-  return [new URL('/app.js', url).href, new URL('/favicon.ico', url).href];
+function resourceSupport(page: Page | undefined): Support {
+  if (page?.performance === undefined) return 'unsupported';
+  if (page.source.kind === 'capture') return 'captured';
+  if (page.source.kind === 'derived' || page.source.kind === 'fp-env') return 'derived';
+  return 'emulated';
 }
 
 export const perfFeature: Feature = {
@@ -149,7 +152,8 @@ export const perfFeature: Feature = {
   build: ({ page, shape }) => {
     const url = page?.url ?? 'https://example.com/';
     const now = shape.features.includes('time') && page?.clock ? page.clock.now : null;
-    const base = { url, resources: resourceNames(url), now };
+    const resources = (page?.performance?.resources ?? []).map((resource) => ({ ...resource })) as JsonValue[];
+    const base = { url, resources, now };
     return {
       binds: [
         ...INTERFACES.map(([id]) => ({
@@ -173,7 +177,7 @@ export const perfFeature: Feature = {
       ],
       support: {
         'perf.clock': now === null ? 'derived' : 'emulated',
-        'perf.resources': 'emulated',
+        'perf.resources': resourceSupport(page),
         'perf.user-timing': 'emulated',
         'perf.legacy': 'emulated',
         'perf.observer': 'emulated',
@@ -185,7 +189,7 @@ export const perfFeature: Feature = {
 interface Config {
   op: string;
   url: string;
-  resources: string[];
+  resources: PerformanceResource[];
   now: number | null;
 }
 
@@ -212,11 +216,26 @@ interface State {
 function config(value: JsonValue | undefined): Config {
   if (value === null || Array.isArray(value) || typeof value !== 'object'
     || typeof value.op !== 'string' || typeof value.url !== 'string'
-    || !Array.isArray(value.resources) || value.resources.some((item) => typeof item !== 'string')
+    || !Array.isArray(value.resources)
     || (value.now !== null && (typeof value.now !== 'number' || !Number.isFinite(value.now)))) {
     throw new TypeError('perf Driver config invalid');
   }
-  return { op: value.op, url: value.url, resources: [...value.resources] as string[], now: value.now };
+  const resources = value.resources.map((resource) => {
+    const nonNegative = (field: unknown): field is number => typeof field === 'number'
+      && Number.isFinite(field) && field >= 0;
+    if (resource === null || Array.isArray(resource) || typeof resource !== 'object'
+      || typeof resource.name !== 'string' || resource.name.length === 0
+      || typeof resource.initiatorType !== 'string' || !nonNegative(resource.startTime)
+      || !nonNegative(resource.duration) || typeof resource.nextHopProtocol !== 'string'
+      || !nonNegative(resource.transferSize) || !nonNegative(resource.encodedBodySize)
+      || !nonNegative(resource.decodedBodySize) || typeof resource.responseStatus !== 'number'
+      || !Number.isInteger(resource.responseStatus)
+      || resource.responseStatus < 0 || resource.responseStatus > 999) {
+      throw new TypeError('perf resource config invalid');
+    }
+    return { ...resource } as unknown as PerformanceResource;
+  });
+  return { op: value.op, url: value.url, resources, now: value.now };
 }
 
 function realmObject(port: Port, value: Record<string, JsonValue>, proto: string): object {
@@ -292,17 +311,9 @@ function createState(port: Port, item: Config): State {
     type: 'navigate',
     redirectCount: 0,
   }, 'perf.navigation-entry.proto', order++);
-  const resources = item.resources.map((name, index) => entry(port, {
-    name,
+  const resources = item.resources.map((resource) => entry(port, {
+    ...resource,
     entryType: 'resource',
-    startTime: 0,
-    duration: 0,
-    initiatorType: index === 0 ? 'script' : 'img',
-    nextHopProtocol: 'h2',
-    transferSize: 0,
-    encodedBodySize: 0,
-    decodedBodySize: 0,
-    responseStatus: 200,
   }, 'perf.resource.proto', order++));
   const paints = [
     entry(port, {

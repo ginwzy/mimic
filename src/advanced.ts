@@ -1,5 +1,7 @@
 export { Application } from './app/index.js';
-export type { ApplicationOptions, CaptureOptions, ProfileRecord, ProfilesPort, TaskRequest } from './app/index.js';
+export type {
+  ApplicationOptions, CaptureLifecycle, CaptureOptions, ProfileRecord, ProfilesPort, TaskRequest,
+} from './app/index.js';
 export { Catalog } from './catalog/index.js';
 export { CatalogFiles } from './catalog/files.js';
 export { compile, explain } from './compile/index.js';

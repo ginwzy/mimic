@@ -14,7 +14,8 @@
     "html": { "type": "string" },
     "cookies": { "type": "array", "items": { "type": "string" } },
     "connection": { "$ref": "#/definitions/connection" },
-    "clock": { "$ref": "#/definitions/clock" }
+    "clock": { "$ref": "#/definitions/clock" },
+    "performance": { "$ref": "#/definitions/performance" }
   },
   "definitions": {
     "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
@@ -47,6 +48,34 @@
     "clock": {
       "type": "object", "additionalProperties": false, "required": ["now", "seed"],
       "properties": { "now": { "type": "number" }, "seed": { "type": "integer", "minimum": 0 } }
+    },
+    "performance": {
+      "type": "object", "additionalProperties": false, "required": ["resources"],
+      "properties": {
+        "resources": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/performanceResource" }
+        }
+      }
+    },
+    "performanceResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name", "initiatorType", "startTime", "duration", "nextHopProtocol",
+        "transferSize", "encodedBodySize", "decodedBodySize", "responseStatus"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "initiatorType": { "type": "string" },
+        "startTime": { "type": "number", "minimum": 0 },
+        "duration": { "type": "number", "minimum": 0 },
+        "nextHopProtocol": { "type": "string" },
+        "transferSize": { "type": "number", "minimum": 0 },
+        "encodedBodySize": { "type": "number", "minimum": 0 },
+        "decodedBodySize": { "type": "number", "minimum": 0 },
+        "responseStatus": { "type": "integer", "minimum": 0, "maximum": 999 }
+      }
     }
   }
 }

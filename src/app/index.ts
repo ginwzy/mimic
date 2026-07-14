@@ -38,7 +38,10 @@ export interface CaptureOptions {
   deadlineMs?: number;
   pollMs?: number;
   maxPosts?: number;
+  lifecycle?: CaptureLifecycle;
 }
+
+export type CaptureLifecycle = 'auto' | 'none';
 
 export interface TaskRequest {
   profile: string;
@@ -64,6 +67,7 @@ interface CaptureConfig {
   deadlineMs: number;
   pollMs: number;
   maxPosts: number;
+  lifecycle: CaptureLifecycle;
 }
 
 interface PlanCacheEntry {
@@ -108,10 +112,15 @@ function positive(value: number | undefined, fallback: number, name: string): nu
 }
 
 function captureConfig(input: CaptureOptions = {}): CaptureConfig {
+  const lifecycle = input.lifecycle ?? 'auto';
+  if (lifecycle !== 'auto' && lifecycle !== 'none') {
+    throw new TypeError('capture.lifecycle must be auto or none');
+  }
   return Object.freeze({
     deadlineMs: positive(input.deadlineMs, 1_000, 'capture.deadlineMs'),
     pollMs: positive(input.pollMs, 10, 'capture.pollMs'),
     maxPosts: positive(input.maxPosts, 1, 'capture.maxPosts'),
+    lifecycle,
   });
 }
 
@@ -144,6 +153,7 @@ function overlayPage(base: Page | undefined, input: Page | undefined): Page | un
   const cookies = override.cookies ?? inherited.cookies;
   const connection = override.connection ?? inherited.connection;
   const clock = override.clock ?? inherited.clock;
+  const performance = override.performance ?? inherited.performance;
   return parsePage(seal({
     schema: 2 as const,
     id: override.id,
@@ -153,6 +163,7 @@ function overlayPage(base: Page | undefined, input: Page | undefined): Page | un
     ...(cookies === undefined ? {} : { cookies }),
     ...(connection === undefined ? {} : { connection }),
     ...(clock === undefined ? {} : { clock }),
+    ...(performance === undefined ? {} : { performance }),
   }));
 }
 
@@ -429,8 +440,10 @@ export class Application {
       if (job.kind === 'capture') {
         const before = net(runtime.report());
         await delay(0);
-        const lifecycle = runtime.run(LIFECYCLE, job.timeout === undefined ? {} : { timeout: job.timeout });
-        if (!lifecycle.ok) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: lifecycle.error, plan: plan.id });
+        if (this.capture.lifecycle === 'auto') {
+          const lifecycle = runtime.run(LIFECYCLE, job.timeout === undefined ? {} : { timeout: job.timeout });
+          if (!lifecycle.ok) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: lifecycle.error, plan: plan.id });
+        }
         const started = Date.now();
         let current = net(runtime.report());
         while (Date.now() - started < this.capture.deadlineMs

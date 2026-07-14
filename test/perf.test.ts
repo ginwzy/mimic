@@ -10,6 +10,7 @@ import {
   parseShape,
   seal,
   type Page,
+  type PerformanceResource,
   type Profile,
   type Shape,
 } from '../src/index.js';
@@ -89,20 +90,28 @@ function profileFor(shape: Shape): Profile {
   }));
 }
 
-function pageFor(clock?: { now: number; seed: number }): Page {
+function pageFor(
+  clock?: { now: number; seed: number },
+  resources?: readonly PerformanceResource[],
+): Page {
   return parsePage(seal({
     schema: 2 as const,
     id: 'perf-page',
     source,
     url: 'https://example.test/app',
     ...(clock ? { clock } : {}),
+    ...(resources ? { performance: { resources } } : {}),
   }));
 }
 
-function open(options: { clock?: { now: number; seed: number }; time?: boolean } = {}) {
+function open(options: {
+  clock?: { now: number; seed: number };
+  resources?: readonly PerformanceResource[];
+  time?: boolean;
+} = {}) {
   const shape = perfShape(options.time ? timeShape(baseShape()) : baseShape());
   const profile = profileFor(shape);
-  const page = pageFor(options.clock);
+  const page = pageFor(options.clock, options.resources);
   const engine = new JsdomEngine();
   const features = options.time ? [timeFeature, perfFeature] : [perfFeature];
   const drivers = options.time ? { time: timeDriver, perf: perfDriver } : { perf: perfDriver };
@@ -120,7 +129,7 @@ function open(options: { clock?: { now: number; seed: number }; time?: boolean }
 test('perf exposes native Timeline methods and Realm-correct legacy values', () => {
   const { engine, plan, runtime } = open();
   try {
-    assert.equal(plan.support['perf.resources'], 'emulated');
+    assert.equal(plan.support['perf.resources'], 'unsupported');
     const result = runtime.run(`JSON.stringify((() => {
       const names = [
         'getEntries', 'getEntriesByType', 'getEntriesByName', 'mark', 'measure',
@@ -181,8 +190,20 @@ test('perf exposes native Timeline methods and Realm-correct legacy values', () 
 });
 
 test('perf keeps Timeline entries ordered, queryable and clearable within one Runtime', () => {
-  const { engine, runtime } = open();
+  const resource: PerformanceResource = {
+    name: 'https://cdn.example.test/app.js',
+    initiatorType: 'script',
+    startTime: 12.5,
+    duration: 5.25,
+    nextHopProtocol: 'h3',
+    transferSize: 1_234,
+    encodedBodySize: 1_000,
+    decodedBodySize: 2_000,
+    responseStatus: 200,
+  };
+  const { engine, plan, runtime } = open({ resources: [resource] });
   try {
+    assert.equal(plan.support['perf.resources'], 'emulated');
     const result = runtime.run(`JSON.stringify((() => {
       const resources = performance.getEntriesByType('resource');
       const navigation = performance.getEntriesByType('navigation');
@@ -194,7 +215,8 @@ test('perf keeps Timeline entries ordered, queryable and clearable within one Ru
       const before = {
         resourceRealm: [resources instanceof Array, Object.getPrototypeOf(resources) === Array.prototype],
         resource: [resources.length, resources.every(entry => entry instanceof PerformanceResourceTiming && entry instanceof PerformanceEntry),
-          resources.map(entry => [entry.entryType, entry.duration, entry.startTime])],
+          resources.map(entry => [entry.name, entry.entryType, entry.initiatorType, entry.startTime, entry.duration,
+            entry.nextHopProtocol, entry.transferSize, entry.encodedBodySize, entry.decodedBodySize, entry.responseStatus])],
         navigation: [navigation.length, navigation[0] instanceof PerformanceNavigationTiming,
           navigation[0] instanceof PerformanceResourceTiming, navigation[0].name],
         marks: [start instanceof PerformanceMark, end instanceof PerformanceMark, named.length, named[0] === start,
@@ -214,8 +236,12 @@ test('perf keeps Timeline entries ordered, queryable and clearable within one Ru
     assert.equal(result.ok, true);
     const value = JSON.parse(String(result.value));
     assert.deepEqual(value.before.resourceRealm, [true, true]);
-    assert.deepEqual(value.before.resource.slice(0, 2), [2, true]);
-    assert.deepEqual(value.before.resource[2], [['resource', 0, 0], ['resource', 0, 0]]);
+    assert.deepEqual(value.before.resource.slice(0, 2), [1, true]);
+    assert.deepEqual(value.before.resource[2], [[
+      resource.name, 'resource', resource.initiatorType, resource.startTime, resource.duration,
+      resource.nextHopProtocol, resource.transferSize, resource.encodedBodySize,
+      resource.decodedBodySize, resource.responseStatus,
+    ]]);
     assert.deepEqual(value.before.navigation, [1, true, true, 'https://example.test/app']);
     assert.deepEqual(value.before.marks, [true, true, 1, true, 'mark', 0]);
     assert.equal(value.before.measure[0], true);

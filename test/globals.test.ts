@@ -53,7 +53,7 @@ test('globals installs Chrome function shapes while preserving source behavior',
   try {
     assert.ok(plan.binds.some((bind) => bind.sources?.includes('window.atob')));
     const result = runtime.run(`(() => {
-      const names = ['alert', 'atob', 'getComputedStyle', 'moveBy', 'setTimeout', 'structuredClone'];
+      const names = ['alert', 'atob', 'getComputedStyle', 'matchMedia', 'moveBy', 'setTimeout', 'structuredClone'];
       const shape = names.map(name => {
         const value = window[name];
         return [
@@ -69,20 +69,60 @@ test('globals installs Chrome function shapes while preserving source behavior',
       let calls = 0;
       target.addEventListener('ready', () => calls++);
       target.dispatchEvent(new Event('ready'));
+      const legacyQuery = matchMedia('(min-width: 1px)');
+      let legacyCalls = 0;
+      let onchangeCalls = 0;
+      const legacyListener = () => legacyCalls++;
+      legacyQuery.addListener(legacyListener);
+      legacyQuery.dispatchEvent(new Event('change'));
+      legacyQuery.removeListener(legacyListener);
+      legacyQuery.dispatchEvent(new Event('change'));
+      legacyQuery.onchange = () => onchangeCalls++;
+      legacyQuery.dispatchEvent(new Event('change'));
+      legacyQuery.onchange = null;
+      legacyQuery.dispatchEvent(new Event('change'));
       return JSON.stringify({
         shape,
         decoded: atob('bWltaWM='),
         encoded: btoa('mimic'),
+        media: [
+          matchMedia('(min-width: 1px)'),
+          matchMedia('(max-width: 1px)'),
+          matchMedia('(orientation: landscape)'),
+          matchMedia('(prefers-color-scheme: light)'),
+        ].map(query => [
+          query.matches,
+          query.media,
+          query.onchange,
+          query instanceof MediaQueryList,
+          query instanceof EventTarget,
+          Object.prototype.toString.call(query),
+          Reflect.ownKeys(query),
+          Object.getPrototypeOf(query) === MediaQueryList.prototype,
+          typeof query.addListener,
+          typeof query.removeListener,
+        ]),
+        mediaPrototype: [
+          Reflect.ownKeys(MediaQueryList.prototype).map(String),
+          Object.getPrototypeOf(MediaQueryList.prototype) === EventTarget.prototype,
+          [MediaQueryList.name, MediaQueryList.length, Function.prototype.toString.call(MediaQueryList)],
+          ['addListener', 'removeListener'].map(name => [
+            MediaQueryList.prototype[name].name,
+            MediaQueryList.prototype[name].length,
+            Function.prototype.toString.call(MediaQueryList.prototype[name]),
+          ]),
+        ],
+        mediaEvents: [legacyCalls, onchangeCalls, legacyQuery.onchange],
         event: calls,
         eventFns: [addEventListener, dispatchEvent, removeEventListener].map(fn => [
           fn.name, fn.length, Function.prototype.toString.call(fn), Object.hasOwn(fn, 'prototype'),
         ]),
       });
     })()`);
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, true, result.ok ? undefined : result.error);
     const value = JSON.parse(String(result.value));
     assert.deepEqual(value.shape.map((item: unknown[]) => item.slice(0, 2)), [
-      ['alert', 0], ['atob', 1], ['getComputedStyle', 1], ['moveBy', 2], ['setTimeout', 1], ['structuredClone', 1],
+      ['alert', 0], ['atob', 1], ['getComputedStyle', 1], ['matchMedia', 1], ['moveBy', 2], ['setTimeout', 1], ['structuredClone', 1],
     ]);
     for (const item of value.shape) {
       assert.match(item[2], /^function \w+\(\) \{ \[native code\] \}$/);
@@ -92,6 +132,22 @@ test('globals installs Chrome function shapes while preserving source behavior',
     }
     assert.equal(value.decoded, 'mimic');
     assert.equal(value.encoded, 'bWltaWM=');
+    assert.deepEqual(value.media, [
+      [true, '(min-width: 1px)', null, true, true, '[object MediaQueryList]', [], true, 'function', 'function'],
+      [false, '(max-width: 1px)', null, true, true, '[object MediaQueryList]', [], true, 'function', 'function'],
+      [true, '(orientation: landscape)', null, true, true, '[object MediaQueryList]', [], true, 'function', 'function'],
+      [true, '(prefers-color-scheme: light)', null, true, true, '[object MediaQueryList]', [], true, 'function', 'function'],
+    ]);
+    assert.deepEqual(value.mediaPrototype, [
+      ['media', 'matches', 'onchange', 'addListener', 'removeListener', 'constructor', 'Symbol(Symbol.toStringTag)'],
+      true,
+      ['MediaQueryList', 0, 'function MediaQueryList() { [native code] }'],
+      [
+        ['addListener', 1, 'function addListener() { [native code] }'],
+        ['removeListener', 1, 'function removeListener() { [native code] }'],
+      ],
+    ]);
+    assert.deepEqual(value.mediaEvents, [1, 1, null]);
     assert.equal(value.event, 1);
     assert.deepEqual(value.eventFns, [
       ['addEventListener', 2, 'function addEventListener() { [native code] }', false],

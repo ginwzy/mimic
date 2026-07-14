@@ -359,9 +359,49 @@ test('parsePage accepts execution state separately from Profile', () => {
     cookies: ['a=1; Path=/'],
     connection: { effectiveType: '4g', downlink: 10, rtt: 0, saveData: false },
     clock: { now: 1735689600000, seed: 305419896 },
+    performance: {
+      resources: [{
+        name: 'https://example.com/app.js',
+        initiatorType: 'script',
+        startTime: 1,
+        duration: 2,
+        nextHopProtocol: 'h2',
+        transferSize: 123,
+        encodedBodySize: 100,
+        decodedBodySize: 200,
+        responseStatus: 200,
+      }],
+    },
   });
 
   assert.deepEqual(parsePage(page), page);
+});
+
+test('parsePage rejects incomplete or impossible Performance resource evidence', () => {
+  const badPage = (resource: object) => seal({
+    schema: 2 as const,
+    id: 'bad:performance',
+    source,
+    performance: { resources: [resource] },
+  });
+  assert.throws(
+    () => parsePage(badPage({ name: 'https://example.com/app.js' })),
+    (error: unknown) => error instanceof MimicError && error.code === 'BAD_PAGE',
+  );
+  assert.throws(
+    () => parsePage(badPage({
+      name: 'https://example.com/app.js',
+      initiatorType: 'script',
+      startTime: -1,
+      duration: 0,
+      nextHopProtocol: 'h2',
+      transferSize: 0,
+      encodedBodySize: 0,
+      decodedBodySize: 0,
+      responseStatus: 200,
+    })),
+    (error: unknown) => error instanceof MimicError && error.code === 'BAD_PAGE',
+  );
 });
 
 test('parsePage rejects non-http document URLs', () => {
