@@ -3,54 +3,53 @@
   "version": "0.3.0",
   "description": "基于 jsdom 的浏览器环境回放框架 —— Profile/Shape 驱动,面向 JS 逆向反检测",
   "type": "module",
-  "main": "./build/v2/src/v2/public.js",
-  "types": "./build/v2/src/v2/public.d.ts",
+  "main": "./dist/src/public.js",
+  "types": "./dist/src/public.d.ts",
   "exports": {
     ".": {
-      "types": "./build/v2/src/v2/public.d.ts",
-      "import": "./build/v2/src/v2/public.js",
-      "default": "./build/v2/src/v2/public.js"
+      "types": "./dist/src/public.d.ts",
+      "import": "./dist/src/public.js",
+      "default": "./dist/src/public.js"
     },
     "./advanced": {
-      "types": "./build/v2/src/v2/advanced.d.ts",
-      "import": "./build/v2/src/v2/advanced.js",
-      "default": "./build/v2/src/v2/advanced.js"
+      "types": "./dist/src/advanced.d.ts",
+      "import": "./dist/src/advanced.js",
+      "default": "./dist/src/advanced.js"
     },
     "./http": {
-      "types": "./build/v2/src/v2/http/public.d.ts",
-      "import": "./build/v2/src/v2/http/public.js",
-      "default": "./build/v2/src/v2/http/public.js"
+      "types": "./dist/src/http/public.d.ts",
+      "import": "./dist/src/http/public.js",
+      "default": "./dist/src/http/public.js"
     },
     "./package.json": "./package.json"
   },
   "bin": {
-    "mimic": "build/v2/src/v2/cli.js"
+    "mimic": "dist/src/cli.js"
   },
   "files": [
-    "build/v2/",
-    "docs/v2-usage.md",
+    "dist/",
+    "docs/usage.md",
     "README.md",
     "LICENSE",
     "!**/*.test.js"
   ],
   "scripts": {
-    "mimic": "node build/v2/src/v2/cli.js",
-    "diff": "node build/v2/src/v2/cli.js diff",
-    "build:v2": "node scripts/build-v2.js production",
-    "build:v2:test": "node scripts/build-v2.js test",
-    "generate:v2:shapes:compiled": "node scripts/generate-v2-shapes.js",
-    "generate:v2:shapes": "npm run build:v2 && npm run generate:v2:shapes:compiled",
-    "check:v2:shapes:compiled": "node scripts/generate-v2-shapes.js --check",
-    "check:v2:shapes": "npm run build:v2 && npm run check:v2:shapes:compiled",
-    "prepack": "npm run build:v2 && npm run check:v2:shapes:compiled && npm run check:data:compiled",
-    "typecheck:v2": "tsc -p tsconfig.v2.test.json --noEmit",
-    "test:v2": "npm run build:v2 && npm run build:v2:test && node --test build/v2-test/test/v2/*.test.js",
-    "test": "npm run test:v2",
+    "mimic": "node dist/src/cli.js",
+    "diff": "node dist/src/cli.js diff",
+    "build": "node scripts/build.js production",
+    "build:test": "node scripts/build.js test",
+    "generate:shapes:compiled": "node scripts/generate-shapes.js",
+    "generate:shapes": "npm run build && npm run generate:shapes:compiled",
+    "check:shapes:compiled": "node scripts/generate-shapes.js --check",
+    "check:shapes": "npm run build && npm run check:shapes:compiled",
+    "prepack": "npm run build && npm run check:shapes:compiled && npm run check:data:compiled",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "npm run build && npm run build:test && node --test build/test/test/*.test.js",
     "check:data:compiled": "node scripts/check-data.js",
-    "check:data": "npm run build:v2 && npm run check:data:compiled",
-    "check": "npm run typecheck:v2 && npm run check:v2:shapes && npm run check:data:compiled",
-    "bench:v2": "npm run build:v2 && node build/v2/src/v2/quality/bench.js",
-    "gate:v2:leak": "npm run build:v2 && node build/v2/src/v2/quality/leak.js"
+    "check:data": "npm run build && npm run check:data:compiled",
+    "check": "npm run typecheck && npm run check:shapes && npm run check:data:compiled",
+    "bench": "npm run build && node dist/src/quality/bench.js",
+    "gate:leak": "npm run build && node dist/src/quality/leak.js"
   },
   "keywords": [
     "jsdom",

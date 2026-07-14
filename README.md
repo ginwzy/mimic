@@ -57,7 +57,7 @@ mimic serve
 mimic collect
 ```
 
-SDK、CLI、HTTP 路由、采集产物与全部参数见[《v2 使用指南》](docs/v2-usage.md)。
+SDK、CLI、HTTP 路由、采集产物与全部参数见[《使用指南》](docs/usage.md)。
 
 ## 核心概念
 
@@ -97,22 +97,22 @@ mimic 的 worker watchdog 用于终止超时任务,**不是多租户安全沙箱
 
 ```bash
 npm test
-npm run typecheck:v2
+npm run typecheck
 npm run check
-npm run build:v2
-npm run bench:v2
-npm run gate:v2:leak
+npm run build
+npm run bench
+npm run gate:leak
 ```
 
 ## 目录
 
 ```text
-src/v2/       v2 领域、编译器、Engine、SDK、CLI、HTTP 与采集实现
+src/          领域、编译器、Engine、SDK、CLI、HTTP 与采集实现
 schemas/v2/   Profile/Shape/Page/Job/Plan/Result/Collect JSON Schema
-profiles/     设备身份源语料,由 v2 数据导入器规范化
-resources/v2/ Shape、结构探针、真机基线与冻结行为 Oracle
+profiles/     设备身份源语料,由数据导入器规范化
+resources/    Shape、结构探针、真机基线与冻结行为 Oracle
 scripts/      构建、数据校验与 Shape 生成工具
-test/v2/      单元、集成、安全、性能与发布包契约测试
+test/         单元、集成、安全、性能与发布包契约测试
 docs/spec/    架构与运行时契约
 ```
 
