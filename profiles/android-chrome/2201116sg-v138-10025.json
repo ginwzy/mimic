@@ -144,8 +144,8 @@
       "36347": 256,
       "36348": 31,
       "36349": 256,
-      "37445": "Qualcomm",
-      "37446": "Adreno (TM) 619"
+      "37445": "Google Inc. (Qualcomm)",
+      "37446": "ANGLE (Qualcomm, Adreno (TM) 619, OpenGL ES 3.2)"
     },
     "extensions": [
       "EXT_color_buffer_float",
@@ -163,6 +163,6 @@
       "WEBGL_multi_draw"
     ],
     "unmaskedVendor": "Google Inc. (Qualcomm)",
-    "unmaskedRenderer": "Adreno (TM) 619"
+    "unmaskedRenderer": "ANGLE (Qualcomm, Adreno (TM) 619, OpenGL ES 3.2)"
   }
 }
