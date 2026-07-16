@@ -327,10 +327,15 @@ export const domFeature: Feature = {
     binds: [
       {
         slot: 'dom.Worker.ctor', driver: 'dom', config: { op: 'worker' },
-        sources: ['window.EventTarget'],
+        sources: [
+          'window.EventTarget',
+          'window.Function',
+          'window.MessageEvent',
+          'window.setTimeout',
+        ],
       },
-      { slot: 'dom.Worker.postMessage', driver: 'dom', config: { op: 'void' } },
-      { slot: 'dom.Worker.terminate', driver: 'dom', config: { op: 'void' } },
+      { slot: 'dom.Worker.postMessage', driver: 'dom', config: { op: 'worker-post' } },
+      { slot: 'dom.Worker.terminate', driver: 'dom', config: { op: 'worker-terminate' } },
       { slot: 'dom.Worker.onmessage.get', driver: 'dom', config: { op: 'handler-get', name: 'onmessage' } },
       { slot: 'dom.Worker.onmessage.set', driver: 'dom', config: { op: 'handler-set', name: 'onmessage' } },
       { slot: 'dom.Worker.onerror.get', driver: 'dom', config: { op: 'handler-get', name: 'onerror' } },
@@ -355,7 +360,7 @@ export const domFeature: Feature = {
       { slot: 'dom.OffscreenCanvas.height.set', driver: 'dom', config: { op: 'offscreen-dim-set', name: 'height' } },
     ],
     support: {
-      'dom.worker': 'emulated',
+      'dom.worker': 'emulated', // blob:/data: scripts run same-process; no OS thread
       'dom.blob-url': 'emulated',
       'dom.offscreencanvas': 'emulated',
     },
@@ -376,15 +381,31 @@ function asObject(port: Port, value: unknown): object {
   return value;
 }
 
-/** Minimal Worker + blob: URLs + OffscreenCanvas; worker scripts are not executed. */
+type BlobEntry = {
+  blob: unknown;
+  text: string | null;
+  ready: Promise<string>;
+};
+
+type WorkerState = {
+  terminated: boolean;
+  main: object;
+  scope: object | null;
+  scriptUrl: string;
+};
+
+/** Same-process Worker: blob/data scripts run in a with(self) scope; postMessage is bridged. */
 export const domDriver: Driver = {
   open: (port) => {
     const handlers = new WeakMap<object, Map<string, unknown>>();
     const offscreens = new WeakMap<object, { canvas: object }>();
+    const workers = new WeakMap<object, WorkerState>();
     const eventTarget = port.source('window.EventTarget');
     const HTMLCanvasElement = port.source('window.HTMLCanvasElement');
     const FunctionCtor = port.source('window.Function');
-    const blobUrls = new Map<string, unknown>();
+    const MessageEventCtor = port.source('window.MessageEvent');
+    const setTimeoutFn = port.source('window.setTimeout');
+    const blobUrls = new Map<string, BlobEntry>();
     let blobSeq = 0;
     let canvasMaker: (() => object) | undefined;
 
@@ -412,13 +433,227 @@ export const domDriver: Driver = {
       return canvas;
     };
 
+    const realmEval = <T>(expression: string): T => {
+      if (typeof FunctionCtor !== 'function') {
+        throw port.error('TypeError', 'Function is unavailable');
+      }
+      const fn = Reflect.construct(FunctionCtor, [`return (${expression});`]) as () => T;
+      return Reflect.apply(fn, undefined, []) as T;
+    };
+
+    const cloneData = (value: unknown): unknown => {
+      if (value === undefined) return null;
+      try {
+        return JSON.parse(JSON.stringify(value)) as unknown;
+      } catch {
+        return null;
+      }
+    };
+
+    const deliverMessage = (target: object, data: unknown): void => {
+      const payload = cloneData(data);
+      let event: object;
+      if (typeof MessageEventCtor === 'function') {
+        try {
+          event = Reflect.construct(MessageEventCtor, ['message', { data: payload }]) as object;
+        } catch {
+          event = { type: 'message', data: payload } as object;
+        }
+      } else {
+        event = { type: 'message', data: payload } as object;
+      }
+      const mapped = handlers.get(target)?.get('onmessage');
+      const own = Reflect.get(target, 'onmessage');
+      for (const handler of [mapped, own]) {
+        if (typeof handler === 'function') {
+          try {
+            Reflect.apply(handler as Function, target, [event]);
+          } catch {
+            /* worker onmessage errors are isolated */
+          }
+        }
+      }
+      const dispatch = Reflect.get(target, 'dispatchEvent');
+      if (typeof dispatch === 'function') {
+        try {
+          Reflect.apply(dispatch, target, [event]);
+        } catch {
+          /* ignore listener errors */
+        }
+      }
+    };
+
+    const fireWorkerError = (main: object, error: unknown): void => {
+      const message = error instanceof Error ? error.message : String(error);
+      const own = handlers.get(main)?.get('onerror') ?? Reflect.get(main, 'onerror');
+      if (typeof own === 'function') {
+        try {
+          Reflect.apply(own as Function, main, [message]);
+        } catch {
+          /* ignore */
+        }
+      }
+      const ErrorEventCtor = realmEval<unknown>('typeof ErrorEvent === "function" ? ErrorEvent : null');
+      if (typeof ErrorEventCtor === 'function') {
+        try {
+          const ev = Reflect.construct(ErrorEventCtor as Function, ['error', { message }]);
+          const dispatch = Reflect.get(main, 'dispatchEvent');
+          if (typeof dispatch === 'function') Reflect.apply(dispatch, main, [ev]);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    const readBlobText = (blob: unknown): Promise<string> => {
+      if (blob !== null && typeof blob === 'object' && typeof Reflect.get(blob, 'text') === 'function') {
+        return Promise.resolve(Reflect.apply(Reflect.get(blob, 'text') as Function, blob, []) as Promise<string>);
+      }
+      return Promise.resolve(String(blob ?? ''));
+    };
+
+    const decodeDataUrl = (url: string): string => {
+      const match = /^data:([^,]*?),([\s\S]*)$/i.exec(url);
+      if (!match) {
+        throw port.error('TypeError', `Failed to construct 'Worker': invalid data URL`);
+      }
+      const meta = match[1] ?? '';
+      const body = match[2] ?? '';
+      if (/;base64/i.test(meta)) {
+        return Buffer.from(body, 'base64').toString('utf8');
+      }
+      try {
+        return decodeURIComponent(body);
+      } catch {
+        return body;
+      }
+    };
+
+    const resolveScript = async (url: string): Promise<string> => {
+      if (url.startsWith('blob:')) {
+        const entry = blobUrls.get(url);
+        if (!entry) {
+          throw port.error('TypeError', `Failed to load worker script: unknown blob URL`);
+        }
+        if (entry.text !== null) return entry.text;
+        const text = await entry.ready;
+        entry.text = text;
+        return text;
+      }
+      if (url.startsWith('data:')) return decodeDataUrl(url);
+      throw port.error(
+        'TypeError',
+        `Failed to construct 'Worker': only blob: and data: script URLs are supported (got ${url.slice(0, 64)})`,
+      );
+    };
+
+    const runInWorkerScope = (scope: object, code: string): void => {
+      if (typeof FunctionCtor !== 'function') {
+        throw port.error('TypeError', 'Function is unavailable');
+      }
+      // Non-strict with(self): bare postMessage/navigator/OffscreenCanvas resolve on the worker scope.
+      // (with is illegal under "use strict".)
+      const runner = Reflect.construct(FunctionCtor, [
+        'self',
+        `with (self) {\n${code}\n}\n`,
+      ]) as (self: object) => void;
+      Reflect.apply(runner, scope, [scope]);
+    };
+
+    const bootWorker = (state: WorkerState, code: string): void => {
+      if (state.terminated) return;
+      if (typeof eventTarget !== 'function') {
+        throw port.error('TypeError', 'EventTarget is unavailable');
+      }
+      const scope = Reflect.construct(eventTarget, []) as object;
+      state.scope = scope;
+      workers.set(scope, state);
+
+      const postFromWorker = (data: unknown): void => {
+        if (state.terminated) return;
+        deliverMessage(state.main, data);
+      };
+      const closeWorker = (): void => {
+        state.terminated = true;
+      };
+      const importScripts = (...urls: unknown[]): void => {
+        for (const item of urls) {
+          const href = String(item);
+          let source: string;
+          if (href.startsWith('blob:')) {
+            const entry = blobUrls.get(href);
+            if (!entry || entry.text === null) {
+              throw port.error('TypeError', `importScripts failed: blob not ready (${href.slice(0, 48)})`);
+            }
+            source = entry.text;
+          } else if (href.startsWith('data:')) {
+            source = decodeDataUrl(href);
+          } else {
+            throw port.error('TypeError', `importScripts only supports blob:/data: URLs`);
+          }
+          runInWorkerScope(scope, source);
+        }
+      };
+
+      // Mirror common DedicatedWorkerGlobalScope bindings from the page realm.
+      Reflect.set(scope, 'self', scope);
+      Reflect.set(scope, 'globalThis', scope);
+      Reflect.set(scope, 'postMessage', postFromWorker);
+      Reflect.set(scope, 'close', closeWorker);
+      Reflect.set(scope, 'importScripts', importScripts);
+      Reflect.set(scope, 'navigator', realmEval<unknown>('navigator'));
+      Reflect.set(scope, 'OffscreenCanvas', realmEval<unknown>('typeof OffscreenCanvas === "function" ? OffscreenCanvas : undefined'));
+      Reflect.set(scope, 'WebGLRenderingContext', realmEval<unknown>('typeof WebGLRenderingContext === "function" ? WebGLRenderingContext : undefined'));
+      Reflect.set(scope, 'WebGL2RenderingContext', realmEval<unknown>('typeof WebGL2RenderingContext === "function" ? WebGL2RenderingContext : undefined'));
+      Reflect.set(scope, 'Blob', realmEval<unknown>('typeof Blob === "function" ? Blob : undefined'));
+      Reflect.set(scope, 'URL', realmEval<unknown>('typeof URL === "function" ? URL : undefined'));
+      Reflect.set(scope, 'console', realmEval<unknown>('console'));
+      Reflect.set(scope, 'setTimeout', realmEval<unknown>('setTimeout'));
+      Reflect.set(scope, 'clearTimeout', realmEval<unknown>('clearTimeout'));
+      Reflect.set(scope, 'setInterval', realmEval<unknown>('setInterval'));
+      Reflect.set(scope, 'clearInterval', realmEval<unknown>('clearInterval'));
+      Reflect.set(scope, 'atob', realmEval<unknown>('typeof atob === "function" ? atob : undefined'));
+      Reflect.set(scope, 'btoa', realmEval<unknown>('typeof btoa === "function" ? btoa : undefined'));
+      Reflect.set(scope, 'location', {
+        href: state.scriptUrl,
+        toString() {
+          return state.scriptUrl;
+        },
+      });
+
+      try {
+        runInWorkerScope(scope, code);
+      } catch (error) {
+        fireWorkerError(state.main, error);
+      }
+    };
+
+    const schedule = (task: () => void): void => {
+      if (typeof setTimeoutFn === 'function') {
+        Reflect.apply(setTimeoutFn as Function, undefined, [task, 0]);
+        return;
+      }
+      queueMicrotask(task);
+    };
+
     return {
       call: (raw, self, args) => {
         const item = config(raw);
         if (item.op === 'void') return undefined;
         if (item.op === 'create-object-url') {
           const id = `blob:https://localhost/${(++blobSeq).toString(16)}-${port.now()}`;
-          blobUrls.set(id, args[0]);
+          const blob = args[0];
+          const entry: BlobEntry = {
+            blob,
+            text: null,
+            ready: readBlobText(blob).then((text) => {
+              entry.text = text;
+              return text;
+            }),
+          };
+          // Kick off text materialization immediately so importScripts/new Worker can often sync-read.
+          void entry.ready.catch(() => undefined);
+          blobUrls.set(id, entry);
           return id;
         }
         if (item.op === 'revoke-object-url') {
@@ -437,6 +672,21 @@ export const domDriver: Driver = {
             handlers.set(self, values);
           }
           values.set(String(item.name), args[0] ?? null);
+          return undefined;
+        }
+        if (item.op === 'worker-post') {
+          const main = asObject(port, self);
+          const state = workers.get(main);
+          if (!state) throw port.error('TypeError', 'Illegal invocation');
+          if (state.terminated || !state.scope) return undefined;
+          deliverMessage(state.scope, args[0]);
+          return undefined;
+        }
+        if (item.op === 'worker-terminate') {
+          const main = asObject(port, self);
+          const state = workers.get(main);
+          if (!state) throw port.error('TypeError', 'Illegal invocation');
+          state.terminated = true;
           return undefined;
         }
         if (item.op === 'offscreen-context') {
@@ -469,10 +719,30 @@ export const domDriver: Driver = {
           if (typeof eventTarget !== 'function') {
             throw port.error('TypeError', 'EventTarget is unavailable');
           }
-          const target = Reflect.construct(eventTarget, []) as object;
-          Object.setPrototypeOf(target, asObject(port, port.node('dom.Worker.proto')));
-          handlers.set(target, new Map());
-          return target;
+          if (args.length < 1) {
+            throw port.error('TypeError', "Failed to construct 'Worker': 1 argument required, but only 0 present.");
+          }
+          const scriptUrl = String(args[0]);
+          const main = Reflect.construct(eventTarget, []) as object;
+          Object.setPrototypeOf(main, asObject(port, port.node('dom.Worker.proto')));
+          handlers.set(main, new Map());
+          const state: WorkerState = {
+            terminated: false,
+            main,
+            scope: null,
+            scriptUrl,
+          };
+          workers.set(main, state);
+          schedule(() => {
+            void resolveScript(scriptUrl)
+              .then((code) => {
+                if (!state.terminated) bootWorker(state, code);
+              })
+              .catch((error: unknown) => {
+                if (!state.terminated) fireWorkerError(main, error);
+              });
+          });
+          return main;
         }
         if (item.op === 'offscreen') {
           const canvas = makeCanvas();
