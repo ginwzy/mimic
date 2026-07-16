@@ -330,6 +330,50 @@ async def initialize(client: Client, post_count: int | None = None) -> dict:
         "accept-language": ACCEPT_LANG,
     }
 
+    # Real HAR order: abck multi-POST first, BMS later (~+13s). Match that for soar.
+    abck_path = extract_abck_script(html)
+    if not abck_path:
+        raise RuntimeError("abck script not found")
+    abck_url = urljoin(SITE + "/", abck_path)
+    log(f"=== init: abck script {abck_path} ===")
+    st, abck_src = await http_get(client, abck_url, script_hdrs)
+    if st != 200:
+        raise RuntimeError(f"abck script HTTP {st}")
+    log(f"abck script source {len(abck_src)}B")
+
+    sensor_bodies = await capture_bodies(
+        SELECT_FLIGHT, html, abck_url, abck_src, cookie_header(client),
+        max_posts=8, events="abck", deadline_ms=5000, script_timeout_ms=12_000,
+    )
+    if not sensor_bodies:
+        raise RuntimeError("no _abck bodies captured")
+
+    # Default: post all captured abck bodies (was 1st+2nd+last).
+    to_post = select_abck_bodies(sensor_bodies, post_count=post_count if post_count is not None else len(sensor_bodies))
+    log(
+        f"abck will post {len(to_post)}/{len(sensor_bodies)} bodies "
+        f"(policy={'first-N='+str(post_count) if post_count is not None else 'all'})"
+    )
+    abck_post = {
+        **base,
+        "content-type": "text/plain;charset=UTF-8",
+        "accept": DOC_ACCEPT,
+        "origin": SITE,
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+        "referer": SELECT_FLIGHT,
+        "accept-language": ACCEPT_LANG,
+    }
+    post_url = abck_url.split("?", 1)[0]
+    for i, body in enumerate(to_post, 1):
+        await asyncio.sleep(0.15)
+        st, _ = await http_post(
+            client, post_url, abck_post, body, label=f"_abck POST {i}/{len(to_post)}"
+        )
+        if st >= 400:
+            raise RuntimeError(f"_abck POST HTTP {st}")
+
     bms_url = None
     bms_posted = False
     bms_path = extract_bms_script(html)
@@ -342,7 +386,7 @@ async def initialize(client: Client, post_count: int | None = None) -> dict:
         log(f"BMS script source {len(bms_src)}B")
         bodies = await capture_bodies(
             SELECT_FLIGHT, html, bms_url, bms_src, cookie_header(client),
-            max_posts=1, events="none", deadline_ms=1000, script_timeout_ms=8000,
+            max_posts=1, events="none", deadline_ms=4000, script_timeout_ms=12_000,
         )
         if bodies:
             bms_posted = True
@@ -370,48 +414,6 @@ async def initialize(client: Client, post_count: int | None = None) -> dict:
             log("BMS capture empty, skip post")
     else:
         log("no BMS script on page")
-
-    abck_path = extract_abck_script(html)
-    if not abck_path:
-        raise RuntimeError("abck script not found")
-    abck_url = urljoin(SITE + "/", abck_path)
-    log(f"=== init: abck script {abck_path} ===")
-    st, abck_src = await http_get(client, abck_url, script_hdrs)
-    if st != 200:
-        raise RuntimeError(f"abck script HTTP {st}")
-    log(f"abck script source {len(abck_src)}B")
-
-    sensor_bodies = await capture_bodies(
-        SELECT_FLIGHT, html, abck_url, abck_src, cookie_header(client),
-        max_posts=8, events="abck", deadline_ms=4000, script_timeout_ms=12000,
-    )
-    if not sensor_bodies:
-        raise RuntimeError("no _abck bodies captured")
-
-    to_post = select_abck_bodies(sensor_bodies, post_count=post_count)
-    log(
-        f"abck will post {len(to_post)}/{len(sensor_bodies)} bodies "
-        f"(policy={'first-N='+str(post_count) if post_count is not None else '1st+2nd+last'})"
-    )
-    abck_post = {
-        **base,
-        "content-type": "text/plain;charset=UTF-8",
-        "accept": DOC_ACCEPT,
-        "origin": SITE,
-        "sec-fetch-site": "same-origin",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-dest": "empty",
-        "referer": SELECT_FLIGHT,
-        "accept-language": ACCEPT_LANG,
-    }
-    post_url = abck_url.split("?", 1)[0]
-    for i, body in enumerate(to_post, 1):
-        await asyncio.sleep(0.1)
-        st, _ = await http_post(
-            client, post_url, abck_post, body, label=f"_abck POST {i}/{len(to_post)}"
-        )
-        if st >= 400:
-            raise RuntimeError(f"_abck POST HTTP {st}")
 
     cookies = cookie_header(client)
     cookie_names = [
@@ -505,8 +507,8 @@ async def search(client: Client, body: str = DEFAULT_BODY) -> dict:
     # Only _abck + bm_s on the wire; empty jar so client store cannot add others.
     cookie = filter_cookies(cookie_header(client, SEARCH_URL), SEARCH_COOKIE_NAMES)
     log_abck_tilde0(cookie, "search")
-    # Temporary: force bm_s for this search only (does not touch client jar).
-    cookie = filter_cookies(cookie + "; bm_s=YAAQSD0xF/xCFjyfAQAA1oRXagWyLEeb0CjQ+gpuEpEXN9CHk7P93ldPBSXbKCKn01aw2hGvt0/GdWXxp4v3I2bg1NHraX/CndBTrPLjXLHMud8X57pnWD4B5DHsDZ0im+FNQ418Pwd+NZsBdbNzs1TP3e0bnJ4MARPvC7b9Kc63DR7J07lmqG1Lvtfv2yEPOye1D4yg2XAkMb+e1bDjKSmSPSlH20/pcglbdwF0VreBcXsWN3PavAFTGgYnsZBlrJPkp5SU2KHMALcRikjU+EWdh1bjBgkmDTNdbF4RMjzkjBpgkk7dS/I5W3dd2Kp5CRJMZaQTYh5JJCyeEb/To5YiesafhpcCb52yc1OqmHSbg1nyAVEJUv65NUQEk8sbM8+Zn6fhgJkAXWDkXYlc4VL24QAkv+WkDq1NzAiuIRoohhgYHuka2GSqYSEL70XTSjx3D9Fal73jDb36yjBfYGJNTtQa2gc+ubMHvFmr9Mm+WEbx12S+H+arlh6eEmzS+0rrjSJeFxKV13X1LnGa0cLc7AwoGxw5h4Gdt0AfJKs/LSmgEIoKz7uQt6aAyuHIvYvAiG78vEJPuDTSRHspmogGvu/jgh0Dx5MMs1I5DFUFh1QgiW6r0GecqLkSVrU5ZcpusA5lCu37xTTN9LLQzUcZYymdUtJr+Lp4EpxEnbZJwHruWLYODuN1g1DCiY2nbV8+27wRNouzyiR5bfkV4FGemG4lzAXrLhMk9Qo0Z7PCIYeD59fQcstjnAerVoPsSOo8VOGpXi01g6eGjZBSc2GkdrvfioKVK6DWkuP2kn1qPzmIGQnbYGtSG+TaE9KKFcVGTdkmAnCGHVFBJ170h1PmR/7tVXPJ1hDr+/NxK942zU2dJlbPM8yBOoYXIm7MbPvs/lYjOQmx3IIwa9wTYEJcpM7pesq9zbVZgU4tADE/Ui7k/DP4GGdpC05w7BAPWka/lWKLEU20hThFiNL3eWHFtO8zCSwzGxB2USm9/ppc0y9oehc9sksQidoB3KgWbnoJc8Q1D6K63k50TiwQH3pQkxh8fls+kHXyxBc=;", SEARCH_COOKIE_NAMES)
+    # Do not force bm_s — use jar from live BMS POST only (local network verification).
+    # cookie = filter_cookies(cookie + "; bm_s=<captured>;", SEARCH_COOKIE_NAMES)
     cnames = [p.split("=", 1)[0] for p in cookie.split("; ") if "=" in p]
     log(f"search cookie names ({len(cnames)}): {cnames}")
     headers = {
@@ -542,18 +544,23 @@ async def search(client: Client, body: str = DEFAULT_BODY) -> dict:
 
 
 def make_client(proxy: Proxy | None = None) -> Client:
-    return Client(
-        emulation=EmulationOption(
+    """Local network by default (no proxy). Pass proxy=... only when explicitly needed."""
+    kwargs: dict[str, Any] = {
+        "emulation": EmulationOption(
             emulation=Emulation.Chrome145,
             emulation_os=EmulationOS.Android,
         ),
-        cookie_store=True,
-        timeout=timedelta(seconds=30),
-        redirect=Policy.limited(10),
-        proxies=[proxy if proxy is not None else get_lumi_proxy()],
-        # proxies=[Proxy.all(REQABLE_PROXY)],
-        verify=False,
-    )
+        "cookie_store": True,
+        "timeout": timedelta(seconds=30),
+        "redirect": Policy.limited(10),
+        "verify": False,
+    }
+    if proxy is not None:
+        kwargs["proxies"] = [proxy]
+    # Local verification: no proxies. Historical options:
+    # kwargs["proxies"] = [proxy if proxy is not None else get_lumi_proxy()]
+    # kwargs["proxies"] = [Proxy.all(REQABLE_PROXY)]
+    return Client(**kwargs)
 
 
 async def run_worker(

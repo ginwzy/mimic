@@ -24,6 +24,8 @@ const DEFERRED_WRITES = [
   token('window.Navigator.prototype', 'connection', 'get'),
   token('window.Navigator.prototype', 'storage', 'get'),
   token('window.Navigator.prototype', 'mediaDevices', 'get'),
+  token('window.Navigator.prototype', 'serviceWorker', 'get'),
+  token('window.Navigator.prototype', 'permissions', 'get'),
   token('window.XMLHttpRequest.prototype', 'send', 'value'),
   token('window.Navigator.prototype', 'sendBeacon', 'value'),
 ] as const;
@@ -110,28 +112,42 @@ function globalOps(shape: Shape): DraftOp[] {
       refProp({ node: 'nav.instance' }, 'mediaSession', 'dom.media', true),
     );
   }
-  // Worker is long-standing on Chrome/WebView; BMS GPU/sensor paths gate on typeof Worker.
-  // Previously only webview or chrome≥149 — android-chrome v138 profiles had no Worker → silent probe skip.
+  // Worker / OffscreenCanvas / RTC long-standing on Chrome/WebView.
+  // RTC was wrongly gated to chrome≥149 — real Android Chrome 138 has typeof RTCPeerConnection === 'function';
+  // BMS capability vectors (iV442/media + dual multi-id table) probe these surfaces.
   if (shape.target.host === 'chrome' || shape.target.host === 'webview') {
-    ops.push(...workerOps(), ...blobUrlOps(), ...offscreenCanvasOps());
-  }
-  if (shape.target.host === 'webview' || shape.target.version >= 149) {
-    const prefix = 'dom.RTCPeerConnection';
-    ops.push(
-      { op: 'alloc', id: `${prefix}.proto`, kind: 'object' },
-      {
-        op: 'alloc', id: `${prefix}.ctor`, kind: 'function',
-        shape: fnShape('RTCPeerConnection', 0, true, true), prototype: { node: `${prefix}.proto` },
-      },
-      { op: 'proto', target: { node: `${prefix}.proto` }, value: { path: 'window.EventTarget.prototype' } },
-      refProp({ path: 'window' }, 'RTCPeerConnection', `${prefix}.ctor`),
-      refProp({ node: `${prefix}.proto` }, 'constructor', `${prefix}.ctor`),
-      tag({ node: `${prefix}.proto` }, 'RTCPeerConnection'),
-      { op: 'alloc', id: `${prefix}.generate`, kind: 'function', shape: fnShape('generateCertificate', 1) },
-      refProp({ node: `${prefix}.ctor` }, 'generateCertificate', `${prefix}.generate`),
-    );
+    ops.push(...workerOps(), ...blobUrlOps(), ...offscreenCanvasOps(), ...rtcPeerConnectionOps());
+    ops.push(...mediaCanPlayOps());
   }
   return ops;
+}
+
+function rtcPeerConnectionOps(): DraftOp[] {
+  const prefix = 'dom.RTCPeerConnection';
+  return [
+    { op: 'alloc', id: `${prefix}.proto`, kind: 'object' },
+    {
+      op: 'alloc', id: `${prefix}.ctor`, kind: 'function',
+      shape: fnShape('RTCPeerConnection', 0, true, true), prototype: { node: `${prefix}.proto` },
+    },
+    { op: 'proto', target: { node: `${prefix}.proto` }, value: { path: 'window.EventTarget.prototype' } },
+    refProp({ path: 'window' }, 'RTCPeerConnection', `${prefix}.ctor`),
+    refProp({ node: `${prefix}.proto` }, 'constructor', `${prefix}.ctor`),
+    tag({ node: `${prefix}.proto` }, 'RTCPeerConnection'),
+    { op: 'alloc', id: `${prefix}.generate`, kind: 'function', shape: fnShape('generateCertificate', 1) },
+    refProp({ node: `${prefix}.ctor` }, 'generateCertificate', `${prefix}.generate`),
+  ];
+}
+
+/**
+ * jsdom canPlayType always returns "". Chrome Android reports "probably"/"maybe"
+ * for common codecs; BMS packs six probes into iV442 (real all 1s when supported).
+ */
+function mediaCanPlayOps(): DraftOp[] {
+  return [
+    fn('dom.media.canPlayType', 'dom.media.canPlayType', 'canPlayType', 1),
+    refProp({ path: 'window.HTMLMediaElement.prototype' }, 'canPlayType', 'dom.media.canPlayType', true),
+  ];
 }
 
 /** jsdom URL lacks createObjectURL; BMS often does new Worker(URL.createObjectURL(blob)). */
@@ -358,11 +374,14 @@ export const domFeature: Feature = {
       { slot: 'dom.OffscreenCanvas.width.set', driver: 'dom', config: { op: 'offscreen-dim-set', name: 'width' } },
       { slot: 'dom.OffscreenCanvas.height.get', driver: 'dom', config: { op: 'offscreen-dim-get', name: 'height' } },
       { slot: 'dom.OffscreenCanvas.height.set', driver: 'dom', config: { op: 'offscreen-dim-set', name: 'height' } },
+      { slot: 'dom.media.canPlayType', driver: 'dom', config: { op: 'can-play-type' } },
     ],
     support: {
       'dom.worker': 'emulated', // blob:/data: scripts run same-process; no OS thread
       'dom.blob-url': 'emulated',
       'dom.offscreencanvas': 'emulated',
+      'dom.rtc': 'emulated',
+      'dom.canplaytype': 'emulated',
     },
   }),
 };
@@ -379,6 +398,32 @@ function asObject(port: Port, value: unknown): object {
     throw port.error('TypeError', 'Illegal invocation');
   }
   return value;
+}
+
+/**
+ * Chrome Android–shaped canPlayType results (not exhaustive; covers BMS 6-probe set).
+ * Empty string = unsupported; "maybe" / "probably" = supported tiers.
+ */
+function canPlayTypeChrome(type: string): string {
+  const t = type.trim().toLowerCase();
+  if (!t) return '';
+  // audio
+  if (t === 'audio/mpeg' || t.startsWith('audio/mpeg;')) return 'probably';
+  if (t.includes('audio/mp4') && t.includes('mp4a.40.2')) return 'probably';
+  if (t.includes('audio/mp4')) return 'maybe';
+  if (t.includes('audio/ogg') && t.includes('vorbis')) return 'probably';
+  if (t.includes('audio/ogg') && t.includes('opus')) return 'probably';
+  if (t.includes('audio/webm') && (t.includes('vorbis') || t.includes('opus'))) return 'probably';
+  if (t.includes('audio/webm')) return 'maybe';
+  if (t.includes('audio/wav') || t.includes('audio/wave') || t.includes('audio/x-wav')) return 'probably';
+  if (t.includes('audio/aac') || t.includes('audio/x-m4a')) return 'probably';
+  // video
+  if (t.includes('video/mp4') && (t.includes('avc1') || t.includes('mp4v'))) return 'probably';
+  if (t.includes('video/mp4')) return 'maybe';
+  if (t.includes('video/webm') && (t.includes('vp8') || t.includes('vp9') || t.includes('av01'))) return 'probably';
+  if (t.includes('video/webm')) return 'maybe';
+  if (t.includes('video/ogg')) return 'maybe';
+  return '';
 }
 
 type BlobEntry = {
@@ -741,6 +786,9 @@ export const domDriver: Driver = {
           const { canvas } = offscreenOf(self);
           Reflect.set(canvas, String(item.name), Number(args[0]) || 0);
           return undefined;
+        }
+        if (item.op === 'can-play-type') {
+          return canPlayTypeChrome(String(args[0] ?? ''));
         }
         throw new TypeError(`dom Driver op invalid:${String(item.op)}`);
       },

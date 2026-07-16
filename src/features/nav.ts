@@ -118,6 +118,94 @@ function mediaDevicesOperations(): DraftOp[] {
   ];
 }
 
+/**
+ * ServiceWorkerContainer + Permissions + CacheStorage stubs.
+ * Chrome always exposes these on secure contexts; missing → capability false / dual-table skip.
+ */
+function serviceWorkerOperations(): DraftOp[] {
+  const sw = { node: 'nav.serviceWorker.proto' } as const;
+  return [
+    { op: 'alloc', id: 'nav.serviceWorker.proto', kind: 'object' },
+    { op: 'alloc', id: 'nav.serviceWorker.instance', kind: 'event' },
+    ctor('nav.serviceWorker.ctor', 'nav.serviceWorker.ctor', 'ServiceWorkerContainer', sw),
+    fn('nav.serviceWorker.get', 'nav.serviceWorker', 'get serviceWorker'),
+    fn('nav.serviceWorker.register', 'nav.serviceWorker.register', 'register', 1),
+    fn('nav.serviceWorker.getRegistration', 'nav.serviceWorker.getRegistration', 'getRegistration', 0),
+    fn('nav.serviceWorker.getRegistrations', 'nav.serviceWorker.getRegistrations', 'getRegistrations', 0),
+    fn('nav.serviceWorker.ready.get', 'nav.serviceWorker.ready', 'get ready'),
+    fn('nav.serviceWorker.controller.get', 'nav.serviceWorker.controller', 'get controller'),
+    { op: 'proto', target: sw, value: { path: 'window.EventTarget.prototype' } },
+    { op: 'proto', target: { node: 'nav.serviceWorker.instance' }, value: sw },
+    refProp({ path: 'window' }, 'ServiceWorkerContainer', 'nav.serviceWorker.ctor'),
+    refProp(sw, 'constructor', 'nav.serviceWorker.ctor'),
+    tag(sw, 'ServiceWorkerContainer'),
+    accessor({ path: 'window.Navigator.prototype' }, 'serviceWorker', 'nav.serviceWorker.get'),
+    refProp(sw, 'register', 'nav.serviceWorker.register', true),
+    refProp(sw, 'getRegistration', 'nav.serviceWorker.getRegistration', true),
+    refProp(sw, 'getRegistrations', 'nav.serviceWorker.getRegistrations', true),
+    accessor(sw, 'ready', 'nav.serviceWorker.ready.get'),
+    accessor(sw, 'controller', 'nav.serviceWorker.controller.get'),
+    {
+      op: 'order', target: sw,
+      keys: [
+        'controller', 'ready', 'register', 'getRegistration', 'getRegistrations',
+        'constructor', { symbol: 'toStringTag' },
+      ],
+    },
+  ];
+}
+
+function permissionsOperations(): DraftOp[] {
+  const perm = { node: 'nav.permissions.proto' } as const;
+  return [
+    { op: 'alloc', id: 'nav.permissions.proto', kind: 'object' },
+    { op: 'alloc', id: 'nav.permissions.instance', kind: 'object' },
+    ctor('nav.permissions.ctor', 'nav.permissions.ctor', 'Permissions', perm),
+    fn('nav.permissions.get', 'nav.permissions', 'get permissions'),
+    fn('nav.permissions.query', 'nav.permissions.query', 'query', 1),
+    { op: 'proto', target: perm, value: { path: 'window.Object.prototype' } },
+    { op: 'proto', target: { node: 'nav.permissions.instance' }, value: perm },
+    refProp({ path: 'window' }, 'Permissions', 'nav.permissions.ctor'),
+    refProp(perm, 'constructor', 'nav.permissions.ctor'),
+    tag(perm, 'Permissions'),
+    accessor({ path: 'window.Navigator.prototype' }, 'permissions', 'nav.permissions.get'),
+    refProp(perm, 'query', 'nav.permissions.query', true),
+    {
+      op: 'order', target: perm,
+      keys: ['query', 'constructor', { symbol: 'toStringTag' }],
+    },
+  ];
+}
+
+function cachesOperations(): DraftOp[] {
+  const caches = { node: 'nav.caches.proto' } as const;
+  return [
+    { op: 'alloc', id: 'nav.caches.proto', kind: 'object' },
+    { op: 'alloc', id: 'nav.caches.instance', kind: 'object' },
+    ctor('nav.caches.ctor', 'nav.caches.ctor', 'CacheStorage', caches),
+    fn('nav.caches.open', 'nav.caches.open', 'open', 1),
+    fn('nav.caches.has', 'nav.caches.has', 'has', 1),
+    fn('nav.caches.keys', 'nav.caches.keys', 'keys', 0),
+    fn('nav.caches.match', 'nav.caches.match', 'match', 1),
+    fn('nav.caches.delete', 'nav.caches.delete', 'delete', 1),
+    { op: 'proto', target: caches, value: { path: 'window.Object.prototype' } },
+    { op: 'proto', target: { node: 'nav.caches.instance' }, value: caches },
+    refProp({ path: 'window' }, 'CacheStorage', 'nav.caches.ctor'),
+    refProp({ path: 'window' }, 'caches', 'nav.caches.instance', true),
+    refProp(caches, 'constructor', 'nav.caches.ctor'),
+    tag(caches, 'CacheStorage'),
+    refProp(caches, 'open', 'nav.caches.open', true),
+    refProp(caches, 'has', 'nav.caches.has', true),
+    refProp(caches, 'keys', 'nav.caches.keys', true),
+    refProp(caches, 'match', 'nav.caches.match', true),
+    refProp(caches, 'delete', 'nav.caches.delete', true),
+    {
+      op: 'order', target: caches,
+      keys: ['match', 'has', 'open', 'delete', 'keys', 'constructor', { symbol: 'toStringTag' }],
+    },
+  ];
+}
+
 export function navShape(input: Shape): Shape {
   const shape = chromeTouchShape(input);
   if (shape.features.includes('nav')) return shape;
@@ -145,6 +233,9 @@ export const navFeature: Feature = {
       operations: [
         ...storageOperations(),
         ...mediaDevicesOperations(),
+        ...serviceWorkerOperations(),
+        ...permissionsOperations(),
+        ...cachesOperations(),
         ...(connection ? connectionOperations() : []),
       ],
       binds: [
@@ -181,6 +272,26 @@ export const navFeature: Feature = {
         },
         { slot: 'nav.mediaDevices.ondevicechange.get', driver: 'nav', config: { op: 'handler-get', name: 'ondevicechange' } },
         { slot: 'nav.mediaDevices.ondevicechange.set', driver: 'nav', config: { op: 'handler-set', name: 'ondevicechange' } },
+        { slot: 'nav.serviceWorker.ctor', driver: 'nav', config: { op: 'illegal' } },
+        { slot: 'nav.serviceWorker', driver: 'nav', config: { op: 'node', id: 'nav.serviceWorker.instance' } },
+        { slot: 'nav.serviceWorker.register', driver: 'nav', config: { op: 'resolve', value: null } },
+        { slot: 'nav.serviceWorker.getRegistration', driver: 'nav', config: { op: 'resolve', value: null } },
+        { slot: 'nav.serviceWorker.getRegistrations', driver: 'nav', config: { op: 'resolve', value: [] } },
+        { slot: 'nav.serviceWorker.ready', driver: 'nav', config: { op: 'resolve', value: null } },
+        { slot: 'nav.serviceWorker.controller', driver: 'nav', config: { op: 'value', value: null } },
+        { slot: 'nav.permissions.ctor', driver: 'nav', config: { op: 'illegal' } },
+        { slot: 'nav.permissions', driver: 'nav', config: { op: 'node', id: 'nav.permissions.instance' } },
+        {
+          slot: 'nav.permissions.query',
+          driver: 'nav',
+          config: { op: 'resolve', value: { state: 'prompt', onchange: null } },
+        },
+        { slot: 'nav.caches.ctor', driver: 'nav', config: { op: 'illegal' } },
+        { slot: 'nav.caches.open', driver: 'nav', config: { op: 'resolve', value: null } },
+        { slot: 'nav.caches.has', driver: 'nav', config: { op: 'resolve', value: false } },
+        { slot: 'nav.caches.keys', driver: 'nav', config: { op: 'resolve', value: [] } },
+        { slot: 'nav.caches.match', driver: 'nav', config: { op: 'resolve', value: null } },
+        { slot: 'nav.caches.delete', driver: 'nav', config: { op: 'resolve', value: false } },
         ...(connection ? [
           { slot: 'nav.connection.ctor', driver: 'nav', config: { op: 'illegal' } },
           { slot: 'nav.connection', driver: 'nav', config: { op: 'node', id: 'nav.connection.instance' } },
@@ -213,6 +324,9 @@ export const navFeature: Feature = {
         'storage.data': 'emulated',
         'mediadevices.data': 'emulated',
         'connection.data': connectionSupport,
+        'serviceworker.data': 'emulated',
+        'permissions.data': 'emulated',
+        'caches.data': 'emulated',
       },
     };
   },

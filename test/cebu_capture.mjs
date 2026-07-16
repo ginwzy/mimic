@@ -255,6 +255,8 @@ async function main() {
     html: pageHtml,
     cookies,
   });
+  // BMS dual-id table must come from runtime (script-specific Ey###/iV### maps);
+  // do not inject HAR-derived iV pairs into live scripts (wrong prefix/ids).
   const code = events === 'abck' ? wrapAbckScript(scriptSource) : scriptSource;
   const mimic = createMimic({
     profile,

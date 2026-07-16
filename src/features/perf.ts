@@ -110,15 +110,34 @@ function operations(): DraftOp[] {
   ops.push(
     fn('perf.timing.get', 'perf.timing', 'get timing'),
     fn('perf.navigation.get', 'perf.navigation', 'get navigation'),
+    // Chrome non-standard; BMS packs heap sizes into sensors (real iV724).
+    fn('perf.memory.get', 'perf.memory', 'get memory'),
     accessor(PERF, 'timing', 'perf.timing.get'),
     accessor(PERF, 'navigation', 'perf.navigation.get'),
+    accessor(PERF, 'memory', 'perf.memory.get'),
     {
       op: 'order', target: PERF,
       keys: [
         'constructor', 'timeOrigin', 'now', 'clearResourceTimings', 'setResourceTimingBufferSize',
         'getEntries', 'getEntriesByType', 'getEntriesByName', 'mark', 'clearMarks',
-        'measure', 'clearMeasures', 'toJSON', 'timing', 'navigation', { symbol: 'toStringTag' },
+        'measure', 'clearMeasures', 'toJSON', 'timing', 'navigation', 'memory', { symbol: 'toStringTag' },
       ],
+    },
+    // MemoryInfo surface (Chrome-only)
+    { op: 'alloc', id: 'perf.memory.proto', kind: 'object' },
+    { op: 'alloc', id: 'perf.memory.instance', kind: 'object' },
+    { op: 'proto', target: { node: 'perf.memory.proto' }, value: { path: 'window.Object.prototype' } },
+    { op: 'proto', target: { node: 'perf.memory.instance' }, value: { node: 'perf.memory.proto' } },
+    fn('perf.memory.jsHeapSizeLimit.get', 'perf.memory.jsHeapSizeLimit', 'get jsHeapSizeLimit'),
+    fn('perf.memory.totalJSHeapSize.get', 'perf.memory.totalJSHeapSize', 'get totalJSHeapSize'),
+    fn('perf.memory.usedJSHeapSize.get', 'perf.memory.usedJSHeapSize', 'get usedJSHeapSize'),
+    accessor({ node: 'perf.memory.proto' }, 'jsHeapSizeLimit', 'perf.memory.jsHeapSizeLimit.get'),
+    accessor({ node: 'perf.memory.proto' }, 'totalJSHeapSize', 'perf.memory.totalJSHeapSize.get'),
+    accessor({ node: 'perf.memory.proto' }, 'usedJSHeapSize', 'perf.memory.usedJSHeapSize.get'),
+    tag({ node: 'perf.memory.proto' }, 'MemoryInfo'),
+    {
+      op: 'order', target: { node: 'perf.memory.proto' },
+      keys: ['jsHeapSizeLimit', 'totalJSHeapSize', 'usedJSHeapSize', { symbol: 'toStringTag' }],
     },
   );
   return ops;
@@ -174,6 +193,11 @@ export const perfFeature: Feature = {
         { slot: 'perf.time-origin', driver: 'perf', config: { op: 'timeOrigin', ...base } },
         { slot: 'perf.timing', driver: 'perf', config: { op: 'timing', ...base } },
         { slot: 'perf.navigation', driver: 'perf', config: { op: 'navigation', ...base } },
+        { slot: 'perf.memory', driver: 'perf', config: { op: 'node', id: 'perf.memory.instance', ...base } },
+        // ~3.34GB limit / ~70MB total / ~50MB used — typical mid Android Chrome heap window
+        { slot: 'perf.memory.jsHeapSizeLimit', driver: 'perf', config: { op: 'value', value: 3_340_000_000, ...base } },
+        { slot: 'perf.memory.totalJSHeapSize', driver: 'perf', config: { op: 'value', value: 72_200_000, ...base } },
+        { slot: 'perf.memory.usedJSHeapSize', driver: 'perf', config: { op: 'value', value: 53_500_000, ...base } },
       ],
       support: {
         'perf.clock': now === null ? 'derived' : 'emulated',
@@ -181,6 +205,7 @@ export const perfFeature: Feature = {
         'perf.user-timing': 'emulated',
         'perf.legacy': 'emulated',
         'perf.observer': 'emulated',
+        'perf.memory': 'emulated',
       },
     };
   },
@@ -191,6 +216,8 @@ interface Config {
   url: string;
   resources: PerformanceResource[];
   now: number | null;
+  id?: string;
+  value?: JsonValue;
 }
 
 interface Entry {
@@ -235,7 +262,14 @@ function config(value: JsonValue | undefined): Config {
     }
     return { ...resource } as unknown as PerformanceResource;
   });
-  return { op: value.op, url: value.url, resources, now: value.now };
+  return {
+    op: value.op,
+    url: value.url,
+    resources,
+    now: value.now as number | null,
+    ...(typeof value.id === 'string' ? { id: value.id } : {}),
+    ...('value' in value ? { value: value.value as JsonValue } : {}),
+  };
 }
 
 function realmObject(port: Port, value: Record<string, JsonValue>, proto: string): object {
@@ -372,6 +406,12 @@ export const perfDriver: Driver = {
         }
         if (item.op === 'empty') return realmList(port, []);
         if (item.op === 'supported') return port.clone([...SUPPORTED]);
+        // Chrome performance.memory + MemoryInfo fields
+        if (item.op === 'node') return port.node(String(item.id));
+        if (item.op === 'value') {
+          const v = item.value;
+          return v !== null && typeof v === 'object' ? port.clone(v as JsonValue) : v;
+        }
         const value = current(item);
         if (item.op === 'now') return elapsed(value);
         if (item.op === 'timeOrigin') return value.origin;

@@ -3,7 +3,7 @@ import { seal } from '../core/seal.js';
 import type { JsonValue, Shape } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
-import { fn, fnShape, refProp, valueProp } from './ops.js';
+import { fn, fnShape, refProp, tag, valueProp } from './ops.js';
 import { screenShape } from './screen.js';
 
 const TOUCH = ['ontouchstart', 'ontouchend', 'ontouchmove', 'ontouchcancel'] as const;
@@ -58,6 +58,38 @@ function securityOps(): DraftOp[] {
   ];
 }
 
+/**
+ * Minimal Notification + speechSynthesis so typeof/in probes match Chrome Android.
+ * BMS capability vectors flip false when these are missing (not full Web Speech/Notification).
+ */
+function mediaSurfaceOps(): DraftOp[] {
+  const notifProto = { node: 'chrome.Notification.proto' } as const;
+  const speechProto = { node: 'chrome.speech.proto' } as const;
+  const speechInst = { node: 'chrome.speech.instance' } as const;
+  return [
+    { op: 'alloc', id: 'chrome.Notification.proto', kind: 'object' },
+    {
+      op: 'alloc', id: 'chrome.Notification.ctor', kind: 'function',
+      shape: fnShape('Notification', 1, true, true), prototype: notifProto,
+    },
+    { op: 'proto', target: notifProto, value: { path: 'window.EventTarget.prototype' } },
+    refProp({ path: 'window' }, 'Notification', 'chrome.Notification.ctor'),
+    refProp(notifProto, 'constructor', 'chrome.Notification.ctor'),
+    valueProp(notifProto, 'permission', 'default', true, true),
+    valueProp({ node: 'chrome.Notification.ctor' }, 'permission', 'default', true, true),
+    tag(notifProto, 'Notification'),
+
+    { op: 'alloc', id: 'chrome.speech.proto', kind: 'object' },
+    { op: 'alloc', id: 'chrome.speech.instance', kind: 'object' },
+    { op: 'proto', target: speechProto, value: { path: 'window.EventTarget.prototype' } },
+    { op: 'proto', target: speechInst, value: speechProto },
+    refProp({ path: 'window' }, 'speechSynthesis', 'chrome.speech.instance', true),
+    fn('chrome.speech.getVoices', 'chrome.speech.getVoices', 'getVoices', 0),
+    refProp(speechProto, 'getVoices', 'chrome.speech.getVoices', true),
+    tag(speechProto, 'SpeechSynthesis'),
+  ];
+}
+
 export function chromeTouchShape(input: Shape): Shape {
   const shape = screenShape(input);
   if (shape.features.includes('touch')) return shape;
@@ -71,12 +103,14 @@ export function chromeTouchShape(input: Shape): Shape {
       ...(chrome ? chromeOps() : [{ op: 'drop', target: { path: 'window' }, key: 'chrome' } as DraftOp]),
       ...touchOps(shape),
       ...securityOps(),
+      ...(chrome ? mediaSurfaceOps() : []),
     ],
     support: {
       ...shape.support,
       'chrome.shape': shape.level === 'captured' ? 'captured' : 'derived',
       'touch.shape': shape.level === 'captured' ? 'captured' : 'derived',
       'window.secure-context': 'emulated',
+      ...(chrome ? { 'chrome.media-surface': 'emulated' as const } : {}),
     },
   }));
 }
@@ -93,6 +127,7 @@ export const chromeFeature: Feature = {
       { slot: 'chrome.installed', driver: 'chrome', config: { op: 'value', value: false } },
       { slot: 'chrome.install-state', driver: 'chrome', config: { op: 'value', value: 'disabled' } },
       { slot: 'chrome.running-state', driver: 'chrome', config: { op: 'value', value: 'cannot_run' } },
+      { slot: 'chrome.speech.getVoices', driver: 'chrome', config: { op: 'value', value: [] } },
     ],
     support: { 'chrome.api': 'emulated' },
   }),
