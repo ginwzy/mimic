@@ -79,6 +79,43 @@ function connectionOperations(): DraftOp[] {
   ];
 }
 
+/** Default devices before permission — Chrome-like empty id/label placeholders. */
+const MEDIA_DEVICES = [
+  { deviceId: '', kind: 'audioinput', label: '', groupId: '' },
+  { deviceId: '', kind: 'videoinput', label: '', groupId: '' },
+  { deviceId: '', kind: 'audiooutput', label: '', groupId: '' },
+] as const;
+
+function mediaDevicesOperations(): DraftOp[] {
+  const media = { node: 'nav.mediaDevices.proto' } as const;
+  return [
+    { op: 'alloc', id: 'nav.mediaDevices.proto', kind: 'object' },
+    { op: 'alloc', id: 'nav.mediaDevices.instance', kind: 'event' },
+    ctor('nav.mediaDevices.ctor', 'nav.mediaDevices.ctor', 'MediaDevices', media),
+    fn('nav.mediaDevices.get', 'nav.mediaDevices', 'get mediaDevices'),
+    fn('nav.mediaDevices.enumerateDevices', 'nav.mediaDevices.enumerateDevices', 'enumerateDevices'),
+    fn('nav.mediaDevices.getSupportedConstraints', 'nav.mediaDevices.getSupportedConstraints', 'getSupportedConstraints'),
+    fn('nav.mediaDevices.ondevicechange.get', 'nav.mediaDevices.ondevicechange.get', 'get ondevicechange'),
+    fn('nav.mediaDevices.ondevicechange.set', 'nav.mediaDevices.ondevicechange.set', 'set ondevicechange', 1),
+    { op: 'proto', target: media, value: { path: 'window.EventTarget.prototype' } },
+    { op: 'proto', target: { node: 'nav.mediaDevices.instance' }, value: media },
+    refProp({ path: 'window' }, 'MediaDevices', 'nav.mediaDevices.ctor'),
+    refProp(media, 'constructor', 'nav.mediaDevices.ctor'),
+    tag(media, 'MediaDevices'),
+    accessor({ path: 'window.Navigator.prototype' }, 'mediaDevices', 'nav.mediaDevices.get'),
+    refProp(media, 'enumerateDevices', 'nav.mediaDevices.enumerateDevices', true),
+    refProp(media, 'getSupportedConstraints', 'nav.mediaDevices.getSupportedConstraints', true),
+    accessor(media, 'ondevicechange', 'nav.mediaDevices.ondevicechange.get', 'nav.mediaDevices.ondevicechange.set'),
+    {
+      op: 'order', target: media,
+      keys: [
+        'enumerateDevices', 'getSupportedConstraints', 'ondevicechange',
+        'constructor', { symbol: 'toStringTag' },
+      ],
+    },
+  ];
+}
+
 export function navShape(input: Shape): Shape {
   const shape = chromeTouchShape(input);
   if (shape.features.includes('nav')) return shape;
@@ -97,7 +134,7 @@ export function navShape(input: Shape): Shape {
 
 export const navFeature: Feature = {
   id: 'nav',
-  rev: '3',
+  rev: '4',
   requires: ['touch'],
   build: ({ profile, page, shape }) => {
     const connection = page?.connection;
@@ -105,6 +142,7 @@ export const navFeature: Feature = {
     return {
       operations: [
         ...storageOperations(),
+        ...mediaDevicesOperations(),
         ...(connection ? connectionOperations() : []),
       ],
       binds: [
@@ -120,6 +158,27 @@ export const navFeature: Feature = {
         { slot: 'nav.storage.getDirectory', driver: 'nav', config: { op: 'resolve', value: null } },
         { slot: 'nav.storage.persist', driver: 'nav', config: { op: 'resolve', value: false } },
         { slot: 'nav.storage.persisted', driver: 'nav', config: { op: 'resolve', value: false } },
+        { slot: 'nav.mediaDevices.ctor', driver: 'nav', config: { op: 'illegal' } },
+        { slot: 'nav.mediaDevices', driver: 'nav', config: { op: 'node', id: 'nav.mediaDevices.instance' } },
+        {
+          slot: 'nav.mediaDevices.enumerateDevices',
+          driver: 'nav',
+          config: { op: 'resolve', value: [...MEDIA_DEVICES] },
+        },
+        {
+          slot: 'nav.mediaDevices.getSupportedConstraints',
+          driver: 'nav',
+          config: {
+            op: 'value',
+            value: {
+              aspectRatio: true, autoGainControl: true, channelCount: true, deviceId: true,
+              echoCancellation: true, facingMode: true, frameRate: true, groupId: true,
+              height: true, noiseSuppression: true, sampleRate: true, sampleSize: true, width: true,
+            },
+          },
+        },
+        { slot: 'nav.mediaDevices.ondevicechange.get', driver: 'nav', config: { op: 'handler-get', name: 'ondevicechange' } },
+        { slot: 'nav.mediaDevices.ondevicechange.set', driver: 'nav', config: { op: 'handler-set', name: 'ondevicechange' } },
         ...(connection ? [
           { slot: 'nav.connection.ctor', driver: 'nav', config: { op: 'illegal' } },
           { slot: 'nav.connection', driver: 'nav', config: { op: 'node', id: 'nav.connection.instance' } },
@@ -131,6 +190,7 @@ export const navFeature: Feature = {
       support: {
         'nav.data': profile.evidence.navigator.support,
         'storage.data': 'emulated',
+        'mediadevices.data': 'emulated',
         'connection.data': connectionSupport,
       },
     };

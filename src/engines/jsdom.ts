@@ -686,7 +686,13 @@ class Installer {
 
   private realmValue(value: unknown): unknown {
     if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value;
-    if (value instanceof this.window.Object || this.trusted.has(value)) return value;
+    if (this.trusted.has(value)) return value;
+    // Same-window host objects: normal DOM nodes pass instanceof Object.
+    // jsdom CSSStyleProperties sits on Node's Object.prototype, so instanceof
+    // window.Object fails even though brand checks (CSSStyleDeclaration) pass.
+    if (value instanceof this.window.Object) return value;
+    const Style = this.window.CSSStyleDeclaration;
+    if (typeof Style === 'function' && (value as object) instanceof (Style as new () => object)) return value;
     throw new this.window.TypeError('Driver returned a foreign Realm object');
   }
 

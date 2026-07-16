@@ -102,6 +102,47 @@ test('nav leaves unknown connection capability absent for a real corpus profile'
   assert.equal(engine.active, 0);
 });
 
+test('nav exposes MediaDevices.enumerateDevices for BMS device probes', async () => {
+  const { engine, runtime } = await open('android-webview-v138');
+  try {
+    const result = runtime.run(`(() => {
+      const md = navigator.mediaDevices;
+      const pending = md.enumerateDevices();
+      return pending.then((devices) => JSON.stringify({
+        same: md === navigator.mediaDevices,
+        tag: Object.prototype.toString.call(md),
+        instance: md instanceof MediaDevices,
+        prototypeKeys: Reflect.ownKeys(MediaDevices.prototype).map(String),
+        promise: pending instanceof Promise,
+        devices,
+        enumerate: [
+          md.enumerateDevices.name,
+          md.enumerateDevices.length,
+          Function.prototype.toString.call(md.enumerateDevices),
+        ],
+      }));
+    })()`);
+    assert.equal(result.ok, true, result.ok ? undefined : result.error);
+    const value = JSON.parse(String(await result.value));
+    assert.equal(value.same, true);
+    assert.equal(value.tag, '[object MediaDevices]');
+    assert.equal(value.instance, true);
+    assert.equal(value.promise, true);
+    assert.ok(Array.isArray(value.devices));
+    assert.equal(value.devices.length, 3);
+    assert.deepEqual(
+      value.devices.map((d: { kind: string }) => d.kind),
+      ['audioinput', 'videoinput', 'audiooutput'],
+    );
+    assert.deepEqual(value.enumerate, [
+      'enumerateDevices', 0, 'function enumerateDevices() { [native code] }',
+    ]);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
 test('nav exposes a Realm-correct StorageManager with promise APIs', async () => {
   const { engine, runtime } = await open('android-webview-v138');
   try {

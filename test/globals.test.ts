@@ -48,6 +48,34 @@ async function open(id: string) {
   return { engine, plan, runtime: engine.open(plan, drivers) };
 }
 
+test('getComputedStyle returns system colors without foreign-Realm errors', async () => {
+  const { engine, runtime } = await open('macos-chrome-v149');
+  try {
+    const result = runtime.run(`(() => {
+      const el = document.createElement('div');
+      el.style.display = 'none';
+      document.head.appendChild(el);
+      const colors = ['ActiveBorder', 'Canvas', 'CanvasText', 'Window', 'WindowText', 'ButtonFace'];
+      const map = {};
+      for (const name of colors) {
+        el.style.cssText = 'background-color: ' + name + ' !important';
+        map[name] = getComputedStyle(el).backgroundColor;
+      }
+      el.remove();
+      return JSON.stringify(map);
+    })()`);
+    assert.equal(result.ok, true, result.ok ? undefined : result.error);
+    const map = JSON.parse(String(result.value)) as Record<string, string>;
+    for (const [name, value] of Object.entries(map)) {
+      assert.match(value, /^rgba?\(/, `${name}=${value}`);
+      assert.notEqual(value, 'e');
+    }
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
 test('globals installs Chrome function shapes while preserving source behavior', async () => {
   const { engine, plan, runtime } = await open('macos-chrome-v149');
   try {
