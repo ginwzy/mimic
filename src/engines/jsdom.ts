@@ -471,6 +471,7 @@ class Installer {
         }
         records.push(jsonCopy(value));
       },
+      evaluate: (source) => this.evaluate(source),
       realm: () => this.realmOrdinal,
       now: () => this.window.Date.now(),
       origin: () => this.timeOrigin,
@@ -583,6 +584,24 @@ class Installer {
       const original = desc.get;
       const getter = new this.window.Proxy(original, {
         apply: (target, self, args) => {
+          // Detached about:blank iframes (Akamai BMS): jsdom leaves
+          // contentWindow.document undefined until the frame is parented.
+          // Chrome still exposes a full window+document for detached frames.
+          // Parent invisibly so dual-realm probes (second signal-id table) work.
+          if (self && typeof self === 'object' && 'tagName' in self) {
+            const frame = self as HTMLIFrameElement;
+            if (!frame.parentNode && this.window.document?.documentElement) {
+              try {
+                const prev = frame.getAttribute('style') || '';
+                if (!/display\s*:\s*none/i.test(prev)) {
+                  frame.setAttribute('style', `${prev};display:none;position:absolute;width:0;height:0;border:0`);
+                }
+                this.window.document.documentElement.appendChild(frame);
+              } catch {
+                /* ignore attach failures */
+              }
+            }
+          }
           const value = Reflect.apply(target, self, args) as unknown;
           const child = name === 'contentWindow'
             ? value

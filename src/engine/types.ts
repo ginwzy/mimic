@@ -9,6 +9,8 @@ export interface Port {
   error(name: 'Error' | 'TypeError' | 'RangeError', message: string): Error;
   resolve(value?: JsonValue): Promise<unknown>;
   record(value: JsonValue): void;
+  /** Evaluate source in this installer's window realm (iframe-safe). */
+  evaluate(source: string): unknown;
   realm(): number;
   now(): number;
   origin(): number;

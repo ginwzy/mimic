@@ -394,6 +394,13 @@ type WorkerState = {
   scriptUrl: string;
 };
 
+/**
+ * BMS probes a detached about:blank iframe whose contentWindow.document is
+ * missing in jsdom (contentDocument exists, window.document does not).
+ * Fall back to a canvas factory captured from the first healthy realm (usually top).
+ */
+let sharedCanvasFactory: (() => object) | null = null;
+
 /** Same-process Worker: blob/data scripts run in a with(self) scope; postMessage is bridged. */
 export const domDriver: Driver = {
   open: (port) => {
@@ -407,7 +414,6 @@ export const domDriver: Driver = {
     const setTimeoutFn = port.source('window.setTimeout');
     const blobUrls = new Map<string, BlobEntry>();
     let blobSeq = 0;
-    let canvasMaker: (() => object) | undefined;
 
     const offscreenOf = (self: unknown): { canvas: object } => {
       const target = asObject(port, self);
@@ -416,29 +422,41 @@ export const domDriver: Driver = {
       return state;
     };
 
-    const makeCanvas = (): object => {
-      if (!canvasMaker) {
-        if (typeof FunctionCtor !== 'function') {
-          throw port.error('TypeError', 'Function is unavailable');
-        }
-        canvasMaker = Reflect.construct(FunctionCtor, [
-          'return document.createElement("canvas")',
-        ]) as () => object;
-      }
-      const canvas = Reflect.apply(canvasMaker, undefined, []) as object;
-      if (typeof HTMLCanvasElement === 'function'
-        && !Reflect.apply(Function.prototype[Symbol.hasInstance], HTMLCanvasElement, [canvas])) {
-        throw port.error('TypeError', 'Failed to create canvas for OffscreenCanvas');
-      }
-      return canvas;
-    };
-
     const realmEval = <T>(expression: string): T => {
       if (typeof FunctionCtor !== 'function') {
         throw port.error('TypeError', 'Function is unavailable');
       }
       const fn = Reflect.construct(FunctionCtor, [`return (${expression});`]) as () => T;
       return Reflect.apply(fn, undefined, []) as T;
+    };
+
+    /** Create a canvas element; prefer this realm, else shared factory (detached iframe). */
+    const makeCanvas = (): object => {
+      const tryCreate = (factory: () => object, brandCheck: boolean): object | null => {
+        try {
+          const canvas = factory();
+          // Cross-realm fallback canvases fail child HTMLCanvasElement brand checks — skip then.
+          if (brandCheck && typeof HTMLCanvasElement === 'function'
+            && !Reflect.apply(Function.prototype[Symbol.hasInstance], HTMLCanvasElement, [canvas])) {
+            return null;
+          }
+          return canvas;
+        } catch {
+          return null;
+        }
+      };
+
+      let canvas = tryCreate(() => port.evaluate('document.createElement("canvas")') as object, true);
+      if (!canvas && sharedCanvasFactory) {
+        canvas = tryCreate(sharedCanvasFactory, false);
+      }
+      if (!canvas) {
+        throw port.error(
+          'TypeError',
+          'document.createElement is unavailable (detached iframe window has no document)',
+        );
+      }
+      return canvas;
     };
 
     const cloneData = (value: unknown): unknown => {
@@ -636,6 +654,19 @@ export const domDriver: Driver = {
       queueMicrotask(task);
     };
 
+    // Eagerly capture a working canvas factory from healthy realms (top window).
+    if (!sharedCanvasFactory) {
+      try {
+        const probe = port.evaluate('document.createElement("canvas")') as object;
+        if (probe) {
+          const evaluate = port.evaluate.bind(port);
+          sharedCanvasFactory = () => evaluate('document.createElement("canvas")') as object;
+        }
+      } catch {
+        /* detached/broken realm — ignore */
+      }
+    }
+
     return {
       call: (raw, self, args) => {
         const item = config(raw);
@@ -750,7 +781,8 @@ export const domDriver: Driver = {
           const height = Math.max(0, Math.trunc(Number(args[1]) || 0));
           Reflect.set(canvas, 'width', width);
           Reflect.set(canvas, 'height', height);
-          const target = Object.create(asObject(port, port.node('dom.OffscreenCanvas.proto'))) as object;
+          // port.make → realm-trusted instance (Node Object.create is foreign in iframes).
+          const target = asObject(port, port.make('dom.OffscreenCanvas.proto'));
           offscreens.set(target, { canvas });
           return target;
         }
