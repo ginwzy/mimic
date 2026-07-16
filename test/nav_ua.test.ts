@@ -102,6 +102,9 @@ test('nav leaves unknown connection capability absent for a real corpus profile'
   assert.equal(engine.active, 0);
 });
 
+// Worker / OffscreenCanvas use full Application stack (dom feature + baked shapes).
+// nav_ua open() is a partial feature set and does not install them.
+
 test('runtime.run with scriptUrl exposes document.currentScript.src (BMS urlKey)', async () => {
   const { engine, runtime } = await open('android-webview-v138');
   const scriptUrl = 'https://www.example.com/FQd/bms.js?v=7fdda865-0972-9d1f-a329-4170ad4217cb';

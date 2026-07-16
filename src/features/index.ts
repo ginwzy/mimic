@@ -4,7 +4,7 @@ import type { Feature } from '../shape/types.js';
 import { audioDriver, audioFeature, audioShape } from './audio.js';
 import { canvasDriver, canvasFeature, canvasShape } from './canvas.js';
 import { chromeDriver, chromeFeature, touchFeature } from './chrome.js';
-import { domFeature } from './dom.js';
+import { domDriver, domFeature } from './dom.js';
 import { globalsDriver, globalsFeature } from './globals.js';
 import { navDriver, navFeature } from './nav.js';
 import { netDriver, netFeature, netShape } from './net.js';
@@ -44,6 +44,7 @@ export const drivers: Drivers = Object.freeze({
   ua: uaDriver,
   plugins: pluginsDriver,
   globals: globalsDriver,
+  dom: domDriver,
   net: netDriver,
   time: timeDriver,
   perf: perfDriver,
