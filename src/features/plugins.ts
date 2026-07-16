@@ -136,10 +136,14 @@ export function pluginsShape(input: Shape): Shape {
   const shape = uaShape(input);
   if (shape.features.includes('plugins')) return shape;
   const { hash: _hash, ...body } = shape;
+  // Chrome Android: empty PluginArray (no PDF plugin entries). Desktop Chrome ships 5 PDF aliases.
+  const pluginOps = shape.target.host === 'chrome' && shape.target.form !== 'mobile'
+    ? chromeOps()
+    : [];
   return parseShape(seal({
     ...body,
     features: [...shape.features, 'plugins'].sort(),
-    ops: [...shape.ops, ...baseOps(), ...(shape.target.host === 'chrome' ? chromeOps() : [])],
+    ops: [...shape.ops, ...baseOps(), ...pluginOps],
     support: {
       ...shape.support,
       'plugins.shape': shape.level === 'captured' ? 'captured' : 'derived',

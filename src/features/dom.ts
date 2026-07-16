@@ -26,6 +26,7 @@ const DEFERRED_WRITES = [
   token('window.Navigator.prototype', 'mediaDevices', 'get'),
   token('window.Navigator.prototype', 'serviceWorker', 'get'),
   token('window.Navigator.prototype', 'permissions', 'get'),
+  token('window.Document.prototype', 'fonts', 'get'),
   token('window.XMLHttpRequest.prototype', 'send', 'value'),
   token('window.Navigator.prototype', 'sendBeacon', 'value'),
 ] as const;

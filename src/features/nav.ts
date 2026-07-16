@@ -177,6 +177,39 @@ function permissionsOperations(): DraftOp[] {
   ];
 }
 
+/**
+ * FontFaceSet stub — document.fonts is undefined in jsdom; Chrome always exposes it.
+ */
+function fontsOperations(): DraftOp[] {
+  const fonts = { node: 'nav.fonts.proto' } as const;
+  return [
+    { op: 'alloc', id: 'nav.fonts.proto', kind: 'object' },
+    { op: 'alloc', id: 'nav.fonts.instance', kind: 'event' },
+    ctor('nav.fonts.ctor', 'nav.fonts.ctor', 'FontFaceSet', fonts),
+    fn('nav.fonts.get', 'nav.fonts', 'get fonts'),
+    fn('nav.fonts.check', 'nav.fonts.check', 'check', 1),
+    fn('nav.fonts.load', 'nav.fonts.load', 'load', 1),
+    fn('nav.fonts.ready.get', 'nav.fonts.ready', 'get ready'),
+    fn('nav.fonts.status.get', 'nav.fonts.status', 'get status'),
+    fn('nav.fonts.size.get', 'nav.fonts.size', 'get size'),
+    { op: 'proto', target: fonts, value: { path: 'window.EventTarget.prototype' } },
+    { op: 'proto', target: { node: 'nav.fonts.instance' }, value: fonts },
+    refProp({ path: 'window' }, 'FontFaceSet', 'nav.fonts.ctor'),
+    refProp(fonts, 'constructor', 'nav.fonts.ctor'),
+    tag(fonts, 'FontFaceSet'),
+    accessor({ path: 'window.Document.prototype' }, 'fonts', 'nav.fonts.get'),
+    refProp(fonts, 'check', 'nav.fonts.check', true),
+    refProp(fonts, 'load', 'nav.fonts.load', true),
+    accessor(fonts, 'ready', 'nav.fonts.ready.get'),
+    accessor(fonts, 'status', 'nav.fonts.status.get'),
+    accessor(fonts, 'size', 'nav.fonts.size.get'),
+    {
+      op: 'order', target: fonts,
+      keys: ['ready', 'status', 'check', 'load', 'size', 'constructor', { symbol: 'toStringTag' }],
+    },
+  ];
+}
+
 function cachesOperations(): DraftOp[] {
   const caches = { node: 'nav.caches.proto' } as const;
   return [
@@ -236,6 +269,7 @@ export const navFeature: Feature = {
         ...serviceWorkerOperations(),
         ...permissionsOperations(),
         ...cachesOperations(),
+        ...fontsOperations(),
         ...(connection ? connectionOperations() : []),
       ],
       binds: [
@@ -292,6 +326,13 @@ export const navFeature: Feature = {
         { slot: 'nav.caches.keys', driver: 'nav', config: { op: 'resolve', value: [] } },
         { slot: 'nav.caches.match', driver: 'nav', config: { op: 'resolve', value: null } },
         { slot: 'nav.caches.delete', driver: 'nav', config: { op: 'resolve', value: false } },
+        { slot: 'nav.fonts.ctor', driver: 'nav', config: { op: 'illegal' } },
+        { slot: 'nav.fonts', driver: 'nav', config: { op: 'node', id: 'nav.fonts.instance' } },
+        { slot: 'nav.fonts.check', driver: 'nav', config: { op: 'value', value: true } },
+        { slot: 'nav.fonts.load', driver: 'nav', config: { op: 'resolve', value: [] } },
+        { slot: 'nav.fonts.ready', driver: 'nav', config: { op: 'resolve', value: null } },
+        { slot: 'nav.fonts.status', driver: 'nav', config: { op: 'value', value: 'loaded' } },
+        { slot: 'nav.fonts.size', driver: 'nav', config: { op: 'value', value: 0 } },
         ...(connection ? [
           { slot: 'nav.connection.ctor', driver: 'nav', config: { op: 'illegal' } },
           { slot: 'nav.connection', driver: 'nav', config: { op: 'node', id: 'nav.connection.instance' } },
@@ -327,6 +368,7 @@ export const navFeature: Feature = {
         'serviceworker.data': 'emulated',
         'permissions.data': 'emulated',
         'caches.data': 'emulated',
+        'fonts.data': 'emulated',
       },
     };
   },

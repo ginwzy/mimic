@@ -95,11 +95,22 @@ const LIFECYCLE = `(() => {
   const fire = (target, type, bubbles = false) => {
     try { target.dispatchEvent(new Event(type, { bubbles })); } catch {}
   };
-  if (document.readyState !== 'complete') {
-    fire(document, 'readystatechange');
-    fire(document, 'DOMContentLoaded', true);
-    fire(window, 'load');
-  }
+  // jsdom often leaves readyState at "loading" after HTML inject; Chrome is "complete"
+  // once load has fired. BMS / abck gate probes on readyState + hasFocus.
+  try {
+    if (document.readyState !== 'complete') {
+      Object.defineProperty(document, 'readyState', {
+        configurable: true, enumerable: true, get: () => 'complete',
+      });
+      fire(document, 'readystatechange');
+      fire(document, 'DOMContentLoaded', true);
+      fire(window, 'load');
+    }
+  } catch {}
+  try {
+    // Focused top-level browsing context (default for real page load).
+    Document.prototype.hasFocus = function hasFocus() { return true; };
+  } catch {}
   fire(window, 'pageshow');
 })()`;
 
@@ -434,16 +445,18 @@ export class Application {
         ...(job.timeout === undefined ? {} : { timeout: job.timeout }),
         ...(job.scriptUrl === undefined ? {} : { url: job.scriptUrl }),
       };
+      // Capture: complete document lifecycle BEFORE page scripts so BMS/abck see
+      // readyState=complete and hasFocus=true (was run after job — silent probe fails).
+      if (job.kind === 'capture' && this.capture.lifecycle === 'auto') {
+        const lifecycle = runtime.run(LIFECYCLE, job.timeout === undefined ? {} : { timeout: job.timeout });
+        if (!lifecycle.ok) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: lifecycle.error, plan: plan.id });
+      }
       const executed = runtime.run(job.code, runOptions);
       if (!executed.ok) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: executed.error, plan: plan.id });
       value = compatibleValue(runtime, executed.value);
       if (job.kind === 'capture') {
         const before = net(runtime.report());
         await delay(0);
-        if (this.capture.lifecycle === 'auto') {
-          const lifecycle = runtime.run(LIFECYCLE, job.timeout === undefined ? {} : { timeout: job.timeout });
-          if (!lifecycle.ok) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: lifecycle.error, plan: plan.id });
-        }
         const started = Date.now();
         let current = net(runtime.report());
         while (Date.now() - started < this.capture.deadlineMs

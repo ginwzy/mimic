@@ -424,10 +424,32 @@ export const canvasDriver: Driver = {
           return state[String(item.name) as keyof ImageState];
         }
         if (item.op === 'metrics') {
-          context(self);
+          const ctx = context(self);
           const target = made(port, item.proto);
-          const width = String(args[0] ?? '').length * 7;
-          metrics.set(target, Object.fromEntries(METRIC_FIELDS.map((name) => [name, name === 'width' ? width : 0])) as unknown as MetricState);
+          const text = String(args[0] ?? '');
+          // Derive metrics from current font size (default 10px) — zero bounding boxes
+          // are a jsdom-era tell; Chrome returns non-zero ascent/descent for normal fonts.
+          const font = String(styles.get(ctx)?.get('font') ?? '10px sans-serif');
+          const sizeMatch = /(\d+(?:\.\d+)?)px/.exec(font);
+          const size = sizeMatch ? Number(sizeMatch[1]) : 10;
+          const width = text.length * size * 0.55;
+          const ascent = size * 0.8;
+          const descent = size * 0.2;
+          const state = {
+            width,
+            actualBoundingBoxLeft: 0,
+            actualBoundingBoxRight: width,
+            fontBoundingBoxAscent: ascent,
+            fontBoundingBoxDescent: descent,
+            actualBoundingBoxAscent: ascent,
+            actualBoundingBoxDescent: descent,
+            emHeightAscent: ascent,
+            emHeightDescent: descent,
+            hangingBaseline: ascent * 0.8,
+            alphabeticBaseline: 0,
+            ideographicBaseline: -descent,
+          } satisfies MetricState;
+          metrics.set(target, state);
           return target;
         }
         if (item.op === 'metric-field') {
