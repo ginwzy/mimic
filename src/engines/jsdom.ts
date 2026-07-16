@@ -182,18 +182,49 @@ class JsdomRuntime implements Runtime {
 
   run(code: string, options: { timeout?: number; url?: string } = {}): RuntimeResult {
     if (this.disposed) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: 'Runtime 已 dispose' });
+    // Akamai BMS 等从 document.currentScript.src 取 ?v= 派生 urlKey;
+    // vm.runInContext 不会设置 currentScript,缺省时脚本回退 location → urlKey=0。
+    return this.withScriptUrl(options.url, () => {
+      try {
+        const value = vm.runInContext(code, this.context!, {
+          filename: options.url || this.plan.boot.url,
+          ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+        });
+        return { ok: true, value };
+      } catch (error) {
+        const value = error as { name?: unknown; message?: unknown; stack?: unknown } | null;
+        const name = value && typeof value.name === 'string' ? value.name : 'Error';
+        const message = value && typeof value.message === 'string' ? value.message : String(error);
+        const stack = value && typeof value.stack === 'string' ? publicStack(value.stack, name, message) : undefined;
+        return { ok: false, error: message, ...(stack ? { stack } : {}) };
+      }
+    });
+  }
+
+  /** Bind document.currentScript (+ scripts entry) for the duration of fn when url is set. */
+  private withScriptUrl<T>(url: string | undefined, fn: () => T): T {
+    if (!url) return fn();
+    const document = (this.context as { document?: Document } | null)?.document;
+    if (!document || typeof document.createElement !== 'function') return fn();
+
+    const script = document.createElement('script');
+    script.src = url;
+    const parent = document.head ?? document.body ?? document.documentElement;
+    if (parent && typeof parent.appendChild === 'function') parent.appendChild(script);
+
+    const own = Object.getOwnPropertyDescriptor(document, 'currentScript');
+    Object.defineProperty(document, 'currentScript', {
+      configurable: true,
+      enumerable: true,
+      get: () => script,
+    });
     try {
-      const value = vm.runInContext(code, this.context!, {
-        filename: options.url || this.plan.boot.url,
-        ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
-      });
-      return { ok: true, value };
-    } catch (error) {
-      const value = error as { name?: unknown; message?: unknown; stack?: unknown } | null;
-      const name = value && typeof value.name === 'string' ? value.name : 'Error';
-      const message = value && typeof value.message === 'string' ? value.message : String(error);
-      const stack = value && typeof value.stack === 'string' ? publicStack(value.stack, name, message) : undefined;
-      return { ok: false, error: message, ...(stack ? { stack } : {}) };
+      return fn();
+    } finally {
+      if (own) Object.defineProperty(document, 'currentScript', own);
+      else Reflect.deleteProperty(document, 'currentScript');
+      if (typeof script.remove === 'function') script.remove();
+      else if (script.parentNode) script.parentNode.removeChild(script);
     }
   }
 

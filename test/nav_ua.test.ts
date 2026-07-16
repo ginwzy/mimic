@@ -102,6 +102,27 @@ test('nav leaves unknown connection capability absent for a real corpus profile'
   assert.equal(engine.active, 0);
 });
 
+test('runtime.run with scriptUrl exposes document.currentScript.src (BMS urlKey)', async () => {
+  const { engine, runtime } = await open('android-webview-v138');
+  const scriptUrl = 'https://www.example.com/FQd/bms.js?v=7fdda865-0972-9d1f-a329-4170ad4217cb';
+  try {
+    const withUrl = runtime.run(`({
+      current: document.currentScript && document.currentScript.src,
+      scripts: [...document.scripts].map((s) => s.src),
+    })`, { url: scriptUrl });
+    assert.equal(withUrl.ok, true, withUrl.ok ? undefined : withUrl.error);
+    assert.equal((withUrl.value as { current: string }).current, scriptUrl);
+    assert.ok((withUrl.value as { scripts: string[] }).scripts.includes(scriptUrl));
+
+    const without = runtime.run(`document.currentScript`);
+    assert.equal(without.ok, true);
+    assert.equal(without.value, null);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
 test('nav exposes MediaDevices.enumerateDevices for BMS device probes', async () => {
   const { engine, runtime } = await open('android-webview-v138');
   try {

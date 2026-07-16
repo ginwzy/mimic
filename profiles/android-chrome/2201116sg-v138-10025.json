@@ -162,7 +162,7 @@
       "WEBGL_lose_context",
       "WEBGL_multi_draw"
     ],
-    "unmaskedVendor": "Qualcomm",
+    "unmaskedVendor": "Google Inc. (Qualcomm)",
     "unmaskedRenderer": "Adreno (TM) 619"
   }
 }
