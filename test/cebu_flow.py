@@ -1,10 +1,9 @@
-"""Run the Cebu request flow against staging with sensor bodies from mimic."""
+"""Run the Cebu request flow against www with sensor bodies from mimic."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import http.cookiejar
 import inspect
 import json
 import os
@@ -12,36 +11,66 @@ import random
 import re
 import signal
 import tempfile
-import urllib.request
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
+from time import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urljoin, urlparse
 
+from rnet import Client, Emulation, EmulationOS, EmulationOption, Policy
 
-SITE_URL = "https://staging.cebupacificair.com"
-AUTHORIZED_ORIGIN = ("https", "staging.cebupacificair.com", 443)
+SITE_URL = "https://www.cebupacificair.com"
+# Web availability endpoint (main.js apiPostAvailability).
+SEARCH_URL = "https://soar.cebupacificair.com/ceb-omnix-proxy-v3/availability"
+AUTHORIZED_HOSTS = frozenset({
+    "www.cebupacificair.com",
+    "soar.cebupacificair.com",
+})
 MIMIC_BRIDGE_PATH = Path(__file__).resolve().with_name("cebu_capture.mjs")
 MIMIC_PROFILE = "android-chrome/2201116sg-v138-10025"
+RNET_EMULATION = EmulationOption(
+    emulation=Emulation.Chrome138,
+    emulation_os=EmulationOS.Android,
+)
+# Abck multi-post capture window (motion + swipe sequences need room to fire).
+ABCK_CAPTURE_DEADLINE_MS = 4_000
+ABCK_MAX_POSTS = 8
+ABCK_SCRIPT_TIMEOUT_MS = 12_000
 
 DOCUMENT_ACCEPT = (
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,"
     "image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
 )
 DEFAULT_ACCEPT_ENCODING = "gzip, deflate, br, zstd"
-DEFAULT_ACCEPT_LANGUAGE = "en-GB,en-US;q=0.9,en;q=0.8,pl;q=0.7"
+DEFAULT_ACCEPT_LANGUAGE = "en,en-US;q=0.9,zh-CN;q=0.8,zh;q=0.7"
 
+# Captured Web v3 availability request (browser). Auth/body are fixed samples;
+# session cookies come from the mimic abck flow. HTTP 401 = bot passed.
+AUTHORIZATION = "Bearer b6b406a0dbGRE79g3Rm6ruBcSiz3fhGawn4kD7"
 X_AUTH_TOKEN = (
-    "837bd9b7a6U2FsdGVkX1+v2jUFaYmhWijDL3pyl5Fa0cAtWT4qTfyTcDmYs3UktAk/"
-    "6Xip/co7QmhmOZscQ/n9FmOGKotA1WSFd6Uo1Hbyr+4TyDl3d26NnQ7HP/n7UtMV/"
-    "PQBCuFGbgv192DfK+LxsiIQRDmcnInOzkUvFRFmG9BHwpyUYE8131ZItFKgqHcgHIT2"
-    "oeKR5JZ3urZGfX4QQQpH7O0Tt9QJuvWsI6yY7AyEG2/pVYFgW4D8BVLLW0+7Mryt8p7"
-    "JUGOEqdX7wIf24xU9rXxh/VjWTbzOBFKPVGSJfVU4HGg="
+    "f13bf793c8U2FsdGVkX1+oWtzU1Jn0t3xdybCpiw7G8lsMyvTCIRlvJwmRht1IXlWBr7+UMahr"
+    "WEDz5oh9fypiMd9FeNhuzkjkizZYtj1wFx5ssbV000QbdW29CVIeduX2yLzcCbyUbGpl1YrXWh"
+    "n5agpnA5XO06RjxOAlB+2TiXuDnuWD+p0v/4mRATZ0zCA7QAQJnkLhyqRS6lpFNZlh/L9URL8G"
+    "NEUbCixzXIkvolHJbgp433JIQ3+vVXfpBc3n6BNE6wuzk2lNMulrLAF97RSqphOuYu60T+vncN"
+    "VZY2v2EfkP4nM="
 )
-AUTHORIZATION = "Bearer ff020ca4a2a0MoV5doJAgndROj90LA3trQleGE"
-X_PATH = "U2FsdGVkX19lEh6mUmJtjvofU5TNrKriSc6QSUKLV3c="
+X_PATH = "U2FsdGVkX19PzY7Ss8H+VQJNOsPMWzAAX2Z2St2/z1g="
 
-DEFAULT_SEARCH_BODY = r'''{"content":"U2FsdGVkX1++rgeTvC4KykMJNXMS9no1//kQGagNJcFIBev2I3hvbq9PYpRS3P0rheYkpM29yAljeQkee4+GW26MTrimeyjvmZ5cParoSzDOWoLEFGdLkqqH0OOVTx8CgN9xmIfXmuGva4E5u0AprbAQn+y53Slw3HoN4+r3pSoruQ55c27Fhd+5S1r755eAlHmixHDOoZnlFYlil2uCMi8HogrewoYw53VBdMNRv0mjQg+3Quvmmpoukqd+a2owfVmXv1x32Gc39VfQg7599qBfW4IB0VlTZjmt00ZNo6arsAcPVe2c+f52IrWtVyAcOxBzEYwlD9L48vKFNa91IdWtQ837bd9b7a6U2FsdGVkX1+v2jUFaYmhWijDL3pyl5Fa0cAtWT4qTfyTcDmYs3UktAk/6Xip/co7QmhmOZscQ/n9FmOGKotA1WSFd6Uo1Hbyr+4TyDl3d26NnQ7HP/n7UtMV/PQBCuFGbgv192DfK+LxsiIQRDmcnInOzkUvFRFmG9BHwpyUYE8131ZItFKgqHcgHIT2oeKR5JZ3urZGfX4QQQpH7O0Tt9QJuvWsI6yY7AyEG2/pVYFgW4D8BVLLW0+7Mryt8p7JUGOEqdX7wIf24xU9rXxh/VjWTbzOBFKPVGSJfVU4HGg=00bl1Uu+EOl6trV9nAcSttyCdCzJB/8UCj08cg5r95tPNKliv9hJy1u+tSxBpbTHBPWoCCEB1LSIr2fexlzMZDHjUD3wCUEP57HSoxqBs+M0yTCTeKiZUPMJFxNGKff020ca4a2a0MoV5doJAgndROj90LA3trQleGEMtLONGsOToHbcI3p6LXJLelHon55uDE0fgHNe2NtohsHawwRsHJ66rWfGaMbAapGPJTw/VvGefYB7ON6EnENwLZtR/36t/FpsC0dWx050fa2ZPsTNIhYCeUh+ul0Xk8/zKIfePfbWLENpKsSurlUGXbj1FaCc8doXtiqK/EVEO"}'''
+DEFAULT_SEARCH_BODY = (
+    '{"content":"U2FsdGVkX1+lnF9oonJrfETXCi2D7mZOCSj7UhJve3FsDc5O8ES/6HkR2LMXBZhskI5N'
+    "zwaxbauhMUHnq2XcNBXIPMvmrhwPYCHhVilHX2+KlVDKDFUvmqRWOs5Ey7Cr1He6o73mYKD4Z4WaE"
+    "nry2klsBIgxrlq6tAUAlQHSir+/oMCWJO2mk+TneZDjav7XrHU1VKGMFZuqNZwV5KIWBtsGRooPTD"
+    "5pt8QEtezKHo9nKq8FNg01BKujGXh7BpgEo8gUs9ynoIbAJ3fMNeQ2XNWR6hUZLQuthqQfKmdf13"
+    "bf793c8U2FsdGVkX1+oWtzU1Jn0t3xdybCpiw7G8lsMyvTCIRlvJwmRht1IXlWBr7+UMahrWEDz5"
+    "oh9fypiMd9FeNhuzkjkizZYtj1wFx5ssbV000QbdW29CVIeduX2yLzcCbyUbGpl1YrXWhn5agpnA"
+    "5XO06RjxOAlB+2TiXuDnuWD+p0v/4mRATZ0zCA7QAQJnkLhyqRS6lpFNZlh/L9URL8GNEUbCixzX"
+    "IkvolHJbgp433JIQ3+vVXfpBc3n6BNE6wuzk2lNMulrLAF97RSqphOuYu60T+vncNVZY2v2EfkP4"
+    "nM=H3/ypOAkdI7w4yUed1XQ9rGg1o86iGJ8oxFvdyjVviNQXWszeGmAqOIQiwhqeSVQBogj4yGmW"
+    "BPXUEFWo3x2g9CVKYuigdub6b406a0dbGRE79g3Rm6ruBcSiz3fhGawn4kD7YMinne2j2WGRe2CG"
+    "KJNKr0++Arpgs/CrVVw25Oe3WB8RmCUwiHdFYtgwxdvxMFHX11GxEZkjYCxhb0HxAb0q4z9A2Py9"
+    'vdxlZjJj9mXPgQEHut7/S/Ce2CR9QP"}'
+)
 
 _SCRIPT_SRC_RE = re.compile(
     r'''(?i)<script[^>]*\ssrc\s*=\s*["']([^"']+)["']'''
@@ -59,6 +88,11 @@ def _origin(url: str) -> Tuple[str, Optional[str], Optional[int]]:
     if port is None:
         port = 443 if parsed.scheme.lower() == "https" else 80
     return parsed.scheme.lower(), parsed.hostname, port
+
+
+def _origin_allowed(url: str) -> bool:
+    scheme, host, port = _origin(url)
+    return scheme == "https" and host in AUTHORIZED_HOSTS and port == 443
 
 
 async def _terminate_process_group(
@@ -83,7 +117,7 @@ async def _terminate_process_group(
             await process.wait()
 
 
-class CurlResponse:
+class HttpResponse:
     def __init__(self, status: int, body: bytes) -> None:
         self.status = status
         self._body = body
@@ -95,30 +129,37 @@ class CurlResponse:
         return None
 
 
-class TermrouteCurlClient:
-    """Small async client that routes every request through termroute and curl."""
+class RnetClient:
+    """Async HTTP client via rnet (Chrome Android TLS/JA3 emulation + cookie jar)."""
 
     def __init__(self, timeout: int = 30) -> None:
         self.timeout = timeout
-        self._directory = tempfile.TemporaryDirectory(prefix="cebu-flow-")
-        self._cookie_path = Path(self._directory.name) / "cookies.txt"
-        self._cookie_path.write_text(
-            "# Netscape HTTP Cookie File\n",
-            encoding="ascii",
-        )
         self._closed = False
+        # proxy=True: honor system/env proxy (user already routes traffic via local proxy).
+        self._client = Client(
+            emulation=RNET_EMULATION,
+            cookie_store=True,
+            timeout=timedelta(seconds=timeout),
+            redirect=Policy.limited(10),
+            proxy=True,
+            verify=False,
+        )
 
     def get_cookies(self, url: str) -> str:
-        jar = http.cookiejar.MozillaCookieJar(str(self._cookie_path))
-        try:
-            jar.load(ignore_discard=True, ignore_expires=True)
-        except (FileNotFoundError, http.cookiejar.LoadError):
+        jar = self._client.cookie_jar
+        if jar is None:
             return ""
-        request = urllib.request.Request(url)
-        jar.add_cookie_header(request)
-        return request.get_header("Cookie", "")
+        host = (urlparse(url).hostname or "").lower()
+        pairs: List[str] = []
+        for cookie in jar.get_all():
+            domain = (cookie.domain or "").lstrip(".").lower()
+            if not domain:
+                continue
+            if host == domain or host.endswith("." + domain):
+                pairs.append(f"{cookie.name}={cookie.value}")
+        return "; ".join(pairs)
 
-    async def get(self, url: str, headers: Dict[str, str]) -> CurlResponse:
+    async def get(self, url: str, headers: Dict[str, str]) -> HttpResponse:
         return await self._request("GET", url, headers)
 
     async def post(
@@ -126,7 +167,7 @@ class TermrouteCurlClient:
         url: str,
         headers: Dict[str, str],
         body: str,
-    ) -> CurlResponse:
+    ) -> HttpResponse:
         return await self._request("POST", url, headers, body)
 
     async def _request(
@@ -135,92 +176,35 @@ class TermrouteCurlClient:
         url: str,
         headers: Dict[str, str],
         body: Optional[str] = None,
-    ) -> CurlResponse:
+    ) -> HttpResponse:
         if self._closed:
-            raise CebuFlowError("termroute curl client is closed")
+            raise CebuFlowError("rnet client is closed")
         try:
             target_origin = _origin(url)
         except ValueError as error:
             raise CebuFlowError(f"refusing invalid URL: {url}") from error
-        if target_origin != AUTHORIZED_ORIGIN:
+        if not _origin_allowed(url):
             raise CebuFlowError(f"refusing out-of-scope URL: {url}")
 
-        output = tempfile.NamedTemporaryFile(
-            prefix="response-",
-            dir=self._directory.name,
-            delete=False,
-        )
-        output_path = Path(output.name)
-        output.close()
-        command = [
-            "termroute",
-            "run",
-            "curl",
-            "--silent",
-            "--show-error",
-            "--compressed",
-            "--max-time",
-            str(self.timeout),
-            "--cookie",
-            str(self._cookie_path),
-            "--cookie-jar",
-            str(self._cookie_path),
-            "--output",
-            str(output_path),
-            "--write-out",
-            "%{http_code}",
-            "--request",
-            method,
-        ]
-        for name, value in headers.items():
-            command.extend(("--header", f"{name}: {value}"))
-        if body is not None:
-            command.extend(("--data-binary", "@-"))
-        command.append(url)
-
-        process: Optional[asyncio.subprocess.Process] = None
         try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdin=asyncio.subprocess.PIPE if body is not None else None,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                start_new_session=True,
-            )
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(
-                        body.encode("utf-8") if body is not None else None
-                    ),
-                    timeout=self.timeout + 5,
-                )
-            except asyncio.TimeoutError as error:
-                raise CebuFlowError(f"curl timed out for {url}") from error
-
-            if process.returncode != 0:
-                detail = stderr.decode("utf-8", errors="replace").strip()
-                raise CebuFlowError(
-                    f"termroute curl failed for {url}: "
-                    f"{detail or process.returncode}"
-                )
-            status_text = stdout.decode("ascii", errors="replace").strip()
-            if not re.fullmatch(r"\d{3}", status_text):
-                raise CebuFlowError(
-                    "termroute curl returned an invalid status for "
-                    f"{url}: {status_text!r}"
-                )
-            response_body = output_path.read_bytes()
-            return CurlResponse(int(status_text), response_body)
-        finally:
-            if process is not None and process.returncode is None:
-                await _terminate_process_group(process)
-            output_path.unlink(missing_ok=True)
+            if method == "GET":
+                response = await self._client.get(url, headers=headers)
+            elif method == "POST":
+                response = await self._client.post(url, headers=headers, body=body or "")
+            else:
+                raise CebuFlowError(f"unsupported method: {method}")
+            status = response.status.as_int()
+            raw = await response.bytes()
+            body_bytes = bytes(raw) if not isinstance(raw, (bytes, bytearray)) else bytes(raw)
+            await response.close()
+            return HttpResponse(status, body_bytes)
+        except CebuFlowError:
+            raise
+        except Exception as error:
+            raise CebuFlowError(f"rnet {method} failed for {url}: {error}") from error
 
     async def close(self) -> None:
-        if self._closed:
-            return
         self._closed = True
-        self._directory.cleanup()
 
 
 @dataclass(frozen=True)
@@ -254,6 +238,7 @@ class InitializationResult:
     bms_script_url: Optional[str]
     abck_script_url: str
     bms_posted: bool
+    abck_body_count: int
     abck_post_count: int
 
 
@@ -292,7 +277,7 @@ def extract_abck_script(html: str) -> Optional[str]:
                 if source.startswith(prefix) and "?v=" not in source:
                     return source
 
-    # Current staging pages expose only the extensionless Akamai sensor path.
+    # Current pages often expose only the extensionless Akamai sensor path.
     for source in reversed(sources):
         parsed = urlparse(source)
         segments = [segment for segment in parsed.path.split("/") if segment]
@@ -318,14 +303,14 @@ class CebuFlow:
         availability_url: Optional[str] = None,
         mimic_profile: str = MIMIC_PROFILE,
         mimic_bridge_path: Path = MIMIC_BRIDGE_PATH,
-        capture_deadline_ms: int = 1_000,
+        capture_deadline_ms: int = ABCK_CAPTURE_DEADLINE_MS,
     ) -> None:
         parsed_site = urlparse(site_url)
         if parsed_site.scheme not in {"http", "https"} or not parsed_site.netloc:
             raise ValueError("site_url must be an absolute HTTP(S) URL")
-        if _origin(site_url) != AUTHORIZED_ORIGIN:
+        if not _origin_allowed(site_url):
             raise ValueError(
-                "site_url must use the authorized staging origin: " + SITE_URL
+                "site_url must be an authorized cebupacificair.com HTTPS origin"
             )
         if capture_deadline_ms < 1:
             raise ValueError("capture_deadline_ms must be positive")
@@ -336,17 +321,24 @@ class CebuFlow:
             self.site_url + "/",
             "en-PH/booking/select-flight",
         )
-        self.availability_url = urljoin(
-            self.site_url + "/",
-            availability_url or "ceb-omnix-proxy-v3/availability",
-        )
+        if availability_url:
+            self.availability_url = (
+                availability_url
+                if "://" in availability_url
+                else urljoin(self.site_url + "/", availability_url)
+            )
+        else:
+            self.availability_url = SEARCH_URL
         self._site_origin = self._origin(self.site_url)
-        self._require_same_origin(self.availability_url)
+        if not _origin_allowed(self.availability_url):
+            raise ValueError(
+                f"availability_url is out of scope: {self.availability_url}"
+            )
         self.mimic_profile = mimic_profile
         self.mimic_bridge_path = Path(mimic_bridge_path)
         self.capture_deadline_ms = capture_deadline_ms
         self.client = (
-            client if client is not None else TermrouteCurlClient(timeout=timeout)
+            client if client is not None else RnetClient(timeout=timeout)
         )
 
     @staticmethod
@@ -434,16 +426,30 @@ class CebuFlow:
     ) -> Optional[str]:
         """Capture the first BMS request body emitted by its browser script."""
 
-        bodies = await self._capture_sensor_bodies(context, max_posts=1)
+        bodies = await self._capture_sensor_bodies(
+            context,
+            max_posts=1,
+            events="none",
+            deadline_ms=1_000,
+            script_timeout_ms=8_000,
+        )
         return bodies[0] if bodies else None
 
     async def generate_abck_bodies(
         self,
         context: SensorBodyContext,
     ) -> Sequence[str]:
-        """Capture the ordered _abck bodies emitted by its browser script."""
+        """Capture ordered _abck bodies with multi-post motion/touch events."""
 
-        bodies = await self._capture_sensor_bodies(context, max_posts=20)
+        bodies = await self._capture_sensor_bodies(
+            context,
+            max_posts=ABCK_MAX_POSTS,
+            events="abck",
+            deadline_ms=self.capture_deadline_ms
+            if self.capture_deadline_ms > ABCK_CAPTURE_DEADLINE_MS
+            else ABCK_CAPTURE_DEADLINE_MS,
+            script_timeout_ms=ABCK_SCRIPT_TIMEOUT_MS,
+        )
         if not bodies:
             raise CebuFlowError("mimic did not capture an _abck sensor body")
         return bodies
@@ -460,11 +466,17 @@ class CebuFlow:
         self,
         context: SensorBodyContext,
         max_posts: int,
+        events: str = "none",
+        deadline_ms: Optional[int] = None,
+        script_timeout_ms: int = 8_000,
     ) -> List[str]:
         if not self.mimic_bridge_path.is_file():
             raise CebuFlowError(
                 f"mimic bridge not found: {self.mimic_bridge_path}"
             )
+        capture_deadline = (
+            self.capture_deadline_ms if deadline_ms is None else deadline_ms
+        )
         payload = json.dumps(
             {
                 "pageUrl": context.page_url,
@@ -473,9 +485,10 @@ class CebuFlow:
                 "scriptSource": context.script_source,
                 "cookies": self._cookie_strings(context.cookie_header),
                 "profile": self.mimic_profile,
-                "deadlineMs": self.capture_deadline_ms,
+                "deadlineMs": capture_deadline,
                 "maxPosts": max_posts,
-                "scriptTimeoutMs": 8_000,
+                "scriptTimeoutMs": script_timeout_ms,
+                "events": events,
             },
             ensure_ascii=False,
         ).encode("utf-8")
@@ -500,7 +513,7 @@ class CebuFlow:
             try:
                 stdout, stderr = await asyncio.wait_for(
                     process.communicate(),
-                    timeout=max(30, self.capture_deadline_ms / 1_000 + 25),
+                    timeout=max(30, capture_deadline / 1_000 + script_timeout_ms / 1_000 + 15),
                 )
             except asyncio.TimeoutError as error:
                 raise CebuFlowError("mimic sensor capture timed out") from error
@@ -585,16 +598,16 @@ class CebuFlow:
         post_count: Optional[int] = None,
         random_source: Optional[Any] = None,
     ) -> List[int]:
+        """Return chronological abck body indices (first N posts in order)."""
+
+        del random_source  # retained for call-site compatibility
         if length < 0:
             raise ValueError("length must be non-negative")
-        if post_count is not None:
-            if post_count < 0:
-                raise ValueError("post_count must be non-negative")
-            return list(range(length - 1, -1, -1))[:post_count]
-
-        rng = random_source if random_source is not None else random
-        indices = {0, 1, rng.randrange(10, 19)}
-        return sorted(index for index in indices if index < length)
+        if post_count is None:
+            return list(range(length))
+        if post_count < 0:
+            raise ValueError("post_count must be non-negative")
+        return list(range(min(post_count, length)))
 
     async def initialize_cookies(
         self,
@@ -662,35 +675,74 @@ class CebuFlow:
             bms_script_url=bms_url,
             abck_script_url=abck_url,
             bms_posted=bms_posted,
+            abck_body_count=len(sensor_bodies),
             abck_post_count=len(sensor_indices),
         )
 
+    @staticmethod
+    def enrich_bot_manager_cookies(cookie_header: str) -> str:
+        """Fill bot-manager cookies that browsers set client-side (not always in jar).
+
+        Real pages (and BMS) write `bm_lso` via document.cookie after seeing `bm_so`.
+        Captured browser traffic is typically:
+          bm_lso = bm_so + "~" + epoch_ms
+        node_akamai offline seeds often use bm_lso == bm_so. We follow the browser form.
+        """
+
+        if not cookie_header.strip():
+            return cookie_header
+        order: List[str] = []
+        values: Dict[str, str] = {}
+        for item in cookie_header.split(";"):
+            piece = item.strip()
+            if not piece or "=" not in piece:
+                continue
+            name, value = piece.split("=", 1)
+            if name not in values:
+                order.append(name)
+            values[name] = value
+        bm_so = values.get("bm_so")
+        if bm_so and "bm_lso" not in values:
+            # Avoid double-suffix if bm_so already ends with ~digits.
+            if re.search(r"~\d{10,}$", bm_so):
+                values["bm_lso"] = bm_so
+            else:
+                values["bm_lso"] = f"{bm_so}~{int(time() * 1000)}"
+            order.append("bm_lso")
+        return "; ".join(f"{name}={values[name]}" for name in order)
+
     def _availability_headers(self) -> Dict[str, str]:
+        # Web v3 availability: same UA/sec-ch-ua as cookie init (profile environment).
+        cookie = self.enrich_bot_manager_cookies(
+            self.cookie_header(self.availability_url)
+        )
         headers = self._browser_headers()
         headers.update(
             {
-                "connection": "close",
-                "accept": "application/json, text/plain, */*",
-                "accept-encoding": DEFAULT_ACCEPT_ENCODING,
-                "content-type": "application/json",
-                "x-auth-token": X_AUTH_TOKEN,
-                "authorization": AUTHORIZATION,
-                "x-path": X_PATH,
-                "origin": self.site_url,
-                "sec-fetch-site": "same-origin",
-                "sec-fetch-mode": "cors",
-                "sec-fetch-dest": "empty",
-                "referer": self.site_url + "/",
+                "accept": "application/json",
                 "accept-language": DEFAULT_ACCEPT_LANGUAGE,
+                "authorization": AUTHORIZATION,
+                "cache-control": "no-cache",
+                "content-type": "application/json",
+                "origin": SITE_URL,
+                "pragma": "no-cache",
                 "priority": "u=1, i",
+                "referer": SITE_URL + "/",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "x-auth-token": X_AUTH_TOKEN,
+                "x-path": X_PATH,
             }
         )
+        if cookie:
+            headers["cookie"] = cookie
         return headers
 
     @staticmethod
     def is_search_success(status: int) -> bool:
-        # upload_flow in cebu.rs accepts exactly HTTP 200, not every 2xx code.
-        return status == 200
+        # Web: bot-passed + stale/invalid anonymous auth -> HTTP 401.
+        return status == 401
 
     async def search(self, body: str = DEFAULT_SEARCH_BODY) -> SearchResult:
         response = await self.client.post(
@@ -731,7 +783,7 @@ class CebuFlow:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the Cebu staging request flow")
+    parser = argparse.ArgumentParser(description="Run the Cebu www request flow")
     parser.add_argument(
         "--availability-url",
         help="Same-origin availability URL or path",
@@ -740,7 +792,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--capture-deadline-ms",
         type=int,
-        default=1_000,
+        default=ABCK_CAPTURE_DEADLINE_MS,
+        help="Abck capture wait window in ms (default multi-post window)",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -794,7 +847,18 @@ async def _main(args: argparse.Namespace) -> int:
             "bms_script_url": initialization.bms_script_url,
             "abck_script_url": initialization.abck_script_url,
             "bms_posted": initialization.bms_posted,
+            "abck_body_count": initialization.abck_body_count,
             "abck_post_count": initialization.abck_post_count,
+            "cookie_names": [
+                item.split("=", 1)[0]
+                for item in (
+                    flow.enrich_bot_manager_cookies(initialization.cookie_header)
+                    .split("; ")
+                    if initialization.cookie_header
+                    else []
+                )
+                if "=" in item
+            ],
             "search_status": search.status if search else None,
             "search_success": search.success if search else None,
             "search_body": search.body if search else None,

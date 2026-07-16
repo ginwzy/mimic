@@ -31,6 +31,207 @@ function positiveInteger(value, fallback, name) {
   return output;
 }
 
+/**
+ * Abck multi-post harness (aligned with node_akamai init/events.js):
+ * wrap XHR.send so each sensor POST schedules motion / touch sequences that
+ * drive subsequent Akamai posts during the capture deadline window.
+ */
+function wrapAbckScript(scriptSource) {
+  const prelude = String.raw`
+;(function () {
+  if (globalThis.__mimicAbckEvents) return;
+  globalThis.__mimicAbckEvents = true;
+
+  function rand(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  function wait(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function motionEvent() {
+    try {
+      return new DeviceMotionEvent('devicemotion', {
+        acceleration: {
+          x: Number(rand(-0.2, 0.2).toFixed(2)),
+          y: Number(rand(-0.2, 0.2).toFixed(2)),
+          z: Number(rand(-0.2, 0.2).toFixed(2)),
+        },
+        accelerationIncludingGravity: {
+          x: Number(rand(-0.5, 0.5).toFixed(2)),
+          y: Number(rand(9.5, 10).toFixed(2)),
+          z: Number(rand(-0.5, 0.5).toFixed(2)),
+        },
+        rotationRate: {
+          alpha: Number(rand(-1, 1).toFixed(2)),
+          beta: Number(rand(-1, 1).toFixed(2)),
+          gamma: Number(rand(-1, 1).toFixed(2)),
+        },
+        interval: 16,
+      });
+    } catch (_error) {
+      var fallback = new Event('devicemotion');
+      try {
+        Object.defineProperty(fallback, 'acceleration', {
+          value: { x: 0.1, y: 0.1, z: 0.1 },
+        });
+        Object.defineProperty(fallback, 'accelerationIncludingGravity', {
+          value: { x: 0.1, y: 9.8, z: 0.1 },
+        });
+        Object.defineProperty(fallback, 'rotationRate', {
+          value: { alpha: 0, beta: 0, gamma: 0 },
+        });
+        Object.defineProperty(fallback, 'interval', { value: 16 });
+      } catch (_defineError) {}
+      return fallback;
+    }
+  }
+
+  function orientationEvent(alpha, beta, gamma) {
+    try {
+      return new DeviceOrientationEvent('deviceorientation', {
+        alpha: alpha,
+        beta: beta,
+        gamma: gamma,
+        absolute: false,
+      });
+    } catch (_error) {
+      var fallback = new Event('deviceorientation');
+      try {
+        Object.defineProperty(fallback, 'alpha', { value: alpha });
+        Object.defineProperty(fallback, 'beta', { value: beta });
+        Object.defineProperty(fallback, 'gamma', { value: gamma });
+        Object.defineProperty(fallback, 'absolute', { value: false });
+      } catch (_defineError) {}
+      return fallback;
+    }
+  }
+
+  async function triggerSensorStream(frames, stepMs) {
+    frames = frames || 10;
+    stepMs = stepMs || 20;
+    var baseAlpha = 180 + rand(-20, 20);
+    var baseBeta = 60 + rand(-10, 10);
+    var baseGamma = rand(-5, 5);
+    for (var i = 0; i < frames; i++) {
+      window.dispatchEvent(motionEvent());
+      window.dispatchEvent(orientationEvent(
+        Number((baseAlpha + rand(-1, 1)).toFixed(1)),
+        Number((baseBeta + rand(-1, 1)).toFixed(1)),
+        Number((baseGamma + rand(-0.5, 0.5)).toFixed(1)),
+      ));
+      await wait(stepMs);
+    }
+  }
+
+  function touchLike(type, x, y) {
+    var point = { pageX: x, pageY: y, clientX: x, clientY: y, screenX: x, screenY: y, identifier: 1 };
+    var touches = type === 'touchend' ? [] : [point];
+    try {
+      return new TouchEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        touches: touches,
+        targetTouches: touches,
+        changedTouches: [point],
+      });
+    } catch (_error) {
+      var event = new Event(type, { bubbles: true, cancelable: true });
+      try {
+        Object.defineProperty(event, 'touches', { value: touches });
+        Object.defineProperty(event, 'targetTouches', { value: touches });
+        Object.defineProperty(event, 'changedTouches', { value: [point] });
+        Object.defineProperty(event, 'pageX', { value: x });
+        Object.defineProperty(event, 'pageY', { value: y });
+        Object.defineProperty(event, 'clientX', { value: x });
+        Object.defineProperty(event, 'clientY', { value: y });
+      } catch (_defineError) {}
+      return event;
+    }
+  }
+
+  function mouseLike(type, x, y) {
+    try {
+      return new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        pageX: x,
+        pageY: y,
+        screenX: x,
+        screenY: y,
+        button: 0,
+        buttons: type === 'mouseup' ? 0 : 1,
+      });
+    } catch (_error) {
+      var event = new Event(type, { bubbles: true, cancelable: true });
+      try {
+        Object.defineProperty(event, 'clientX', { value: x });
+        Object.defineProperty(event, 'clientY', { value: y });
+        Object.defineProperty(event, 'pageX', { value: x });
+        Object.defineProperty(event, 'pageY', { value: y });
+      } catch (_defineError) {}
+      return event;
+    }
+  }
+
+  async function triggerMixedSwipeSequence() {
+    var startX = 250;
+    var startY = 500;
+    var endX = 250;
+    var endY = 200;
+    var steps = 10;
+    var target = document;
+    target.dispatchEvent(touchLike('touchstart', startX, startY));
+    target.dispatchEvent(mouseLike('mousedown', startX, startY));
+    await wait(rand(50, 100));
+    for (var i = 1; i <= steps; i++) {
+      var cx = startX + (endX - startX) * (i / steps) + rand(-2, 2);
+      var cy = startY + (endY - startY) * (i / steps) + rand(-2, 2);
+      target.dispatchEvent(touchLike('touchmove', cx, cy));
+      target.dispatchEvent(mouseLike('mousemove', cx, cy));
+      await wait(rand(10, 20));
+    }
+    await wait(rand(20, 50));
+    target.dispatchEvent(touchLike('touchend', endX, endY));
+    target.dispatchEvent(mouseLike('mouseup', endX, endY));
+    // Extra mousemove bursts help CBl=11 path thresholds.
+    for (var j = 0; j < 24; j++) {
+      target.dispatchEvent(mouseLike('mousemove', endX + rand(-4, 4), endY + rand(-4, 4)));
+      await wait(4);
+    }
+  }
+
+  var xhrCount = 0;
+  var nativeSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function () {
+    xhrCount += 1;
+    var current = xhrCount;
+    var result = nativeSend.apply(this, arguments);
+    try {
+      if (current === 1) {
+        setTimeout(function () { triggerSensorStream().catch(function () {}); }, 0);
+      } else if (current === 2) {
+        setTimeout(function () { triggerMixedSwipeSequence().catch(function () {}); }, 0);
+      } else {
+        setTimeout(function () { triggerMixedSwipeSequence().catch(function () {}); }, 10);
+      }
+    } catch (_error) {}
+    return result;
+  };
+
+  // Fallback schedules if the first post is delayed past load.
+  setTimeout(function () { triggerSensorStream().catch(function () {}); }, 120);
+  setTimeout(function () { triggerMixedSwipeSequence().catch(function () {}); }, 450);
+  setTimeout(function () { triggerMixedSwipeSequence().catch(function () {}); }, 900);
+  setTimeout(function () { triggerMixedSwipeSequence().catch(function () {}); }, 1500);
+})();
+`;
+  return `${prelude}\n${scriptSource}`;
+}
+
 async function main() {
   const input = await readInput();
   const pageUrl = requireString(input, 'pageUrl');
@@ -44,15 +245,17 @@ async function main() {
   const deadlineMs = positiveInteger(input.deadlineMs, 1_000, 'deadlineMs');
   const maxPosts = positiveInteger(input.maxPosts, 1, 'maxPosts');
   const scriptTimeoutMs = positiveInteger(input.scriptTimeoutMs, 8_000, 'scriptTimeoutMs');
-  const material = { pageUrl, pageHtml, cookies };
+  const events = input.events === 'abck' ? 'abck' : 'none';
+  const material = { pageUrl, pageHtml, cookies, events };
   const page = seal({
     schema: 2,
-    id: `cebu-staging-${digest(material).slice(0, 16)}`,
+    id: `cebu-www-${digest(material).slice(0, 16)}`,
     source: { kind: 'manual', hash: digest(material) },
     url: pageUrl,
     html: pageHtml,
     cookies,
   });
+  const code = events === 'abck' ? wrapAbckScript(scriptSource) : scriptSource;
   const mimic = createMimic({
     profile,
     page,
@@ -64,7 +267,7 @@ async function main() {
   try {
     const result = await mimic.capture({
       kind: 'capture',
-      code: scriptSource,
+      code,
       scriptUrl,
       timeout: scriptTimeoutMs,
       trace: true,
@@ -84,6 +287,7 @@ async function main() {
     writeResult({
       ok: true,
       bodies,
+      events,
       posts: posts.map((post) => ({
         via: post && typeof post === 'object' ? post.via : null,
         tag: post && typeof post === 'object' ? post.tag : null,
