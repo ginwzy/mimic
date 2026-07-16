@@ -194,9 +194,12 @@ function mediaFeature(port: Port, feature: string): boolean {
   const [rawName, rawValue] = feature.split(':', 2);
   const name = rawName?.trim();
   const value = rawValue?.trim();
-  const width = Number(port.source('window.innerWidth'));
-  const height = Number(port.source('window.innerHeight'));
-  const touchPoints = Number(port.source('window.navigator.maxTouchPoints'));
+  // Live reads: captureSources freezes values before nav/view install, so
+  // port.source('window.navigator.maxTouchPoints') stays at jsdom's 0 and
+  // Android (pointer:coarse) wrongly reports as fine (BMS iV266).
+  const width = Number(port.evaluate('innerWidth'));
+  const height = Number(port.evaluate('innerHeight'));
+  const touchPoints = Number(port.evaluate('navigator.maxTouchPoints'));
 
   if (value === undefined) {
     if (name === 'width') return width > 0;
@@ -277,8 +280,10 @@ export const globalsDriver: Driver = {
             return typeof source === 'function' ? Reflect.apply(source, self, args) : undefined;
           }
           case 'match-media': {
-            const source = port.source(String(item.source));
-            return typeof source === 'function' ? Reflect.apply(source, self, args) : makeMedia(args);
+            // Always use emulated MediaQueryList. Host jsdom matchMedia is desktop-biased
+            // (pointer:fine / hover:hover) and ignores navigator.maxTouchPoints — Android BMS
+            // sensors read coarse/none (real iV266) and dual-id tables may gate on that surface.
+            return makeMedia(args);
           }
           case 'media': {
             const [, state] = mediaState(self);

@@ -181,6 +181,8 @@ export interface Connection {
   downlink: number;
   rtt: number;
   saveData: boolean;
+  /** Network Information API `type` (wifi, cellular, …); optional for older profiles. */
+  type?: string;
 }
 
 export interface Clock {

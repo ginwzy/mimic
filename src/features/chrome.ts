@@ -50,6 +50,14 @@ function touchOps(shape: Shape): DraftOp[] {
   ];
 }
 
+/** jsdom omits Window.isSecureContext / crossOriginIsolated; Chrome exposes both. */
+function securityOps(): DraftOp[] {
+  return [
+    valueProp({ path: 'window' }, 'isSecureContext', true, true, true),
+    valueProp({ path: 'window' }, 'crossOriginIsolated', false, true, true),
+  ];
+}
+
 export function chromeTouchShape(input: Shape): Shape {
   const shape = screenShape(input);
   if (shape.features.includes('touch')) return shape;
@@ -62,11 +70,13 @@ export function chromeTouchShape(input: Shape): Shape {
       ...shape.ops,
       ...(chrome ? chromeOps() : [{ op: 'drop', target: { path: 'window' }, key: 'chrome' } as DraftOp]),
       ...touchOps(shape),
+      ...securityOps(),
     ],
     support: {
       ...shape.support,
       'chrome.shape': shape.level === 'captured' ? 'captured' : 'derived',
       'touch.shape': shape.level === 'captured' ? 'captured' : 'derived',
+      'window.secure-context': 'emulated',
     },
   }));
 }

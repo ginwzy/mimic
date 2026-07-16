@@ -12,7 +12,9 @@ const SCALARS = [
   'hardwareConcurrency', 'deviceMemory', 'maxTouchPoints', 'cookieEnabled',
 ] as const;
 const FIXED = ['webdriver', 'pdfViewerEnabled', 'doNotTrack', 'onLine'] as const;
-const CONNECTION = ['effectiveType', 'downlink', 'rtt', 'saveData'] as const;
+// Chrome NetworkInformation also exposes non-standard `type` (wifi/cellular/…);
+// Cebu BMS packs [effectiveType, rtt, type] into iV864/iV261.
+const CONNECTION = ['effectiveType', 'downlink', 'rtt', 'saveData', 'type'] as const;
 
 function operations(): DraftOp[] {
   return [
@@ -182,7 +184,26 @@ export const navFeature: Feature = {
         ...(connection ? [
           { slot: 'nav.connection.ctor', driver: 'nav', config: { op: 'illegal' } },
           { slot: 'nav.connection', driver: 'nav', config: { op: 'node', id: 'nav.connection.instance' } },
-          ...CONNECTION.map((name) => ({ slot: `nav.connection.${name}`, driver: 'nav', config: { op: 'value', value: connection[name] } })),
+          ...CONNECTION.map((name) => {
+            let value: string | number | boolean;
+            if (name === 'type') {
+              // profiles without `type` still need a string; Android Chrome often reports wifi
+              value = connection.type ?? (shape.target.form === 'mobile' ? 'wifi' : 'ethernet');
+            } else if (name === 'effectiveType') {
+              value = connection.effectiveType;
+            } else if (name === 'downlink') {
+              value = connection.downlink;
+            } else if (name === 'rtt') {
+              value = connection.rtt;
+            } else {
+              value = connection.saveData;
+            }
+            return {
+              slot: `nav.connection.${name}`,
+              driver: 'nav',
+              config: { op: 'value', value },
+            };
+          }),
           { slot: 'nav.connection.onchange.get', driver: 'nav', config: { op: 'handler-get', name: 'onchange' } },
           { slot: 'nav.connection.onchange.set', driver: 'nav', config: { op: 'handler-set', name: 'onchange' } },
         ] : []),
