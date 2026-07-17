@@ -1,2 +1,1 @@
-# Prefer: pip install -r python/requirements.txt
 rnet==3.0.0rc22
