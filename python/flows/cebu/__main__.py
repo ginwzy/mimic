@@ -30,7 +30,7 @@ async def async_main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--post-count",
         type=int,
-        help="post first N _abck bodies (default: all captured)",
+        help="post first N _abck bodies (default: first, second, last)",
     )
     add_runtime_args(p)
     args = p.parse_args(argv)
