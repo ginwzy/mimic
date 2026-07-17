@@ -703,6 +703,64 @@ def classify_result(r: dict[str, Any]) -> str:
     return f"search_{st}"
 
 
+def should_retry_edge(out: dict[str, Any], *, proxy_mode: str) -> bool:
+    """Retry only when handshake looks good but soar edge still 403 (IP/pool)."""
+    if proxy_mode != "lumi":
+        return False
+    if out.get("error"):
+        return False
+    if out.get("search_status") != 403:
+        return False
+    # Fresh cookies + sensor path OK → new sticky often helps more than re-POSTing.
+    return bool(out.get("abck_tilde0") and out.get("has_bm_s") and out.get("bms_posted"))
+
+
+async def run_attempt(
+    worker_id: int,
+    attempt: int,
+    *,
+    do_search: bool,
+    post_count: int | None,
+    proxy_mode: str,
+    lumi_country: str,
+    abck_policy: str,
+) -> dict[str, Any]:
+    """Single init(+search) on a fresh Client / Lumi sticky session."""
+    log(
+        f"attempt {attempt} start search={do_search} post_count={post_count} "
+        f"abck_policy={abck_policy} proxy={proxy_mode} lumi_country={lumi_country}"
+    )
+    client = make_client(
+        resolve_proxy(proxy_mode, lumi_country=lumi_country),
+        proxy_mode=proxy_mode,
+    )
+    out: dict[str, Any] = {
+        "worker": worker_id,
+        "attempt": attempt,
+        "proxy_mode": proxy_mode,
+        "lumi_country": lumi_country if proxy_mode == "lumi" else None,
+    }
+    init = await initialize(
+        client,
+        post_count=post_count,
+        abck_policy=abck_policy,
+        proxy_mode=proxy_mode,
+    )
+    out.update(init)
+    abck = cookie_value(str(out.get("cookies") or ""), "_abck") or ""
+    out["abck_tilde0"] = "~0~" in abck
+    out["has_bm_s"] = cookie_value(str(out.get("cookies") or ""), "bm_s") is not None
+    if do_search:
+        out.update(await search(client))
+    else:
+        out.update(search_status=None, search_success=None, search_body=None)
+        log("init-only, skip search")
+    ok = (not do_search) or bool(out.get("search_success"))
+    out["ok"] = ok
+    out["class"] = classify_result(out)
+    return out
+
+
 async def run_worker(
     worker_id: int,
     *,
@@ -711,62 +769,67 @@ async def run_worker(
     proxy_mode: str,
     lumi_country: str = LUMI_COUNTRY,
     abck_policy: str = "all",
+    retries: int = 0,
+    stagger_s: float = 0.0,
 ) -> dict[str, Any]:
-    """One full flow: own sticky proxy + client → init → optional search."""
+    """One flow with optional full-chain retries (new Lumi sticky each attempt)."""
     token = _WORKER.set(f"w{worker_id}")
     started = time()
     try:
+        if stagger_s > 0:
+            delay = stagger_s * (worker_id - 1)
+            log(f"stagger sleep {delay:.2f}s")
+            await asyncio.sleep(delay)
+        max_attempts = 1 + max(0, retries)
+        last: dict[str, Any] = {}
+        for attempt in range(1, max_attempts + 1):
+            try:
+                last = await run_attempt(
+                    worker_id,
+                    attempt,
+                    do_search=do_search,
+                    post_count=post_count,
+                    proxy_mode=proxy_mode,
+                    lumi_country=lumi_country,
+                    abck_policy=abck_policy,
+                )
+            except Exception as exc:
+                log(f"FAILED attempt={attempt}: {type(exc).__name__}: {exc}")
+                last = {
+                    "worker": worker_id,
+                    "attempt": attempt,
+                    "proxy_mode": proxy_mode,
+                    "lumi_country": lumi_country if proxy_mode == "lumi" else None,
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+                last["class"] = classify_result(last)
+                # Network/proxy errors: retry on lumi; local usually not worth it.
+                if proxy_mode != "lumi" or attempt >= max_attempts:
+                    break
+                log(f"retry after exception attempt={attempt}/{max_attempts}")
+                await asyncio.sleep(0.4 * attempt)
+                continue
+
+            last["attempts"] = attempt
+            if last.get("ok") or attempt >= max_attempts:
+                break
+            if should_retry_edge(last, proxy_mode=proxy_mode):
+                log(
+                    f"edge_403 with good handshake → new sticky "
+                    f"attempt={attempt}/{max_attempts}"
+                )
+                await asyncio.sleep(0.35 * attempt)
+                continue
+            break
+
+        last["elapsed_s"] = round(time() - started, 2)
         log(
-            f"worker start search={do_search} post_count={post_count} "
-            f"abck_policy={abck_policy} proxy={proxy_mode} lumi_country={lumi_country}"
+            f"worker done ok={last.get('ok')} class={last.get('class')} "
+            f"status={last.get('search_status')} attempts={last.get('attempts', 1)} "
+            f"elapsed={last['elapsed_s']}s"
         )
-        # Fresh proxy object per worker so Lumi session ids never share.
-        # Same Client for entire init+search → sticky session + cookie jar stay bound.
-        client = make_client(
-            resolve_proxy(proxy_mode, lumi_country=lumi_country),
-            proxy_mode=proxy_mode,
-        )
-        out: dict[str, Any] = {
-            "worker": worker_id,
-            "proxy_mode": proxy_mode,
-            "lumi_country": lumi_country if proxy_mode == "lumi" else None,
-        }
-        try:
-            init = await initialize(
-                client,
-                post_count=post_count,
-                abck_policy=abck_policy,
-                proxy_mode=proxy_mode,
-            )
-            out.update(init)
-            abck = cookie_value(str(out.get("cookies") or ""), "_abck") or ""
-            out["abck_tilde0"] = "~0~" in abck
-            out["has_bm_s"] = cookie_value(str(out.get("cookies") or ""), "bm_s") is not None
-            if do_search:
-                out.update(await search(client))
-            else:
-                out.update(search_status=None, search_success=None, search_body=None)
-                log("init-only, skip search")
-            ok = (not do_search) or bool(out.get("search_success"))
-            out["ok"] = ok
-            out["class"] = classify_result(out)
-            out["elapsed_s"] = round(time() - started, 2)
-            log(
-                f"worker done ok={ok} class={out['class']} "
-                f"status={out.get('search_status')} elapsed={out['elapsed_s']}s"
-            )
-            return out
-        except Exception as exc:
-            log(f"FAILED: {type(exc).__name__}: {exc}")
-            fail = {
-                "worker": worker_id,
-                "proxy_mode": proxy_mode,
-                "ok": False,
-                "error": f"{type(exc).__name__}: {exc}",
-                "elapsed_s": round(time() - started, 2),
-            }
-            fail["class"] = classify_result(fail)
-            return fail
+        return last
     finally:
         _WORKER.reset(token)
 
@@ -779,11 +842,14 @@ async def run_concurrent(
     proxy_mode: str,
     lumi_country: str = LUMI_COUNTRY,
     abck_policy: str = "all",
+    retries: int = 0,
+    stagger_s: float = 0.0,
 ) -> list[dict[str, Any]]:
     """Run N independent flows in parallel (each: own sticky proxy+cookies)."""
     log(
         f"concurrent start n={concurrency} search={do_search} "
-        f"proxy={proxy_mode} lumi_country={lumi_country} abck_policy={abck_policy}"
+        f"proxy={proxy_mode} lumi_country={lumi_country} abck_policy={abck_policy} "
+        f"retries={retries} stagger_s={stagger_s}"
     )
     tasks = [
         run_worker(
@@ -793,6 +859,8 @@ async def run_concurrent(
             proxy_mode=proxy_mode,
             lumi_country=lumi_country,
             abck_policy=abck_policy,
+            retries=retries,
+            stagger_s=stagger_s,
         )
         for i in range(concurrency)
     ]
@@ -809,12 +877,14 @@ async def run_concurrent(
                 f"summary w{wid}: ok status={r.get('search_status')} "
                 f"class={r.get('class')} abck_posts={r.get('abck_post_count')} "
                 f"bms={r.get('bms_posted')} tilde0={r.get('abck_tilde0')} "
-                f"bm_s={r.get('has_bm_s')} elapsed={r.get('elapsed_s')}s"
+                f"bm_s={r.get('has_bm_s')} attempts={r.get('attempts', 1)} "
+                f"elapsed={r.get('elapsed_s')}s"
             )
         else:
             log(
                 f"summary w{wid}: FAIL class={r.get('class')} "
-                f"{r.get('error')} elapsed={r.get('elapsed_s')}s"
+                f"attempts={r.get('attempts', 1)} {r.get('error')} "
+                f"elapsed={r.get('elapsed_s')}s"
             )
     return list(results)
 
@@ -856,6 +926,26 @@ async def main() -> int:
         help=f"Bright Data -country-XX (default {LUMI_COUNTRY}); only with --proxy lumi",
     )
     p.add_argument(
+        "--retries",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "extra full-flow attempts on Lumi edge_403 (new sticky each time). "
+            "default: 2 for --proxy lumi, 0 otherwise"
+        ),
+    )
+    p.add_argument(
+        "--stagger",
+        type=float,
+        default=None,
+        metavar="SEC",
+        help=(
+            "delay (worker_id-1)*SEC before each worker starts. "
+            "default: 0.4s when concurrency>1 and --proxy lumi, else 0"
+        ),
+    )
+    p.add_argument(
         "--json-out",
         type=Path,
         help="write full results JSON array to this path",
@@ -864,11 +954,24 @@ async def main() -> int:
     if args.concurrency < 1:
         log("concurrency must be >= 1")
         return 2
+    retries = args.retries
+    if retries is None:
+        retries = 2 if args.proxy == "lumi" else 0
+    if retries < 0:
+        log("retries must be >= 0")
+        return 2
+    stagger = args.stagger
+    if stagger is None:
+        stagger = 0.4 if (args.proxy == "lumi" and args.concurrency > 1) else 0.0
+    if stagger < 0:
+        log("stagger must be >= 0")
+        return 2
 
     log(
         f"start search={args.search} post_count={args.post_count} "
         f"abck_policy={args.abck_policy} concurrency={args.concurrency} "
-        f"proxy={args.proxy} lumi_country={args.lumi_country}"
+        f"proxy={args.proxy} lumi_country={args.lumi_country} "
+        f"retries={retries} stagger={stagger}"
     )
     results = await run_concurrent(
         args.concurrency,
@@ -877,6 +980,8 @@ async def main() -> int:
         proxy_mode=args.proxy,
         lumi_country=args.lumi_country,
         abck_policy=args.abck_policy,
+        retries=retries,
+        stagger_s=stagger,
     )
     if args.json_out:
         slim = []
@@ -898,6 +1003,7 @@ async def main() -> int:
                         "bms_posted",
                         "abck_tilde0",
                         "has_bm_s",
+                        "attempts",
                         "elapsed_s",
                         "error",
                     )
