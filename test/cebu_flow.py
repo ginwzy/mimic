@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import base64
 import json
 import re
 import secrets
@@ -35,8 +34,8 @@ PROXY_HEADERS = {"X-ClientHello-Id": "hellochrome_150"}
 LUMI_PROXY_URL = "http://servercountry-gb.brd.superproxy.io:22225/"
 # Single fixed exit country (no random multi-country). Sticky pin is per-flow session id.
 LUMI_COUNTRY = "gb"
-# Keep exit IP for the whole init+search chain (abck multi-POST + BMS + availability).
-LUMI_SESSION_DURATION_MIN = 15
+# Zone credentials (username prefix + zone password). Optional params go on the username.
+LUMI_CUSTOMER_ZONE = "lum-customer-travel_fusion-zone-gen"
 LUMI_PASSWORD = "j48ly0d63top"
 SELECT_FLIGHT = f"{SITE}/en-PH/booking/select-flight"
 SEARCH_URL = "https://soar.cebupacificair.com/ceb-omnix-proxy-v3/availability"
@@ -100,28 +99,27 @@ def get_lumi_proxy(
     *,
     country: str = LUMI_COUNTRY,
     session_id: str | None = None,
-    session_duration_min: int = LUMI_SESSION_DURATION_MIN,
 ) -> Proxy:
     """Bright Data residential: fixed country + unique sticky session for this Client.
 
-    Each call mints a new session id so concurrent workers do not share an exit IP.
-    sessionduration keeps that IP for the full flow (not just the first hop).
+    Each call mints a new alphanumeric session id so concurrent workers do not
+    share an exit IP. Stickiness is Bright Data's default session TTL (re-use the
+    same session id for the whole Client lifetime — do not invent invalid params
+    like sessionduration; those yield ProxyAuthRequired / 407).
     """
+    # Alphanumeric only — Bright Data rejects session values with '-' / '*'.
     sid = session_id or secrets.token_hex(8)
-    # user:pass — country + unique session + duration pin the exit for this Client.
     user = (
-        f"lum-customer-travel_fusion-zone-gen-country-{country}"
-        f"-session-{sid}-sessionduration-{session_duration_min}-route_err-block"
+        f"{LUMI_CUSTOMER_ZONE}-country-{country}"
+        f"-session-{sid}-route_err-block"
     )
-    token = f"{user}:{LUMI_PASSWORD}"
-    auth = base64.b64encode(token.encode()).decode()
-    log(
-        f"lumi proxy country={country} session={sid} "
-        f"duration={session_duration_min}m url={LUMI_PROXY_URL}"
-    )
+    log(f"lumi proxy country={country} session={sid} url={LUMI_PROXY_URL}")
+    # Native username/password → CONNECT Proxy-Authorization (more reliable than
+    # stuffing Basic into custom_http_headers under concurrency).
     return Proxy.all(
         LUMI_PROXY_URL,
-        custom_http_headers={"Proxy-Authorization": f"Basic {auth}"},
+        username=user,
+        password=LUMI_PASSWORD,
     )
 
 def get_mitm_proxy() -> Proxy:
