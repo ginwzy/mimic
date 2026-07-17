@@ -562,8 +562,14 @@ async def search(client: Client, body: str = DEFAULT_BODY) -> dict:
     return {"search_status": status, "search_success": ok, "search_body": text}
 
 
+# Per-worker full-flow tries. Residential exits are hit-or-miss; 403 / proxy
+# errors get a fresh sticky session (new exit IP) rather than reusing a bad peer.
+DEFAULT_ATTEMPTS = 3
+RETRY_BACKOFF_S = 0.4
+
+
 def make_client(proxy: Proxy | None = None) -> Client:
-    """Local network by default (no proxy). Pass proxy=... only when explicitly needed."""
+    """Build a Client. Default: new Lumi sticky session (unique exit pin)."""
     kwargs: dict[str, Any] = {
         "emulation": EmulationOption(
             emulation=Emulation.Chrome144,
@@ -574,13 +580,61 @@ def make_client(proxy: Proxy | None = None) -> Client:
         "redirect": Policy.limited(10),
         "verify": False,
     }
-    if proxy is not None:
-        kwargs["proxies"] = [proxy]
-    # Local verification: no proxies. Historical options:
+    # Always assign proxies last so a fresh get_lumi_proxy() session is used.
     kwargs["proxies"] = [proxy if proxy is not None else get_lumi_proxy()]
+    # Historical options:
     # kwargs["proxies"] = [Proxy.all(REQABLE_PROXY)]
     # kwargs["proxies"] = [get_mitm_proxy()]
     return Client(**kwargs)
+
+
+def _is_retryable_exc(exc: BaseException) -> bool:
+    """Proxy/connect/timeout failures → new sticky session may help."""
+    name = type(exc).__name__.lower()
+    msg = str(exc).lower()
+    needles = (
+        "proxy",
+        "timeout",
+        "timed out",
+        "connect",
+        "connection",
+        "reset",
+        "tls",
+        "ssl",
+        "dns",
+        "network",
+    )
+    return any(n in name for n in needles) or any(n in msg for n in needles)
+
+
+def _is_retryable_result(out: dict[str, Any], *, do_search: bool) -> bool:
+    """403 Access Denied on availability (or hard init 403) → try another exit."""
+    if do_search:
+        status = out.get("search_status")
+        if status == 403:
+            return True
+        # Edge sometimes returns other non-401 bot denials; only 403 is clear-cut.
+        return False
+    return False
+
+
+async def run_once(
+    *,
+    do_search: bool,
+    post_count: int | None,
+) -> dict[str, Any]:
+    """Single attempt: new client/proxy → init → optional search."""
+    client = make_client()
+    out: dict[str, Any] = {}
+    init = await initialize(client, post_count=post_count)
+    out.update(init)
+    if do_search:
+        out.update(await search(client))
+    else:
+        out.update(search_status=None, search_success=None, search_body=None)
+        log("init-only, skip search")
+    out["ok"] = (not do_search) or bool(out.get("search_success"))
+    return out
 
 
 async def run_worker(
@@ -588,37 +642,91 @@ async def run_worker(
     *,
     do_search: bool,
     post_count: int | None,
+    attempts: int = DEFAULT_ATTEMPTS,
 ) -> dict[str, Any]:
-    """One full flow: own proxy + client → init → optional search."""
+    """Full flow with fresh sticky session per attempt on retryable failure."""
     token = _WORKER.set(f"w{worker_id}")
     started = time()
+    attempts = max(1, attempts)
+    last: dict[str, Any] = {"worker": worker_id, "ok": False}
     try:
-        log(f"worker start search={do_search} post_count={post_count}")
-        client = make_client()
-        out: dict[str, Any] = {"worker": worker_id}
-        try:
-            init = await initialize(client, post_count=post_count)
-            out.update(init)
-            if do_search:
-                out.update(await search(client))
-            else:
-                out.update(search_status=None, search_success=None, search_body=None)
-                log("init-only, skip search")
-            ok = (not do_search) or bool(out.get("search_success"))
-            out["ok"] = ok
+        log(
+            f"worker start search={do_search} post_count={post_count} "
+            f"attempts={attempts}"
+        )
+        for attempt in range(1, attempts + 1):
+            log(f"attempt {attempt}/{attempts}")
+            try:
+                out = await run_once(do_search=do_search, post_count=post_count)
+            except Exception as exc:
+                err = f"{type(exc).__name__}: {exc}"
+                log(f"FAILED: {err}")
+                last = {
+                    "worker": worker_id,
+                    "ok": False,
+                    "error": err,
+                    "attempt": attempt,
+                    "attempts": attempts,
+                }
+                if attempt < attempts and _is_retryable_exc(exc):
+                    log(f"retryable error → new sticky session after {RETRY_BACKOFF_S}s")
+                    await asyncio.sleep(RETRY_BACKOFF_S)
+                    continue
+                last["elapsed_s"] = round(time() - started, 2)
+                log(f"worker done ok=False elapsed={last['elapsed_s']}s")
+                return last
+
+            out["worker"] = worker_id
+            out["attempt"] = attempt
+            out["attempts"] = attempts
             out["elapsed_s"] = round(time() - started, 2)
-            log(f"worker done ok={ok} elapsed={out['elapsed_s']}s")
+            last = out
+            if out.get("ok"):
+                log(
+                    f"worker done ok=True status={out.get('search_status')} "
+                    f"attempt={attempt}/{attempts} elapsed={out['elapsed_s']}s"
+                )
+                return out
+            if attempt < attempts and _is_retryable_result(out, do_search=do_search):
+                log(
+                    f"retryable result status={out.get('search_status')} "
+                    f"→ new sticky session after {RETRY_BACKOFF_S}s"
+                )
+                await asyncio.sleep(RETRY_BACKOFF_S)
+                continue
+            log(
+                f"worker done ok=False status={out.get('search_status')} "
+                f"error={out.get('error')} attempt={attempt}/{attempts} "
+                f"elapsed={out['elapsed_s']}s"
+            )
             return out
-        except Exception as exc:
-            log(f"FAILED: {type(exc).__name__}: {exc}")
-            return {
-                "worker": worker_id,
-                "ok": False,
-                "error": f"{type(exc).__name__}: {exc}",
-                "elapsed_s": round(time() - started, 2),
-            }
+
+        last["elapsed_s"] = round(time() - started, 2)
+        log(f"worker done ok=False elapsed={last.get('elapsed_s')}s")
+        return last
     finally:
         _WORKER.reset(token)
+
+
+def _summary_line(r: dict[str, Any]) -> str:
+    wid = r.get("worker")
+    att = f"attempt={r.get('attempt')}/{r.get('attempts')}"
+    if r.get("ok"):
+        return (
+            f"summary w{wid}: ok status={r.get('search_status')} "
+            f"abck_posts={r.get('abck_post_count')} {att} "
+            f"elapsed={r.get('elapsed_s')}s"
+        )
+    if r.get("error"):
+        return (
+            f"summary w{wid}: FAIL {r.get('error')} {att} "
+            f"elapsed={r.get('elapsed_s')}s"
+        )
+    return (
+        f"summary w{wid}: FAIL status={r.get('search_status')} "
+        f"abck_posts={r.get('abck_post_count')} {att} "
+        f"elapsed={r.get('elapsed_s')}s"
+    )
 
 
 async def run_concurrent(
@@ -626,11 +734,20 @@ async def run_concurrent(
     *,
     do_search: bool,
     post_count: int | None,
+    attempts: int = DEFAULT_ATTEMPTS,
 ) -> list[dict[str, Any]]:
-    """Run N independent flows in parallel (each: lumi proxy + init + search)."""
-    log(f"concurrent start n={concurrency} search={do_search}")
+    """Run N independent flows in parallel (each: own sticky session + retries)."""
+    log(
+        f"concurrent start n={concurrency} search={do_search} "
+        f"attempts={attempts}"
+    )
     tasks = [
-        run_worker(i + 1, do_search=do_search, post_count=post_count)
+        run_worker(
+            i + 1,
+            do_search=do_search,
+            post_count=post_count,
+            attempts=attempts,
+        )
         for i in range(concurrency)
     ]
     results = await asyncio.gather(*tasks)
@@ -638,14 +755,7 @@ async def run_concurrent(
     fail_n = concurrency - ok_n
     log(f"concurrent summary ok={ok_n} fail={fail_n} total={concurrency}")
     for r in results:
-        wid = r.get("worker")
-        if r.get("ok"):
-            log(
-                f"summary w{wid}: ok status={r.get('search_status')} "
-                f"abck_posts={r.get('abck_post_count')} elapsed={r.get('elapsed_s')}s"
-            )
-        else:
-            log(f"summary w{wid}: FAIL {r.get('error')} elapsed={r.get('elapsed_s')}s")
+        log(_summary_line(r))
     return list(results)
 
 
@@ -665,23 +775,37 @@ async def main() -> int:
         metavar="N",
         help="run N full flows in parallel (each own proxy+cookies); default 1",
     )
+    p.add_argument(
+        "--attempts",
+        type=int,
+        default=DEFAULT_ATTEMPTS,
+        metavar="N",
+        help=(
+            "per-worker full-flow tries; 403/proxy fail mints a new sticky "
+            f"session (default {DEFAULT_ATTEMPTS})"
+        ),
+    )
     args = p.parse_args()
     if args.concurrency < 1:
         log("concurrency must be >= 1")
         return 2
+    if args.attempts < 1:
+        log("attempts must be >= 1")
+        return 2
 
     log(
         f"start search={args.search} post_count={args.post_count} "
-        f"concurrency={args.concurrency}"
+        f"concurrency={args.concurrency} attempts={args.attempts}"
     )
     results = await run_concurrent(
         args.concurrency,
         do_search=args.search,
         post_count=args.post_count,
+        attempts=args.attempts,
     )
     if not args.search:
         return 0 if all(r.get("ok") for r in results) else 1
-    ok_n = sum(1 for r in results if r.get("search_success"))
+    ok_n = sum(1 for r in results if r.get("search_success") or r.get("ok"))
     code = 0 if ok_n == len(results) else 1
     log(f"exit {code} search_ok={ok_n}/{len(results)}")
     return code
