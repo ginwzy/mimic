@@ -243,6 +243,76 @@ function wrapBmsProbe(scriptSource) {
   if (globalThis.__mimicBmsAssignProbe) return;
   globalThis.__mimicBmsAssignProbe = true;
   globalThis.__bmsAssignBatches = [];
+  globalThis.__bmsSwLog = [];
+  // Non-invasive SharedWorker spy (preserve constructor.name === "SharedWorker").
+  try {
+    var NativeSW = globalThis.SharedWorker;
+    globalThis.__bmsSwLog.push({
+      t: 'gate',
+      present: typeof NativeSW === 'function',
+      name: NativeSW && NativeSW.prototype && NativeSW.prototype.constructor
+        ? NativeSW.prototype.constructor.name
+        : null,
+    });
+    if (typeof NativeSW === 'function') {
+      var SpySW = function SharedWorker(url, opts) {
+        globalThis.__bmsSwLog.push({ t: 'construct', url: String(url).slice(0, 96) });
+        var sw = opts !== undefined ? new NativeSW(url, opts) : new NativeSW(url);
+        try {
+          var port = sw.port;
+          var start = port.start;
+          if (typeof start === 'function') {
+            port.start = function () {
+              globalThis.__bmsSwLog.push({ t: 'port.start' });
+              return start.call(port);
+            };
+          }
+          var desc = Object.getOwnPropertyDescriptor(port, 'onmessage');
+          var setOn = function (fn) {
+            globalThis.__bmsSwLog.push({ t: 'port.onmessage.set', isFn: typeof fn === 'function' });
+            var wrapped = typeof fn === 'function' ? function (ev) {
+              try {
+                var d = ev && ev.data;
+                globalThis.__bmsSwLog.push({
+                  t: 'port.message',
+                  status: d && typeof d === 'object' ? d.status : undefined,
+                  topKeys: d && typeof d === 'object' ? Object.keys(d).slice(0, 12) : null,
+                  dataKeys: d && d.data && typeof d.data === 'object' ? Object.keys(d.data).slice(0, 24) : null,
+                });
+              } catch (_e) {}
+              return fn.apply(this, arguments);
+            } : fn;
+            if (desc && typeof desc.set === 'function') desc.set.call(port, wrapped);
+            else {
+              // Fall back: assign may use data property
+              try { port.onmessage = wrapped; } catch (_e2) {}
+            }
+          };
+          if (desc && desc.configurable) {
+            Object.defineProperty(port, 'onmessage', {
+              configurable: true,
+              enumerable: true,
+              get: desc.get ? function () { return desc.get.call(port); } : function () { return null; },
+              set: setOn,
+            });
+          }
+        } catch (e) {
+          globalThis.__bmsSwLog.push({ t: 'spy-error', err: String(e && e.message || e) });
+        }
+        return sw;
+      };
+      SpySW.prototype = NativeSW.prototype;
+      try {
+        Object.defineProperty(SpySW, 'name', { value: 'SharedWorker' });
+        Object.defineProperty(SpySW, 'prototype', { value: NativeSW.prototype });
+      } catch (_n) {}
+      // Critical: BMS checks SharedWorker.prototype.constructor.name
+      try { NativeSW.prototype.constructor = SpySW; } catch (_c) {}
+      globalThis.SharedWorker = SpySW;
+    }
+  } catch (e0) {
+    globalThis.__bmsSwLog.push({ t: 'gate-error', err: String(e0 && e0.message || e0) });
+  }
   var nativeAssign = Object.assign;
   var batchIndex = 0;
   Object.assign = function (target) {
@@ -314,6 +384,7 @@ function wrapBmsProbe(scriptSource) {
             batchCount: batches.length,
             uniqueKeys: Object.keys(unique).length,
             batches: batches,
+            swLog: globalThis.__bmsSwLog || [],
           });
           var x = new XMLHttpRequest();
           x.open('POST', (location && location.origin ? location.origin : '') + '/__mimic_bms_assign__', true);

@@ -100,3 +100,89 @@ test('Worker runs data: URL scripts', async () => {
   }
   assert.equal(engine.active, 0);
 });
+
+// Bare `onconnect=fn` (not self.onconnect=) as in live Cebu BMS SharedWorker blob.
+test('SharedWorker accepts bare onconnect assignment under with(self)', async () => {
+  const { engine, runtime } = await open('android-chrome/2201116sg-v138-10025');
+  try {
+    const result = runtime.run(`(() => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('bare onconnect timeout')), 3000);
+      const source = 'onconnect=function(ev){ev.ports[0].postMessage(7)};';
+      const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+      const sw = new SharedWorker(url);
+      sw.port.start();
+      sw.port.onmessage = function (ev) {
+        clearTimeout(timer);
+        resolve(ev.data);
+      };
+    }))()`);
+    assert.equal(result.ok, true, result.ok ? undefined : result.error);
+    assert.equal(await result.value, 7);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
+// Cebu BMS dual-id second table: SharedWorker + port; fails closed with status 260
+// when typeof SharedWorker is missing or constructor.name !== "SharedWorker".
+test('SharedWorker fires connect and bridges port.postMessage', async () => {
+  const { engine, runtime } = await open('android-chrome/2201116sg-v138-10025');
+  try {
+    const result = runtime.run(`(() => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('shared worker timeout')), 3000);
+      if (typeof SharedWorker !== 'function') {
+        clearTimeout(timer);
+        reject(new Error('SharedWorker missing'));
+        return;
+      }
+      if (SharedWorker.prototype.constructor.name !== 'SharedWorker') {
+        clearTimeout(timer);
+        reject(new Error('SharedWorker.name gate failed: ' + SharedWorker.prototype.constructor.name));
+        return;
+      }
+      const source = \`
+        self.onconnect = function (ev) {
+          var port = ev.ports[0];
+          var glOk = false;
+          try {
+            if (typeof OffscreenCanvas === 'function') {
+              var gl = new OffscreenCanvas(0, 0).getContext('webgl');
+              glOk = !!gl;
+            }
+          } catch (e) {}
+          port.postMessage({
+            ok: true,
+            glOk: glOk,
+            nav: typeof navigator,
+            uad: typeof navigator.userAgentData,
+          });
+        };
+      \`;
+      const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+      const sw = new SharedWorker(url);
+      sw.port.start();
+      sw.port.onmessage = function (ev) {
+        clearTimeout(timer);
+        resolve(ev.data);
+      };
+      sw.onerror = function (err) {
+        clearTimeout(timer);
+        reject(new Error(String(err)));
+      };
+    }))()`);
+    assert.equal(result.ok, true, result.ok ? undefined : result.error);
+    const value = await result.value as {
+      ok: boolean;
+      glOk: boolean;
+      nav: string;
+      uad: string;
+    };
+    assert.equal(value.ok, true);
+    assert.equal(value.nav, 'object');
+    assert.equal(value.glOk, true);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});

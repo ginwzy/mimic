@@ -195,9 +195,10 @@ function offscreenCanvasOps(): DraftOp[] {
   ];
 }
 
-/** Constructible Worker surface (EventTarget); script body is not executed — enough for presence gates. */
+/** Constructible Worker surface (EventTarget); blob/data scripts run same-process. */
 function workerOps(): DraftOp[] {
   const proto = { node: 'dom.Worker.proto' } as const;
+  const shared = { node: 'dom.SharedWorker.proto' } as const;
   return [
     { op: 'alloc', id: 'dom.Worker.proto', kind: 'object' },
     {
@@ -227,6 +228,25 @@ function workerOps(): DraftOp[] {
         'postMessage', 'terminate', 'onmessage', 'onerror', 'onmessageerror',
         'constructor', { symbol: 'toStringTag' },
       ],
+    },
+    // BMS dual-id second table: SharedWorker + port (status 260 if ctor.name !== "SharedWorker").
+    { op: 'alloc', id: 'dom.SharedWorker.proto', kind: 'object' },
+    {
+      op: 'alloc', id: 'dom.SharedWorker.ctor', kind: 'function', slot: 'dom.SharedWorker.ctor',
+      shape: fnShape('SharedWorker', 1, true, true), prototype: shared,
+    },
+    { op: 'proto', target: shared, value: { path: 'window.EventTarget.prototype' } },
+    refProp({ path: 'window' }, 'SharedWorker', 'dom.SharedWorker.ctor'),
+    refProp(shared, 'constructor', 'dom.SharedWorker.ctor'),
+    tag(shared, 'SharedWorker'),
+    fn('dom.SharedWorker.port.get', 'dom.SharedWorker.port.get', 'get port'),
+    fn('dom.SharedWorker.onerror.get', 'dom.SharedWorker.onerror.get', 'get onerror'),
+    fn('dom.SharedWorker.onerror.set', 'dom.SharedWorker.onerror.set', 'set onerror', 1),
+    accessor(shared, 'port', 'dom.SharedWorker.port.get'),
+    accessor(shared, 'onerror', 'dom.SharedWorker.onerror.get', 'dom.SharedWorker.onerror.set'),
+    {
+      op: 'order', target: shared,
+      keys: ['port', 'onerror', 'constructor', { symbol: 'toStringTag' }],
     },
   ];
 }
@@ -359,6 +379,18 @@ export const domFeature: Feature = {
       { slot: 'dom.Worker.onerror.set', driver: 'dom', config: { op: 'handler-set', name: 'onerror' } },
       { slot: 'dom.Worker.onmessageerror.get', driver: 'dom', config: { op: 'handler-get', name: 'onmessageerror' } },
       { slot: 'dom.Worker.onmessageerror.set', driver: 'dom', config: { op: 'handler-set', name: 'onmessageerror' } },
+      {
+        slot: 'dom.SharedWorker.ctor', driver: 'dom', config: { op: 'shared-worker' },
+        sources: [
+          'window.EventTarget',
+          'window.Function',
+          'window.MessageEvent',
+          'window.setTimeout',
+        ],
+      },
+      { slot: 'dom.SharedWorker.port.get', driver: 'dom', config: { op: 'shared-port' } },
+      { slot: 'dom.SharedWorker.onerror.get', driver: 'dom', config: { op: 'handler-get', name: 'onerror' } },
+      { slot: 'dom.SharedWorker.onerror.set', driver: 'dom', config: { op: 'handler-set', name: 'onerror' } },
       { slot: 'dom.url.createObjectURL', driver: 'dom', config: { op: 'create-object-url' } },
       { slot: 'dom.url.revokeObjectURL', driver: 'dom', config: { op: 'revoke-object-url' } },
       {
@@ -379,6 +411,7 @@ export const domFeature: Feature = {
     ],
     support: {
       'dom.worker': 'emulated', // blob:/data: scripts run same-process; no OS thread
+      'dom.shared-worker': 'emulated', // BMS dual-id second table path
       'dom.blob-url': 'emulated',
       'dom.offscreencanvas': 'emulated',
       'dom.rtc': 'emulated',
@@ -438,6 +471,16 @@ type WorkerState = {
   main: object;
   scope: object | null;
   scriptUrl: string;
+  /** SharedWorker: main-thread MessagePort (sw.port). */
+  sharedPort?: object;
+  kind: 'dedicated' | 'shared';
+};
+
+type PortLink = {
+  closed: boolean;
+  started: boolean;
+  peer: object | null;
+  queue: unknown[];
 };
 
 /**
@@ -453,6 +496,7 @@ export const domDriver: Driver = {
     const handlers = new WeakMap<object, Map<string, unknown>>();
     const offscreens = new WeakMap<object, { canvas: object }>();
     const workers = new WeakMap<object, WorkerState>();
+    const ports = new WeakMap<object, PortLink>();
     const eventTarget = port.source('window.EventTarget');
     const HTMLCanvasElement = port.source('window.HTMLCanvasElement');
     const FunctionCtor = port.source('window.Function');
@@ -514,18 +558,20 @@ export const domDriver: Driver = {
       }
     };
 
-    const deliverMessage = (target: object, data: unknown): void => {
-      const payload = cloneData(data);
-      let event: object;
+    const makeMessageEvent = (type: string, init: { data?: unknown; ports?: object[] }): object => {
       if (typeof MessageEventCtor === 'function') {
         try {
-          event = Reflect.construct(MessageEventCtor, ['message', { data: payload }]) as object;
+          return Reflect.construct(MessageEventCtor, [type, init]) as object;
         } catch {
-          event = { type: 'message', data: payload } as object;
+          /* fall through */
         }
-      } else {
-        event = { type: 'message', data: payload } as object;
       }
+      return { type, data: init.data ?? null, ports: init.ports ?? [] } as object;
+    };
+
+    const deliverMessage = (target: object, data: unknown): void => {
+      const payload = cloneData(data);
+      const event = makeMessageEvent('message', { data: payload });
       const mapped = handlers.get(target)?.get('onmessage');
       const own = Reflect.get(target, 'onmessage');
       for (const handler of [mapped, own]) {
@@ -543,6 +589,104 @@ export const domDriver: Driver = {
           Reflect.apply(dispatch, target, [event]);
         } catch {
           /* ignore listener errors */
+        }
+      }
+    };
+
+    /** MessagePort pair for SharedWorker.port ↔ connect event ports[0]. */
+    const makePortPair = (): { main: object; worker: object } => {
+      const makeSide = (): object => (
+        typeof eventTarget === 'function'
+          ? Reflect.construct(eventTarget, []) as object
+          : Object.create(null) as object
+      );
+      const main = makeSide();
+      const worker = makeSide();
+      const mainLink: PortLink = { closed: false, started: false, peer: worker, queue: [] };
+      const workerLink: PortLink = { closed: false, started: false, peer: main, queue: [] };
+      ports.set(main, mainLink);
+      ports.set(worker, workerLink);
+
+      const flush = (selfPort: object, link: PortLink): void => {
+        while (link.queue.length > 0) {
+          const item = link.queue.shift();
+          deliverMessage(selfPort, item);
+        }
+      };
+
+      const wire = (selfPort: object, link: PortLink): void => {
+        Reflect.set(selfPort, 'start', () => {
+          if (link.closed) return;
+          link.started = true;
+          flush(selfPort, link);
+        });
+        Reflect.set(selfPort, 'close', () => {
+          link.closed = true;
+          link.queue.length = 0;
+        });
+        Reflect.set(selfPort, 'postMessage', (data: unknown) => {
+          if (link.closed || !link.peer) return;
+          const peerLink = ports.get(link.peer);
+          if (!peerLink || peerLink.closed) return;
+          // Queue until peer has started or installed onmessage (MessagePort semantics).
+          const peerHasHandler = handlers.get(link.peer)?.get('onmessage') != null
+            || typeof Reflect.get(link.peer, 'onmessage') === 'function';
+          if (!peerLink.started && !peerHasHandler) {
+            peerLink.queue.push(cloneData(data));
+            return;
+          }
+          peerLink.started = true;
+          deliverMessage(link.peer, data);
+        });
+        Object.defineProperty(selfPort, 'onmessage', {
+          get() {
+            return handlers.get(selfPort)?.get('onmessage') ?? null;
+          },
+          set(value: unknown) {
+            let values = handlers.get(selfPort);
+            if (!values) {
+              values = new Map();
+              handlers.set(selfPort, values);
+            }
+            values.set('onmessage', value ?? null);
+            if (typeof value === 'function' && !link.closed) {
+              link.started = true;
+              flush(selfPort, link);
+            }
+          },
+          enumerable: true,
+          configurable: true,
+        });
+      };
+      wire(main, mainLink);
+      wire(worker, workerLink);
+      return { main, worker };
+    };
+
+    const fireConnect = (state: WorkerState, workerPort: object): void => {
+      if (state.terminated || !state.scope) return;
+      // Plain event object: jsdom MessageEvent often drops `ports`.
+      const event = {
+        type: 'connect',
+        ports: [workerPort],
+        data: null,
+        source: null,
+      } as object;
+      const scope = state.scope;
+      const own = Reflect.get(scope, 'onconnect');
+      if (typeof own === 'function') {
+        try {
+          Reflect.apply(own as Function, scope, [event]);
+        } catch (error) {
+          fireWorkerError(state.main, error);
+        }
+      }
+      const dispatch = Reflect.get(scope, 'dispatchEvent');
+      if (typeof dispatch === 'function') {
+        try {
+          Reflect.apply(dispatch, scope, [event]);
+        } catch {
+          /* ignore */
         }
       }
     };
@@ -678,6 +822,12 @@ export const domDriver: Driver = {
       Reflect.set(scope, 'clearInterval', realmEval<unknown>('clearInterval'));
       Reflect.set(scope, 'atob', realmEval<unknown>('typeof atob === "function" ? atob : undefined'));
       Reflect.set(scope, 'btoa', realmEval<unknown>('typeof btoa === "function" ? btoa : undefined'));
+      Reflect.set(scope, 'Promise', realmEval<unknown>('Promise'));
+      // BMS SharedWorker blob uses bare `onconnect=fn` (not self.onconnect=).
+      // with(self) only assigns to self when the property already exists — seed it.
+      Reflect.set(scope, 'onconnect', null);
+      Reflect.set(scope, 'onmessage', null);
+      Reflect.set(scope, 'onerror', null);
       Reflect.set(scope, 'location', {
         href: state.scriptUrl,
         toString() {
@@ -689,6 +839,17 @@ export const domDriver: Driver = {
         runInWorkerScope(scope, code);
       } catch (error) {
         fireWorkerError(state.main, error);
+        return;
+      }
+
+      // SharedWorker scripts wait for connect; fire after script registration.
+      if (state.kind === 'shared' && state.sharedPort) {
+        const workerPort = ports.get(state.sharedPort)?.peer ?? null;
+        if (workerPort) {
+          const wLink = ports.get(workerPort);
+          if (wLink) wLink.started = true;
+          schedule(() => fireConnect(state, workerPort));
+        }
       }
     };
 
@@ -766,6 +927,12 @@ export const domDriver: Driver = {
           state.terminated = true;
           return undefined;
         }
+        if (item.op === 'shared-port') {
+          const main = asObject(port, self);
+          const state = workers.get(main);
+          if (!state || !state.sharedPort) throw port.error('TypeError', 'Illegal invocation');
+          return state.sharedPort;
+        }
         if (item.op === 'offscreen-context') {
           const { canvas } = offscreenOf(self);
           const getContext = Reflect.get(Object.getPrototypeOf(canvas) as object, 'getContext');
@@ -795,22 +962,30 @@ export const domDriver: Driver = {
       },
       construct: (raw, args) => {
         const item = config(raw);
-        if (item.op === 'worker') {
+        if (item.op === 'worker' || item.op === 'shared-worker') {
           if (typeof eventTarget !== 'function') {
             throw port.error('TypeError', 'EventTarget is unavailable');
           }
+          const isShared = item.op === 'shared-worker';
+          const label = isShared ? 'SharedWorker' : 'Worker';
           if (args.length < 1) {
-            throw port.error('TypeError', "Failed to construct 'Worker': 1 argument required, but only 0 present.");
+            throw port.error('TypeError', `Failed to construct '${label}': 1 argument required, but only 0 present.`);
           }
           const scriptUrl = String(args[0]);
           const main = Reflect.construct(eventTarget, []) as object;
-          Object.setPrototypeOf(main, asObject(port, port.node('dom.Worker.proto')));
+          Object.setPrototypeOf(
+            main,
+            asObject(port, port.node(isShared ? 'dom.SharedWorker.proto' : 'dom.Worker.proto')),
+          );
           handlers.set(main, new Map());
+          const pair = isShared ? makePortPair() : null;
           const state: WorkerState = {
             terminated: false,
             main,
             scope: null,
             scriptUrl,
+            kind: isShared ? 'shared' : 'dedicated',
+            ...(pair ? { sharedPort: pair.main } : {}),
           };
           workers.set(main, state);
           schedule(() => {
