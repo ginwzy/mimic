@@ -1,0 +1,168 @@
+{
+  "meta": {
+    "source": "fp_env-akamai",
+    "captureFile": "z__env_10025.json",
+    "hygiene": {
+      "devicePixelRatio": 2.75,
+      "issues": []
+    },
+    "fidelity": {
+      "navigator": "real",
+      "screen": "real",
+      "window": "real",
+      "timezone": "real",
+      "webgl": "params",
+      "canvas": "absent",
+      "audio": "absent",
+      "fonts": "absent"
+    },
+    "traits": {
+      "engine": "chromium",
+      "platform": "android",
+      "formFactor": "mobile",
+      "host": "chrome",
+      "version": 145
+    },
+    "name": "android-chrome/2201116sg-v145-10025"
+  },
+  "navigator": {
+    "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36",
+    "appVersion": "5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36",
+    "platform": "Linux armv8l",
+    "vendor": "Google Inc.",
+    "language": "en-GB",
+    "languages": [
+      "en-GB",
+      "en-US",
+      "en",
+      "pl"
+    ],
+    "hardwareConcurrency": 8,
+    "deviceMemory": 4,
+    "maxTouchPoints": 5,
+    "cookieEnabled": true,
+    "userAgentData": {
+      "brands": [
+        {
+          "brand": "Not)A;Brand",
+          "version": "8"
+        },
+        {
+          "brand": "Chromium",
+          "version": "145"
+        },
+        {
+          "brand": "Google Chrome",
+          "version": "145"
+        }
+      ],
+      "mobile": true,
+      "platform": "Android",
+      "architecture": "",
+      "bitness": "",
+      "model": "2201116SG",
+      "platformVersion": "13.0.0",
+      "uaFullVersion": "145.0.7632.109",
+      "fullVersionList": [
+        {
+          "brand": "Not)A;Brand",
+          "version": "8.0.0.0"
+        },
+        {
+          "brand": "Chromium",
+          "version": "145.0.7632.109"
+        },
+        {
+          "brand": "Google Chrome",
+          "version": "145.0.7632.109"
+        }
+      ],
+      "wow64": false
+    },
+    "connection": {
+      "effectiveType": "4g",
+      "downlink": 8.4,
+      "rtt": 200,
+      "saveData": false
+    }
+  },
+  "screen": {
+    "width": 393,
+    "height": 873,
+    "availWidth": 393,
+    "availHeight": 873,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "orientation": {
+      "type": "portrait-primary",
+      "angle": 0
+    }
+  },
+  "window": {
+    "innerWidth": 392,
+    "innerHeight": 736,
+    "outerWidth": 393,
+    "outerHeight": 737,
+    "devicePixelRatio": 2.75
+  },
+  "timezone": {
+    "timeZone": "Europe/Bucharest",
+    "offset": -180
+  },
+  "webgl": {
+    "parameters": {
+      "3379": 4096,
+      "3386": [
+        16384,
+        16384
+      ],
+      "3410": 8,
+      "3411": 8,
+      "3412": 8,
+      "3413": 8,
+      "3414": 24,
+      "3415": 0,
+      "7936": "WebKit",
+      "7937": "WebKit WebGL",
+      "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "33901": [
+        1,
+        1023
+      ],
+      "33902": [
+        1,
+        8
+      ],
+      "34024": 16384,
+      "34047": 16,
+      "34076": 4096,
+      "34921": 32,
+      "34930": 16,
+      "35660": 16,
+      "35661": 96,
+      "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+      "36347": 256,
+      "36348": 31,
+      "36349": 256,
+      "37445": "Google Inc. (Qualcomm)",
+      "37446": "ANGLE (Qualcomm, Adreno (TM) 619, OpenGL ES 3.2)"
+    },
+    "extensions": [
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_float_blend",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_norm16",
+      "OES_texture_float_linear",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw"
+    ],
+    "unmaskedVendor": "Google Inc. (Qualcomm)",
+    "unmaskedRenderer": "ANGLE (Qualcomm, Adreno (TM) 619, OpenGL ES 3.2)"
+  }
+}

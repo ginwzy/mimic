@@ -25,6 +25,10 @@
       "file": "chromium/chrome/android/mobile/141.json",
       "sha256": "73c2530ef1f3443f34ce17bc40f172b62843f892af687fbceed595e47c480634"
     },
+    "chromium/chrome/android/mobile/145": {
+      "file": "chromium/chrome/android/mobile/145.json",
+      "sha256": "cb5471d88bb9770bc81c530f8dbf33d2413360f6bf935c97dafd53a3fd4981ad"
+    },
     "chromium/chrome/linux/desktop/143": {
       "file": "chromium/chrome/linux/desktop/143.json",
       "sha256": "67c316b1850cbd77517e9ae7fdc5414195de2d0f8fdb013a7453d007ec6bcab7"

@@ -46,16 +46,21 @@ LUMI_PASSWORD = "j48ly0d63top"
 SELECT_FLIGHT = f"{SITE}/en-PH/booking/select-flight"
 SEARCH_URL = "https://soar.cebupacificair.com/ceb-omnix-proxy-v3/availability"
 BRIDGE = Path(__file__).with_name("cebu_capture.mjs")
-PROFILE = "android-chrome/2201116sg-v138-10025"
+# Sensor UA strings are Chrome/145; shape stays v138 (traits.version) for SharedWorker ops.
+PROFILE = "android-chrome/2201116sg-v145-10025"
 
-# Wire UA tracks rnet Emulation (Chrome144-class); profile sensor stays v138 for now.
-# Aligning wire→138 with TLS/emulation mismatch regressed local 401; keep prior wire.
+# TLS (rnet) + wire UA + profile sensor UA all Chrome Android 145 (rnet max useful pin).
+CHROME_MAJOR = 145
 UA = (
     "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
+    f"(KHTML, like Gecko) Chrome/{CHROME_MAJOR}.0.0.0 Mobile Safari/537.36"
 )
-SEC_CH_UA = '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"'
+SEC_CH_UA = (
+    f'"Not;A=Brand";v="8", "Chromium";v="{CHROME_MAJOR}", '
+    f'"Google Chrome";v="{CHROME_MAJOR}"'
+)
 ACCEPT_LANG = "en-GB,en-US;q=0.9,en;q=0.8,pl;q=0.7"
+RNET_EMULATION = Emulation.Chrome145
 DOC_ACCEPT = (
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,"
     "image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
@@ -659,7 +664,7 @@ def make_client(
     http_timeout = 60 if proxy_mode == "lumi" else 30
     kwargs: dict[str, Any] = {
         "emulation": EmulationOption(
-            emulation=Emulation.Chrome144,
+            emulation=RNET_EMULATION,
             emulation_os=EmulationOS.Android,
         ),
         "cookie_store": True,

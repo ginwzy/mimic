@@ -15,6 +15,7 @@ const ids = [
   'chromium/chrome/android/mobile/139',
   'chromium/chrome/android/mobile/140',
   'chromium/chrome/android/mobile/141',
+  'chromium/chrome/android/mobile/145',
   'chromium/chrome/linux/desktop/143',
   'chromium/chrome/macos/desktop/131',
   'chromium/chrome/macos/desktop/148',
