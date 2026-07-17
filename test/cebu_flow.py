@@ -4,8 +4,8 @@ import argparse
 import asyncio
 import base64
 import json
-import random
 import re
+import secrets
 import sys
 import tempfile
 from contextvars import ContextVar
@@ -30,10 +30,13 @@ def log(msg: str) -> None:
 SITE = "https://www.cebupacificair.com"
 # HTTP CONNECT proxy; X-ClientHello-Id is sent on the CONNECT hop.
 REQABLE_PROXY = "http://10.5.2.79:9001"
-PROXY = "http://95.179.202.136:24800"
+MITM_PROXY = "http://95.179.202.136:24800"
 PROXY_HEADERS = {"X-ClientHello-Id": "hellochrome_150"}
 LUMI_PROXY_URL = "http://servercountry-gb.brd.superproxy.io:22225/"
-LUMI_EXIT_NODES = ("es", "gb", "it", "de", "ie", "fr", "nl", "no", "se", "dk", "pl")
+# Single fixed exit country (no random multi-country). Sticky pin is per-flow session id.
+LUMI_COUNTRY = "gb"
+# Keep exit IP for the whole init+search chain (abck multi-POST + BMS + availability).
+LUMI_SESSION_DURATION_MIN = 15
 LUMI_PASSWORD = "j48ly0d63top"
 SELECT_FLIGHT = f"{SITE}/en-PH/booking/select-flight"
 SEARCH_URL = "https://soar.cebupacificair.com/ceb-omnix-proxy-v3/availability"
@@ -93,22 +96,40 @@ def browser_headers() -> dict:
     }
 
 
-def get_lumi_proxy() -> Proxy:
-    """Bright Data (Luminati) residential proxy; random EU/UK exit + sticky session."""
-    exit_node = random.choice(LUMI_EXIT_NODES)
-    # user:pass — country + session pin the exit for this Client lifetime.
+def get_lumi_proxy(
+    *,
+    country: str = LUMI_COUNTRY,
+    session_id: str | None = None,
+    session_duration_min: int = LUMI_SESSION_DURATION_MIN,
+) -> Proxy:
+    """Bright Data residential: fixed country + unique sticky session for this Client.
+
+    Each call mints a new session id so concurrent workers do not share an exit IP.
+    sessionduration keeps that IP for the full flow (not just the first hop).
+    """
+    sid = session_id or secrets.token_hex(8)
+    # user:pass — country + unique session + duration pin the exit for this Client.
     user = (
-        f"lum-customer-travel_fusion-zone-gen-country-{exit_node}"
-        f"-session-{exit_node}-route_err-block"
+        f"lum-customer-travel_fusion-zone-gen-country-{country}"
+        f"-session-{sid}-sessionduration-{session_duration_min}-route_err-block"
     )
     token = f"{user}:{LUMI_PASSWORD}"
     auth = base64.b64encode(token.encode()).decode()
-    log(f"lumi proxy exit={exit_node} url={LUMI_PROXY_URL}")
+    log(
+        f"lumi proxy country={country} session={sid} "
+        f"duration={session_duration_min}m url={LUMI_PROXY_URL}"
+    )
     return Proxy.all(
         LUMI_PROXY_URL,
         custom_http_headers={"Proxy-Authorization": f"Basic {auth}"},
     )
 
+def get_mitm_proxy() -> Proxy:
+    """MITM HTTP CONNECT proxy; X-ClientHello-Id header on CONNECT hop."""
+    return Proxy.all(
+        MITM_PROXY,
+        custom_http_headers=PROXY_HEADERS,
+    )
 
 def cookie_header(client: Client, url: str = SITE) -> str:
     jar = client.cookie_jar
@@ -547,7 +568,7 @@ def make_client(proxy: Proxy | None = None) -> Client:
     """Local network by default (no proxy). Pass proxy=... only when explicitly needed."""
     kwargs: dict[str, Any] = {
         "emulation": EmulationOption(
-            emulation=Emulation.Chrome145,
+            emulation=Emulation.Chrome144,
             emulation_os=EmulationOS.Android,
         ),
         "cookie_store": True,
@@ -558,8 +579,9 @@ def make_client(proxy: Proxy | None = None) -> Client:
     if proxy is not None:
         kwargs["proxies"] = [proxy]
     # Local verification: no proxies. Historical options:
-    # kwargs["proxies"] = [proxy if proxy is not None else get_lumi_proxy()]
+    kwargs["proxies"] = [proxy if proxy is not None else get_lumi_proxy()]
     # kwargs["proxies"] = [Proxy.all(REQABLE_PROXY)]
+    # kwargs["proxies"] = [get_mitm_proxy()]
     return Client(**kwargs)
 
 
