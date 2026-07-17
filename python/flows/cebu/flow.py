@@ -97,14 +97,11 @@ async def initialize(ctx: FlowContext, post_count: int | None = None) -> dict:
     if not sensor_bodies:
         raise RuntimeError("no _abck bodies captured")
 
-    # Default: post all captured abck bodies.
-    to_post = select_abck_bodies(
-        sensor_bodies,
-        post_count=post_count if post_count is not None else len(sensor_bodies),
-    )
+    # Default: first, second, last (see select_abck_bodies). --post-count N → first N.
+    to_post = select_abck_bodies(sensor_bodies, post_count=post_count)
     log(
         f"abck will post {len(to_post)}/{len(sensor_bodies)} bodies "
-        f"(policy={'first-N=' + str(post_count) if post_count is not None else 'all'})"
+        f"(policy={'first-N=' + str(post_count) if post_count is not None else '1st+2nd+last'})"
     )
     abck_post = {
         **base,

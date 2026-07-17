@@ -40,7 +40,7 @@ def extract_abck_script(html: str) -> str | None:
 def select_abck_bodies(
     bodies: list[str], post_count: int | None = None
 ) -> list[str]:
-    """Pick abck bodies to POST. Default policy when post_count set: first N."""
+    """Pick abck bodies to POST. Default: first, second, last; --post-count N → first N."""
     if not bodies:
         return []
     if post_count is not None:
@@ -49,4 +49,5 @@ def select_abck_bodies(
         return bodies[:1]
     if len(bodies) == 2:
         return bodies[:2]
+    # first, second, last (deduped naturally when short)
     return [bodies[0], bodies[1], bodies[-1]]
