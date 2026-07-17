@@ -48,12 +48,14 @@ SEARCH_URL = "https://soar.cebupacificair.com/ceb-omnix-proxy-v3/availability"
 BRIDGE = Path(__file__).with_name("cebu_capture.mjs")
 PROFILE = "android-chrome/2201116sg-v138-10025"
 
+# Wire UA tracks rnet Emulation (Chrome144-class); profile sensor stays v138 for now.
+# Aligning wire→138 with TLS/emulation mismatch regressed local 401; keep prior wire.
 UA = (
     "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
 )
 SEC_CH_UA = '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"'
-ACCEPT_LANG = "dz-BT,dz;q=0.9,en;q=0.8"
+ACCEPT_LANG = "en-GB,en-US;q=0.9,en;q=0.8,pl;q=0.7"
 DOC_ACCEPT = (
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,"
     "image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
