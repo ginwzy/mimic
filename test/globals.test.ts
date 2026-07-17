@@ -209,3 +209,32 @@ test('globals keeps APIs absent when the WebView Shape says they are absent', as
   }
   assert.equal(engine.active, 0);
 });
+
+// Bare `navigator.maxTouchPoints` in port.evaluate was 0/undefined while the page
+// navigator had 5 → pointer:fine desktop tell; dual-id BMS tables may gate on coarse.
+test('globals matchMedia reports coarse/none for Android maxTouchPoints>0', async () => {
+  const { engine, runtime } = await open('android-chrome/2201116sg-v138-10025');
+  try {
+    const result = runtime.run(`JSON.stringify({
+      tp: navigator.maxTouchPoints,
+      fine: matchMedia('(pointer: fine)').matches,
+      coarse: matchMedia('(pointer: coarse)').matches,
+      hoverHover: matchMedia('(hover: hover)').matches,
+      hoverNone: matchMedia('(hover: none)').matches,
+      anyFine: matchMedia('(any-pointer: fine)').matches,
+      anyCoarse: matchMedia('(any-pointer: coarse)').matches,
+    })`);
+    assert.equal(result.ok, true, result.ok ? undefined : result.error);
+    const value = JSON.parse(String(result.value));
+    assert.ok(value.tp > 0, `maxTouchPoints=${value.tp}`);
+    assert.equal(value.fine, false);
+    assert.equal(value.coarse, true);
+    assert.equal(value.hoverHover, false);
+    assert.equal(value.hoverNone, true);
+    assert.equal(value.anyFine, false);
+    assert.equal(value.anyCoarse, true);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});

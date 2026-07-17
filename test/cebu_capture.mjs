@@ -232,6 +232,102 @@ function wrapAbckScript(scriptSource) {
   return `${prelude}\n${scriptSource}`;
 }
 
+/**
+ * BMS multi-id probe: log Object.assign batches whose keys look like sensor ids
+ * (e.g. Ey### / iV###). After first XHR.send, emit a second probe POST body
+ * `__BMS_ASSIGN__{...}` so capture can surface batches (maxPosts≥2).
+ */
+function wrapBmsProbe(scriptSource) {
+  const prelude = String.raw`
+;(function () {
+  if (globalThis.__mimicBmsAssignProbe) return;
+  globalThis.__mimicBmsAssignProbe = true;
+  globalThis.__bmsAssignBatches = [];
+  var nativeAssign = Object.assign;
+  var batchIndex = 0;
+  Object.assign = function (target) {
+    var beforeKeys = -1;
+    try {
+      if (target && typeof target === 'object' && !Array.isArray(target)) {
+        beforeKeys = Object.keys(target).length;
+      }
+    } catch (_b) {}
+    var result = nativeAssign.apply(this, arguments);
+    try {
+      if (target && typeof target === 'object') {
+        var keys = [];
+        var sample = {};
+        for (var i = 1; i < arguments.length; i++) {
+          var src = arguments[i];
+          if (!src || typeof src !== 'object') continue;
+          var ks = Object.keys(src);
+          for (var j = 0; j < ks.length; j++) {
+            var k = ks[j];
+            // Live: lD### / Ey### ; HAR-era: iV###
+            if (/^[A-Za-z]{1,4}\d{2,4}$/.test(k)) {
+              keys.push(k);
+              if (Object.keys(sample).length < 8) {
+                var v = src[k];
+                var t = v === null ? 'null' : typeof v;
+                sample[k] = t === 'string'
+                  ? (v.length > 48 ? v.slice(0, 48) + '…' : v)
+                  : t === 'number' || t === 'boolean' ? v : t;
+              }
+            }
+          }
+        }
+        if (keys.length > 0) {
+          batchIndex += 1;
+          globalThis.__bmsAssignBatches.push({
+            i: batchIndex,
+            n: keys.length,
+            beforeKeys: beforeKeys,
+            afterKeys: Object.keys(target).filter(function (k) {
+              return /^[A-Za-z]{1,4}\d{2,4}$/.test(k);
+            }).length,
+            isArray: Array.isArray(target),
+            keys: keys.slice(0, 200),
+            sample: sample,
+          });
+        }
+      }
+    } catch (_e) {}
+    return result;
+  };
+
+  var dumped = false;
+  var nativeSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function () {
+    var ret = nativeSend.apply(this, arguments);
+    if (!dumped) {
+      dumped = true;
+      setTimeout(function () {
+        try {
+          var unique = {};
+          var batches = globalThis.__bmsAssignBatches || [];
+          for (var b = 0; b < batches.length; b++) {
+            var ks = batches[b].keys || [];
+            for (var t = 0; t < ks.length; t++) unique[ks[t]] = 1;
+          }
+          var payload = JSON.stringify({
+            marker: '__BMS_ASSIGN__',
+            batchCount: batches.length,
+            uniqueKeys: Object.keys(unique).length,
+            batches: batches,
+          });
+          var x = new XMLHttpRequest();
+          x.open('POST', (location && location.origin ? location.origin : '') + '/__mimic_bms_assign__', true);
+          x.send('__BMS_ASSIGN__' + payload);
+        } catch (_e2) {}
+      }, 30);
+    }
+    return ret;
+  };
+})();
+`;
+  return `${prelude}\n${scriptSource}`;
+}
+
 async function main() {
   const input = await readInput();
   const pageUrl = requireString(input, 'pageUrl');
@@ -257,7 +353,9 @@ async function main() {
   });
   // BMS dual-id table must come from runtime (script-specific Ey###/iV### maps);
   // do not inject HAR-derived iV pairs into live scripts (wrong prefix/ids).
-  const code = events === 'abck' ? wrapAbckScript(scriptSource) : scriptSource;
+  let code = scriptSource;
+  if (events === 'abck') code = wrapAbckScript(scriptSource);
+  else code = wrapBmsProbe(scriptSource);
   const mimic = createMimic({
     profile,
     page,
@@ -281,15 +379,29 @@ async function main() {
     }
     const value = result.value;
     const posts = value && typeof value === 'object' && Array.isArray(value.posts) ? value.posts : [];
-    const bodies = posts.flatMap((post) => (
+    const allBodies = posts.flatMap((post) => (
       post && typeof post === 'object' && typeof post.body === 'string' && post.body.length > 0
         ? [post.body]
         : []
     ));
+    let assignProbe = null;
+    const bodies = [];
+    for (const body of allBodies) {
+      if (body.startsWith('__BMS_ASSIGN__')) {
+        try {
+          assignProbe = JSON.parse(body.slice('__BMS_ASSIGN__'.length));
+        } catch (_e) {
+          assignProbe = { parseError: true, rawLen: body.length };
+        }
+      } else {
+        bodies.push(body);
+      }
+    }
     writeResult({
       ok: true,
       bodies,
       events,
+      assignProbe,
       posts: posts.map((post) => ({
         via: post && typeof post === 'object' ? post.via : null,
         tag: post && typeof post === 'object' ? post.tag : null,

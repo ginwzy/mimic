@@ -7,6 +7,7 @@ import re
 import secrets
 import sys
 import tempfile
+from collections import Counter
 from contextvars import ContextVar
 from datetime import timedelta
 from pathlib import Path
@@ -27,11 +28,16 @@ def log(msg: str) -> None:
     print(f"[{time() - _T0:6.1f}s] {prefix}{msg}", file=sys.stderr, flush=True)
 
 SITE = "https://www.cebupacificair.com"
+# Lab / local egress. Direct datacenter IP is Akamai-whitelisted (no BMS/abck inject);
+# use LOCAL_PROXY (Clash etc.) for a non-whitelist path when not on Lumi.
+LOCAL_PROXY = "http://127.0.0.1:7890"
 # HTTP CONNECT proxy; X-ClientHello-Id is sent on the CONNECT hop.
 REQABLE_PROXY = "http://10.5.2.79:9001"
 MITM_PROXY = "http://95.179.202.136:24800"
 PROXY_HEADERS = {"X-ClientHello-Id": "hellochrome_150"}
-LUMI_PROXY_URL = "http://servercountry-gb.brd.superproxy.io:22225/"
+# Bright Data: country via username (and optional host); do not hard-pin only in host.
+LUMI_PROXY_HOST = "brd.superproxy.io"
+LUMI_PROXY_PORT = 22225
 # Single fixed exit country (no random multi-country). Sticky pin is per-flow session id.
 LUMI_COUNTRY = "gb"
 # Zone credentials (username prefix + zone password). Optional params go on the username.
@@ -113,11 +119,13 @@ def get_lumi_proxy(
         f"{LUMI_CUSTOMER_ZONE}-country-{country}"
         f"-session-{sid}-route_err-block"
     )
-    log(f"lumi proxy country={country} session={sid} url={LUMI_PROXY_URL}")
+    # Country in username; host is generic (servercountry-XX host would ignore -country-YY).
+    url = f"http://{LUMI_PROXY_HOST}:{LUMI_PROXY_PORT}/"
+    log(f"lumi proxy country={country} session={sid} url={url}")
     # Native username/password → CONNECT Proxy-Authorization (more reliable than
     # stuffing Basic into custom_http_headers under concurrency).
     return Proxy.all(
-        LUMI_PROXY_URL,
+        url,
         username=user,
         password=LUMI_PASSWORD,
     )
@@ -294,6 +302,26 @@ async def capture_bodies(
         raise RuntimeError("invalid sensor bodies from bridge")
     sizes = [len(b) for b in bodies]
     log(f"mimic capture done bodies={len(bodies)} sizes={sizes} rc={proc.returncode}")
+    probe = result.get("assignProbe")
+    if isinstance(probe, dict):
+        batches = probe.get("batches") if isinstance(probe.get("batches"), list) else []
+        per = [b.get("n") for b in batches if isinstance(b, dict)]
+        log(
+            f"BMS assignProbe batches={probe.get('batchCount')} "
+            f"uniqueKeys={probe.get('uniqueKeys')} per_batch={per}"
+        )
+        try:
+            out = Path("tmp/cebu-baseline")
+            out.mkdir(parents=True, exist_ok=True)
+            stamp = int(time())
+            (out / f"bms-assign-{stamp}.json").write_text(
+                json.dumps(probe, indent=2), encoding="utf-8"
+            )
+            if bodies:
+                (out / f"bms-body-{stamp}.txt").write_text(bodies[0], encoding="utf-8")
+            log(f"BMS assignProbe wrote tmp/cebu-baseline/bms-assign-{stamp}.json")
+        except OSError as exc:
+            log(f"BMS assignProbe write failed: {exc}")
     if stderr:
         err = stderr.decode(errors="replace").strip()
         if err:
@@ -302,23 +330,52 @@ async def capture_bodies(
     return bodies
 
 
-def select_abck_bodies(bodies: list[str], post_count: int | None = None) -> list[str]:
-    """Pick abck bodies to POST. Default: first, second, last (deduped if short)."""
+def select_abck_bodies(
+    bodies: list[str],
+    post_count: int | None = None,
+    *,
+    policy: str = "all",
+) -> list[str]:
+    """Pick abck bodies to POST.
+
+    policy:
+      - all: every captured body (worklog success path; default)
+      - edges: first, second, last (legacy sparse policy)
+    post_count: if set, first N bodies (overrides policy).
+    """
     if not bodies:
         return []
     if post_count is not None:
         return bodies[: max(0, post_count)]
-    if len(bodies) == 1:
-        return bodies[:1]
-    if len(bodies) == 2:
-        return bodies[:2]
-    # first, second, last
-    return [bodies[0], bodies[1], bodies[-1]]
+    if policy == "edges":
+        if len(bodies) == 1:
+            return bodies[:1]
+        if len(bodies) == 2:
+            return bodies[:2]
+        return [bodies[0], bodies[1], bodies[-1]]
+    if policy != "all":
+        raise ValueError(f"unknown abck policy: {policy}")
+    return list(bodies)
 
 
-async def initialize(client: Client, post_count: int | None = None) -> dict:
+def capture_deadlines(proxy_mode: str) -> tuple[int, int, int]:
+    """(abck_deadline_ms, bms_deadline_ms, script_timeout_ms) by egress RTT."""
+    # Lumi residential RTT is higher; give mimic more wall time to emit sensors.
+    if proxy_mode == "lumi":
+        return 8000, 7000, 16_000
+    return 5000, 5000, 12_000
+
+
+async def initialize(
+    client: Client,
+    post_count: int | None = None,
+    *,
+    abck_policy: str = "all",
+    proxy_mode: str = "local",
+) -> dict:
     base = browser_headers()
-    log("=== init: select-flight ===")
+    abck_dl, bms_dl, script_to = capture_deadlines(proxy_mode)
+    log(f"=== init: select-flight (proxy={proxy_mode} abck_policy={abck_policy}) ===")
     status, html = await http_get(
         client,
         SELECT_FLIGHT,
@@ -362,16 +419,22 @@ async def initialize(client: Client, post_count: int | None = None) -> dict:
 
     sensor_bodies = await capture_bodies(
         SELECT_FLIGHT, html, abck_url, abck_src, cookie_header(client),
-        max_posts=8, events="abck", deadline_ms=5000, script_timeout_ms=12_000,
+        max_posts=8, events="abck", deadline_ms=abck_dl, script_timeout_ms=script_to,
     )
     if not sensor_bodies:
         raise RuntimeError("no _abck bodies captured")
 
-    # Default: first, second, last (see select_abck_bodies). --post-count N → first N.
-    to_post = select_abck_bodies(sensor_bodies, post_count=post_count)
+    # Default: all captured bodies (worklog). --abck-policy edges / --post-count N override.
+    to_post = select_abck_bodies(
+        sensor_bodies, post_count=post_count, policy=abck_policy
+    )
+    if post_count is not None:
+        policy_label = f"first-N={post_count}"
+    else:
+        policy_label = abck_policy
     log(
         f"abck will post {len(to_post)}/{len(sensor_bodies)} bodies "
-        f"(policy={'first-N=' + str(post_count) if post_count is not None else '1st+2nd+last'})"
+        f"(policy={policy_label} deadline={abck_dl}ms)"
     )
     abck_post = {
         **base,
@@ -385,8 +448,10 @@ async def initialize(client: Client, post_count: int | None = None) -> dict:
         "accept-language": ACCEPT_LANG,
     }
     post_url = abck_url.split("?", 1)[0]
+    # Slightly longer inter-POST gap on high-RTT egress.
+    gap = 0.25 if proxy_mode == "lumi" else 0.15
     for i, body in enumerate(to_post, 1):
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(gap)
         st, _ = await http_post(
             client, post_url, abck_post, body, label=f"_abck POST {i}/{len(to_post)}"
         )
@@ -403,9 +468,10 @@ async def initialize(client: Client, post_count: int | None = None) -> dict:
         if st != 200:
             raise RuntimeError(f"BMS script HTTP {st}")
         log(f"BMS script source {len(bms_src)}B")
+        # max_posts=2: real BMS body + optional __BMS_ASSIGN__ multi-id probe post
         bodies = await capture_bodies(
             SELECT_FLIGHT, html, bms_url, bms_src, cookie_header(client),
-            max_posts=1, events="none", deadline_ms=4000, script_timeout_ms=12_000,
+            max_posts=2, events="none", deadline_ms=bms_dl, script_timeout_ms=script_to,
         )
         if bodies:
             bms_posted = True
@@ -451,6 +517,9 @@ async def initialize(client: Client, post_count: int | None = None) -> dict:
         "bms_posted": bms_posted,
         "abck_body_count": len(sensor_bodies),
         "abck_post_count": len(to_post),
+        "abck_policy": (
+            f"first-N={post_count}" if post_count is not None else abck_policy
+        ),
         "cookie_names": cookie_names,
     }
 
@@ -562,24 +631,69 @@ async def search(client: Client, body: str = DEFAULT_BODY) -> dict:
     return {"search_status": status, "search_success": ok, "search_body": text}
 
 
-def make_client(proxy: Proxy | None = None) -> Client:
-    """Build a Client. Default: new Lumi sticky session (unique exit pin)."""
+def resolve_proxy(mode: str, *, lumi_country: str = LUMI_COUNTRY) -> Proxy | None:
+    """Map CLI proxy mode to rnet Proxy (or None for direct egress)."""
+    if mode == "none":
+        # Direct from this host → often Akamai whitelist shell (no sensor scripts).
+        return None
+    if mode == "local":
+        return Proxy.all(LOCAL_PROXY)
+    if mode == "lumi":
+        return get_lumi_proxy(country=lumi_country)
+    if mode == "mitm":
+        return get_mitm_proxy()
+    if mode == "reqable":
+        return Proxy.all(REQABLE_PROXY)
+    raise ValueError(f"unknown proxy mode: {mode}")
+
+
+def make_client(
+    proxy: Proxy | None = None,
+    *,
+    proxy_mode: str = "local",
+) -> Client:
+    """Build a Client. proxy=None → direct egress; else sticky/CONNECT proxy."""
+    # Lumi RTT + multi abck POST needs a wider HTTP timeout than lab local.
+    http_timeout = 60 if proxy_mode == "lumi" else 30
     kwargs: dict[str, Any] = {
         "emulation": EmulationOption(
             emulation=Emulation.Chrome144,
             emulation_os=EmulationOS.Android,
         ),
         "cookie_store": True,
-        "timeout": timedelta(seconds=30),
+        "timeout": timedelta(seconds=http_timeout),
         "redirect": Policy.limited(10),
         "verify": False,
     }
-    # Always assign proxies last so a fresh get_lumi_proxy() session is used.
-    kwargs["proxies"] = [proxy if proxy is not None else get_lumi_proxy()]
-    # Historical options:
-    # kwargs["proxies"] = [Proxy.all(REQABLE_PROXY)]
-    # kwargs["proxies"] = [get_mitm_proxy()]
+    if proxy is not None:
+        kwargs["proxies"] = [proxy]
     return Client(**kwargs)
+
+
+def classify_result(r: dict[str, Any]) -> str:
+    """Bucket one flow for baseline notes (not a strict state machine)."""
+    if r.get("error"):
+        err = str(r["error"])
+        if "abck script not found" in err or "no BMS script" in err:
+            return "no_akamai_scripts"
+        if "no _abck bodies" in err or "BMS capture empty" in err or "mimic" in err.lower():
+            return "flow_capture"
+        if "_abck POST" in err or "BMS POST" in err or "select-flight" in err:
+            return "http_init"
+        return "exception"
+    if not r.get("bms_posted"):
+        return "bms_skip"
+    abck = cookie_value(str(r.get("cookies") or ""), "_abck") or ""
+    if "~0~" not in abck:
+        return "abck_no_tilde0"
+    st = r.get("search_status")
+    if st == 401:
+        return "ok_401"
+    if st == 403:
+        return "edge_403"
+    if st is None:
+        return "init_only"
+    return f"search_{st}"
 
 
 async def run_worker(
@@ -587,17 +701,40 @@ async def run_worker(
     *,
     do_search: bool,
     post_count: int | None,
+    proxy_mode: str,
+    lumi_country: str = LUMI_COUNTRY,
+    abck_policy: str = "all",
 ) -> dict[str, Any]:
     """One full flow: own sticky proxy + client → init → optional search."""
     token = _WORKER.set(f"w{worker_id}")
     started = time()
     try:
-        log(f"worker start search={do_search} post_count={post_count}")
-        client = make_client()
-        out: dict[str, Any] = {"worker": worker_id}
+        log(
+            f"worker start search={do_search} post_count={post_count} "
+            f"abck_policy={abck_policy} proxy={proxy_mode} lumi_country={lumi_country}"
+        )
+        # Fresh proxy object per worker so Lumi session ids never share.
+        # Same Client for entire init+search → sticky session + cookie jar stay bound.
+        client = make_client(
+            resolve_proxy(proxy_mode, lumi_country=lumi_country),
+            proxy_mode=proxy_mode,
+        )
+        out: dict[str, Any] = {
+            "worker": worker_id,
+            "proxy_mode": proxy_mode,
+            "lumi_country": lumi_country if proxy_mode == "lumi" else None,
+        }
         try:
-            init = await initialize(client, post_count=post_count)
+            init = await initialize(
+                client,
+                post_count=post_count,
+                abck_policy=abck_policy,
+                proxy_mode=proxy_mode,
+            )
             out.update(init)
+            abck = cookie_value(str(out.get("cookies") or ""), "_abck") or ""
+            out["abck_tilde0"] = "~0~" in abck
+            out["has_bm_s"] = cookie_value(str(out.get("cookies") or ""), "bm_s") is not None
             if do_search:
                 out.update(await search(client))
             else:
@@ -605,17 +742,24 @@ async def run_worker(
                 log("init-only, skip search")
             ok = (not do_search) or bool(out.get("search_success"))
             out["ok"] = ok
+            out["class"] = classify_result(out)
             out["elapsed_s"] = round(time() - started, 2)
-            log(f"worker done ok={ok} elapsed={out['elapsed_s']}s")
+            log(
+                f"worker done ok={ok} class={out['class']} "
+                f"status={out.get('search_status')} elapsed={out['elapsed_s']}s"
+            )
             return out
         except Exception as exc:
             log(f"FAILED: {type(exc).__name__}: {exc}")
-            return {
+            fail = {
                 "worker": worker_id,
+                "proxy_mode": proxy_mode,
                 "ok": False,
                 "error": f"{type(exc).__name__}: {exc}",
                 "elapsed_s": round(time() - started, 2),
             }
+            fail["class"] = classify_result(fail)
+            return fail
     finally:
         _WORKER.reset(token)
 
@@ -625,26 +769,46 @@ async def run_concurrent(
     *,
     do_search: bool,
     post_count: int | None,
+    proxy_mode: str,
+    lumi_country: str = LUMI_COUNTRY,
+    abck_policy: str = "all",
 ) -> list[dict[str, Any]]:
     """Run N independent flows in parallel (each: own sticky proxy+cookies)."""
-    log(f"concurrent start n={concurrency} search={do_search}")
+    log(
+        f"concurrent start n={concurrency} search={do_search} "
+        f"proxy={proxy_mode} lumi_country={lumi_country} abck_policy={abck_policy}"
+    )
     tasks = [
-        run_worker(i + 1, do_search=do_search, post_count=post_count)
+        run_worker(
+            i + 1,
+            do_search=do_search,
+            post_count=post_count,
+            proxy_mode=proxy_mode,
+            lumi_country=lumi_country,
+            abck_policy=abck_policy,
+        )
         for i in range(concurrency)
     ]
     results = await asyncio.gather(*tasks)
     ok_n = sum(1 for r in results if r.get("ok"))
     fail_n = concurrency - ok_n
     log(f"concurrent summary ok={ok_n} fail={fail_n} total={concurrency}")
+    buckets = Counter(str(r.get("class") or "?") for r in results)
+    log(f"class buckets: {dict(buckets)}")
     for r in results:
         wid = r.get("worker")
         if r.get("ok"):
             log(
                 f"summary w{wid}: ok status={r.get('search_status')} "
-                f"abck_posts={r.get('abck_post_count')} elapsed={r.get('elapsed_s')}s"
+                f"class={r.get('class')} abck_posts={r.get('abck_post_count')} "
+                f"bms={r.get('bms_posted')} tilde0={r.get('abck_tilde0')} "
+                f"bm_s={r.get('has_bm_s')} elapsed={r.get('elapsed_s')}s"
             )
         else:
-            log(f"summary w{wid}: FAIL {r.get('error')} elapsed={r.get('elapsed_s')}s")
+            log(
+                f"summary w{wid}: FAIL class={r.get('class')} "
+                f"{r.get('error')} elapsed={r.get('elapsed_s')}s"
+            )
     return list(results)
 
 
@@ -654,7 +818,13 @@ async def main() -> int:
     p.add_argument(
         "--post-count",
         type=int,
-        help="post first N _abck bodies (default: first, second, last)",
+        help="post first N _abck bodies (overrides --abck-policy)",
+    )
+    p.add_argument(
+        "--abck-policy",
+        choices=("all", "edges"),
+        default="all",
+        help="all=every captured body (default); edges=1st+2nd+last",
     )
     p.add_argument(
         "-j",
@@ -664,6 +834,25 @@ async def main() -> int:
         metavar="N",
         help="run N full flows in parallel (each own proxy+cookies); default 1",
     )
+    p.add_argument(
+        "--proxy",
+        choices=("local", "lumi", "none", "mitm", "reqable"),
+        default="local",
+        help=(
+            "egress: local=127.0.0.1:7890 (default; non-whitelist), "
+            "lumi=Bright Data sticky, none=direct (whitelist shell), mitm/reqable=lab"
+        ),
+    )
+    p.add_argument(
+        "--lumi-country",
+        default=LUMI_COUNTRY,
+        help=f"Bright Data -country-XX (default {LUMI_COUNTRY}); only with --proxy lumi",
+    )
+    p.add_argument(
+        "--json-out",
+        type=Path,
+        help="write full results JSON array to this path",
+    )
     args = p.parse_args()
     if args.concurrency < 1:
         log("concurrency must be >= 1")
@@ -671,13 +860,46 @@ async def main() -> int:
 
     log(
         f"start search={args.search} post_count={args.post_count} "
-        f"concurrency={args.concurrency}"
+        f"abck_policy={args.abck_policy} concurrency={args.concurrency} "
+        f"proxy={args.proxy} lumi_country={args.lumi_country}"
     )
     results = await run_concurrent(
         args.concurrency,
         do_search=args.search,
         post_count=args.post_count,
+        proxy_mode=args.proxy,
+        lumi_country=args.lumi_country,
+        abck_policy=args.abck_policy,
     )
+    if args.json_out:
+        slim = []
+        for r in results:
+            slim.append(
+                {
+                    k: r.get(k)
+                    for k in (
+                        "worker",
+                        "proxy_mode",
+                        "lumi_country",
+                        "ok",
+                        "class",
+                        "search_status",
+                        "search_success",
+                        "abck_post_count",
+                        "abck_body_count",
+                        "abck_policy",
+                        "bms_posted",
+                        "abck_tilde0",
+                        "has_bm_s",
+                        "elapsed_s",
+                        "error",
+                    )
+                    if k in r or k in ("ok", "class", "worker")
+                }
+            )
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        args.json_out.write_text(json.dumps(slim, indent=2), encoding="utf-8")
+        log(f"wrote {args.json_out}")
     if not args.search:
         return 0 if all(r.get("ok") for r in results) else 1
     ok_n = sum(1 for r in results if r.get("search_success"))

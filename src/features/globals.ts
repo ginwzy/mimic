@@ -190,6 +190,33 @@ function config(value: JsonValue | undefined): Config {
   };
 }
 
+function liveNumber(port: Port, expression: string): number {
+  try {
+    const raw = port.evaluate(expression);
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : Number.NaN;
+  } catch {
+    return Number.NaN;
+  }
+}
+
+function liveTouchPoints(port: Port): number {
+  // Prefer live realm read. captureSources can freeze path sources at jsdom's 0
+  // before nav install; expression eval can also return undefined if the getter
+  // is not visible to bare identifiers — use window.navigator explicitly.
+  for (const expr of [
+    'window.navigator.maxTouchPoints',
+    'navigator.maxTouchPoints',
+    '(function(){return navigator.maxTouchPoints})()',
+  ]) {
+    const n = liveNumber(port, expr);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  const sourced = Number(port.source('window.navigator.maxTouchPoints'));
+  if (Number.isFinite(sourced) && sourced > 0) return sourced;
+  return 0;
+}
+
 function mediaFeature(port: Port, feature: string): boolean {
   const [rawName, rawValue] = feature.split(':', 2);
   const name = rawName?.trim();
@@ -197,9 +224,9 @@ function mediaFeature(port: Port, feature: string): boolean {
   // Live reads: captureSources freezes values before nav/view install, so
   // port.source('window.navigator.maxTouchPoints') stays at jsdom's 0 and
   // Android (pointer:coarse) wrongly reports as fine (BMS iV266).
-  const width = Number(port.evaluate('innerWidth'));
-  const height = Number(port.evaluate('innerHeight'));
-  const touchPoints = Number(port.evaluate('navigator.maxTouchPoints'));
+  const width = liveNumber(port, 'window.innerWidth');
+  const height = liveNumber(port, 'window.innerHeight');
+  const touchPoints = liveTouchPoints(port);
 
   if (value === undefined) {
     if (name === 'width') return width > 0;
