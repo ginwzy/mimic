@@ -13,13 +13,14 @@
 
 ### 1.1 失败码（采集失败）
 
-| key | 值 | 问题 | 根因线索 |
-|-----|-----|------|----------|
-| **`PL248`** | `-2` | 传感器失败码；真机不应长期为 `-2` | deobf：`HD()`，vV 字节码导出 |
-| **`PL710`** | `-2` | 同上 | deobf：`MU()`，vV 字节码导出 |
+| key | 修复前 | 2026-07-20 后 | 问题 | 根因线索 |
+|-----|--------|---------------|------|----------|
+| **`PL248`** | `-2` | **`"1"`（已离开 -2）** | 曾为失败哨兵 | deobf：`HD()` VM；缺 PushManager / hasPrivateToken / iframe.loading |
+| **`PL710`** | `-2` | **仍 `-2`** | 传感器失败码 | deobf：`MU()`，另一段 vV 导出；**未修** |
 
-- 与 system colors **无关**（颜色哈希是成功态，见下）。
-- 历史 FK 时代同形态：`FK349` / `FK424` = `-2`（**数字已轮换**，勿与 248/710 硬对应）。
+- `PL248` 修复：`chromeFeature` 安装 PushManager + Document.hasPrivateToken/hasRedemptionRecord + HTMLIFrameElement.loading；chrome android shape 的 Document `order` 键补齐（见 `src/features/chrome.ts`）。
+- `PL710` 与 system colors **无关**；与 `PL248` **不同函数**，勿合并修。
+- 历史 FK 时代同形态：`FK349` / `FK424` = `-2`（**数字已轮换**）。
 
 ### 1.2 成功但假、全 mimic 固定簇（可聚类 tell）
 
@@ -47,8 +48,9 @@
 
 ### 1.4 一句话
 
-**确定性有问题的 key（本 live 脚本）：**  
-`PL248`、`PL710`（`-2`）+ `PL236`、`PL817`、`PL881`（固定假指纹）。
+**仍确定有问题的 key（本 live 脚本，修 PL248 后）：**  
+`PL710`（`-2`）+ `PL236`、`PL817`、`PL881`（固定假指纹）。  
+**已缓解：** `PL248` → 成功态 `"1"`（offline 复验）。
 
 ---
 
@@ -181,8 +183,8 @@ const { signals, n } = JSON.parse(
   require('fs').readFileSync('tmp/cebu-baseline/offline-replay/parsed-repro.json', 'utf8')
 );
 
+// 固定假指纹仍应钉死；PL248 修后不应再为 -2；PL710 仍失败直至 MU 修完
 const expect = {
-  PL248: '-2',
   PL710: '-2',
   PL236: '947d9249',
   PL817: '8e726a09c196f96bcf104fd83a6a6278c5ccca1c0b841dd8ecef621b87acf56a',
@@ -190,7 +192,12 @@ const expect = {
 };
 
 console.log('n_signals', n);
+console.log('PL248', signals.PL248, String(signals.PL248) === '-2' ? '(still fail)' : '(ok left -2)');
 let bad = 0;
+if (String(signals.PL248) === '-2') {
+  console.log('FAIL PL248 still -2');
+  bad++;
+}
 for (const [k, want] of Object.entries(expect)) {
   const got = signals[k];
   const ok = String(got) === want;
@@ -212,17 +219,18 @@ process.exit(bad ? 1 : 0);
 NODE
 ```
 
-**通过标准（当前 mimic，问题仍在时）：**
+**通过标准（2026-07-20 后）：**
 
 | 检查 | 期望 |
 |------|------|
-| `PL248` / `PL710` | `'-2'` |
+| `PL248` | **不是** `'-2'`（现为 `"1"`） |
+| `PL710` | `'-2'`（仍未修） |
 | `PL236` | `947d9249` |
 | `PL817` | 上表 64-hex |
 | `PL881` | `85eefa4e` |
 | `n_signals` | ~116（第二表开时） |
 
-修复 system colors / canvas / `-2` 后，对应断言应**故意改掉**（不再等于上表假值或 `-2`）。
+修复 canvas / 其余 `-2` / system colors 后，对应断言应**故意改掉**。
 
 ### 2.4 可选：证明「换 profile 改不了固定簇」
 
@@ -276,8 +284,9 @@ console.log("n", Object.keys(s).length);
 |--------|----------|
 | system colors 查表 | `PL236`（或同值位）**不再**为 `947d9249`；宜对齐真机 hash |
 | canvas replay | `PL817` **不再**为上表 64-hex |
-| `HD`/`MU` 能力 | `PL248`/`PL710` **不再**为 `-2` |
-| 仅改 profile | 固定簇三 hash + 两 `-2` **仍不变**（说明未修到根） |
+| `HD`（PL248） | **已做**：PushManager + hasPrivateToken + iframe.loading → `PL248`≠`-2` |
+| `MU`（PL710） | 仍 `-2`；需另解 vV `MU` 目标面 |
+| 仅改 profile | 固定簇三 hash + `PL710` **仍不变** |
 
 ---
 

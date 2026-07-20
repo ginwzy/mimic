@@ -74,6 +74,43 @@ test('chrome host exposes only the captured chrome surface', async () => {
   assert.equal(engine.active, 0);
 });
 
+test('Chrome Android exposes PushManager, hasPrivateToken, iframe loading for BMS HD', async () => {
+  const { engine, runtime } = await open('android-chrome/2201116sg-v145-10025');
+  try {
+    const result = runtime.run(`(() => {
+      const push = typeof window.PushManager;
+      const pushIn = 'PushManager' in window;
+      const pushNative = window.PushManager && Function.prototype.toString.call(window.PushManager).includes('[native code]');
+      const hptOwn = Document.prototype.hasOwnProperty('hasPrivateToken');
+      const hptIn = 'hasPrivateToken' in Document.prototype;
+      const hptType = typeof Document.prototype.hasPrivateToken;
+      const desc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'loading');
+      const loadingGetNative = !!(desc && desc.get
+        && Function.prototype.toString.call(desc.get).includes('[native code]'));
+      const iframe = document.createElement('iframe');
+      const loadingVal = iframe.loading;
+      return JSON.stringify({
+        push, pushIn, pushNative, hptOwn, hptIn, hptType,
+        hasLoadingDesc: !!desc, loadingGetNative, loadingVal,
+      });
+    })()`);
+    assert.equal(result.ok, true, result.ok ? '' : String(result.error));
+    const v = JSON.parse(String(result.value));
+    assert.equal(v.push, 'function');
+    assert.equal(v.pushIn, true);
+    assert.equal(v.pushNative, true);
+    assert.equal(v.hptOwn, true);
+    assert.equal(v.hptIn, true);
+    assert.equal(v.hptType, 'function');
+    assert.equal(v.hasLoadingDesc, true);
+    assert.equal(v.loadingGetNative, true);
+    assert.equal(v.loadingVal, 'auto');
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
 test('Shape alone controls Chrome/WebView and mobile/desktop presence', async () => {
   const webview = await open('android-webview-v138');
   try {
