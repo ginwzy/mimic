@@ -89,9 +89,12 @@ test('Chrome Android exposes PushManager, hasPrivateToken, iframe loading for BM
         && Function.prototype.toString.call(desc.get).includes('[native code]'));
       const iframe = document.createElement('iframe');
       const loadingVal = iframe.loading;
+      // Non-isolated Chrome: SharedArrayBuffer must not be on window (BMS MU/PL710).
+      const sab = typeof window.SharedArrayBuffer;
+      const iso = window.crossOriginIsolated;
       return JSON.stringify({
         push, pushIn, pushNative, hptOwn, hptIn, hptType,
-        hasLoadingDesc: !!desc, loadingGetNative, loadingVal,
+        hasLoadingDesc: !!desc, loadingGetNative, loadingVal, sab, iso,
       });
     })()`);
     assert.equal(result.ok, true, result.ok ? '' : String(result.error));
@@ -105,6 +108,8 @@ test('Chrome Android exposes PushManager, hasPrivateToken, iframe loading for BM
     assert.equal(v.hasLoadingDesc, true);
     assert.equal(v.loadingGetNative, true);
     assert.equal(v.loadingVal, 'auto');
+    assert.equal(v.iso, false);
+    assert.equal(v.sab, 'undefined');
   } finally {
     runtime.dispose();
   }

@@ -121,7 +121,7 @@ assignProbe：两 profile 均为 **uniqueKeys=110**、batches=9。
 | **system colors** | `PL236` | `947d9249` | `pR`：38 CSS system color → `JSON.stringify` → `bO(39)` seed **5381** |
 | **canvas 2d** | `PL817` | `8e726a09c196f96bcf104fd83a6a6278c5ccca1c0b841dd8ecef621b87acf56a` | `Lj()` fillText/arc；无真机 canvas 回放 |
 | **u32 簇** | `PL881` | `85eefa4e` | 疑 nav 键序 / 其它 `bO(39)`；全 mimic 固定 |
-| **fail** | `PL248`（修后 `"1"`）、`PL710` | 曾/`仍` `-2` | `HD()` 已用 PushManager/hasPrivateToken/iframe.loading 缓解；`MU()` 仍 `-2` |
+| **fail（已修）** | `PL248` / `PL710` | 曾 `-2` → **`"1"`** | HD：PushManager/hasPrivateToken/loading；MU：非隔离时去掉 SharedArrayBuffer |
 
 历史 FK 时代同值对齐示例：
 

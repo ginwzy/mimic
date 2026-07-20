@@ -50,11 +50,17 @@ function touchOps(shape: Shape): DraftOp[] {
   ];
 }
 
-/** jsdom omits Window.isSecureContext / crossOriginIsolated; Chrome exposes both. */
+/**
+ * jsdom omits isSecureContext / crossOriginIsolated.
+ * Chrome: SharedArrayBuffer is only exposed when cross-origin isolated; with
+ * crossOriginIsolated=false, SAB must be absent (else Cebu BMS MU/PL710 → -2).
+ */
 function securityOps(): DraftOp[] {
   return [
     valueProp({ path: 'window' }, 'isSecureContext', true, true, true),
     valueProp({ path: 'window' }, 'crossOriginIsolated', false, true, true),
+    // Drop host SAB so typeof window.SharedArrayBuffer === 'undefined' (non-isolated).
+    { op: 'drop', target: { path: 'window' }, key: 'SharedArrayBuffer' },
   ];
 }
 
@@ -100,6 +106,8 @@ function bmsCapabilityOps(): DraftOp[] {
   const iframeProto = { path: 'window.HTMLIFrameElement.prototype' } as const;
   const docProto = { path: 'window.Document.prototype' } as const;
   return [
+    // Disk shapes skip chromeTouchShape; re-assert non-isolated SAB absence (PL710/MU).
+    { op: 'drop', target: { path: 'window' }, key: 'SharedArrayBuffer' },
     { op: 'alloc', id: 'chrome.PushManager.proto', kind: 'object' },
     {
       op: 'alloc', id: 'chrome.PushManager.ctor', kind: 'function',
