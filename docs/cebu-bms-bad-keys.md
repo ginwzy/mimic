@@ -27,7 +27,7 @@
 
 | key | 稳定值 | 语义 | 问题 |
 |-----|--------|------|------|
-| **`PL236`** | `947d9249` | CSS system colors（ActiveBorder 等 38 色） | 已采集成功，但是 **jsdom 默认色板**；无专用 patch；换 profile **不变** |
+| **`PL236`** | 曾 `947d9249` | CSS system colors（`pR`：38 色 → `bO(39)`） | **已缓解**：`getComputedStyle` 对 system color 关键字回放 profile 色板；无 `systemColors` 时按 `profile.id` 合成（离开 jsdom 簇） |
 | **`PL817`** | `8e726a09c196f96bcf104fd83a6a6278c5ccca1c0b841dd8ecef621b87acf56a` | canvas 2d 指纹（`Lj()`） | 无真机 canvas 回放；**全员同一 hash** |
 | **`PL881`** | 曾 `85eefa4e` | OfflineAudio `Vk()` 四元组 → `bO(39)` | **已缓解**：runtime 按 profile.id 合成 reduction/sampleSum/freqSum/timeSum（可 `profile.audio` 覆盖）；零样本簇 `85eefa4e` 已离开 |
 
@@ -50,8 +50,8 @@
 ### 1.4 一句话
 
 **仍确定有问题的 key：**  
-`PL236`、`PL817`（固定假指纹簇：system colors / canvas）。  
-**已缓解：** `PL248` / `PL710` → `"1"`；`PL881` → 按 profile 合成 OfflineAudio 四元组（非全员 `85eefa4e`）。
+`PL817`（canvas 全员固定 sha256）。  
+**已缓解：** `PL248` / `PL710` → `"1"`；`PL881` audio 合成；`PL236` system colors 合成（非全员 `947d9249`）。
 
 ---
 

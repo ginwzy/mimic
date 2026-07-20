@@ -18,6 +18,7 @@
     "timezone": { "$ref": "#/definitions/timezone" },
     "webgl": { "$ref": "#/definitions/webgl" },
     "audio": { "$ref": "#/definitions/audio" },
+    "systemColors": { "$ref": "#/definitions/systemColors" },
     "evidence": { "$ref": "#/definitions/evidenceMap" }
   },
   "definitions": {
@@ -180,6 +181,11 @@
         "freqSum": { "type": "number" },
         "timeSum": { "type": "number" }
       }
+    },
+    "systemColors": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 },
+      "description": "Optional CSS system-color → rgb() map for BMS pR / getComputedStyle"
     },
     "support": { "enum": ["captured", "derived", "emulated", "shape-only", "unsupported"] },
     "evidence": {

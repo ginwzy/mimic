@@ -56,6 +56,7 @@ export { createMimic, Mimic } from './sdk.js';
 export type { MimicOptions } from './sdk.js';
 export type {
   AudioData,
+  SystemColorsData,
   Data,
   CatalogDoc,
   Bind,

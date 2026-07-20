@@ -8,7 +8,8 @@ import { digest, seal } from '../core/seal.js';
 import { shape as builtShape } from '../features/index.js';
 import type {
   AudioData, Brand, Data, Evidence, Form, Hash, Host, JsonValue, NavigatorData, Page, Part, Platform,
-  Profile, ScreenData, Shape, Source, Support, Target, TimezoneData, UaData, WebGlData, WindowData,
+  Profile, ScreenData, Shape, Source, Support, SystemColorsData, Target, TimezoneData, UaData, WebGlData,
+  WindowData,
 } from '../core/types.js';
 
 const IDENTITY = new Set(['canvas', 'webgl', 'audio', 'fonts']);
@@ -41,6 +42,7 @@ type Legacy = Data & {
   webgl?: Data;
   canvas?: Data;
   audio?: Data;
+  systemColors?: Data;
   fonts?: Data;
   location?: Data;
   timing?: Data;
@@ -475,6 +477,15 @@ function normalizeAudio(data: Data | undefined): AudioData | undefined {
   return { reduction, sampleSum, freqSum, timeSum };
 }
 
+function normalizeSystemColors(data: Data | undefined): SystemColorsData | undefined {
+  if (!data || Object.keys(data).length === 0) return undefined;
+  const out: SystemColorsData = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === 'string' && value.length > 0) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function evidenceOf(data: Legacy, source: Source, derived: string[], sections: Partial<Record<Part, unknown>>): Record<Part, Evidence> {
   const fidelity = isData(data.meta?.fidelity) ? data.meta.fidelity : {};
   const output = {} as Record<Part, Evidence>;
@@ -546,6 +557,7 @@ export function importLegacyData(
   const timezone = normalizeTimezone(data.timezone);
   const webgl = normalizeWebGl(data.webgl);
   const audio = normalizeAudio(data.audio);
+  const systemColors = normalizeSystemColors(data.systemColors);
   const sections: Partial<Record<Part, unknown>> = { navigator, screen, window, timezone, webgl, audio };
 
   const profile = parseProfile(seal({
@@ -560,6 +572,7 @@ export function importLegacyData(
     ...(timezone ? { timezone } : {}),
     ...(webgl ? { webgl } : {}),
     ...(audio ? { audio } : {}),
+    ...(systemColors ? { systemColors } : {}),
     evidence: evidenceOf(data, source, derived, sections),
   }));
 

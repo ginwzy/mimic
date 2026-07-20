@@ -7,6 +7,12 @@ import { globalsDriver, globalsFeature, globalsShape } from '../src/features/glo
 import { navDriver, navFeature } from '../src/features/nav.js';
 import { pluginsDriver, pluginsFeature } from '../src/features/plugins.js';
 import { screenDriver, screenFeature } from '../src/features/screen.js';
+import {
+  SYSTEM_COLOR_NAMES,
+  synthesizeSystemColors,
+  systemColorsBo39,
+  systemColorsPayload,
+} from '../src/features/system-colors.js';
 import { uaDriver, uaFeature } from '../src/features/ua.js';
 import { viewDriver, viewFeature } from '../src/features/view.js';
 
@@ -70,6 +76,95 @@ test('getComputedStyle returns system colors without foreign-Realm errors', asyn
       assert.match(value, /^rgba?\(/, `${name}=${value}`);
       assert.notEqual(value, 'e');
     }
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
+test('system color palette leaves the jsdom bO(39) cluster and is stable per profile id', () => {
+  // jsdom default ActiveBorder rgb(51,51,51) … → 947d9249 (BMS PL236 cluster)
+  const jsdomLike = {
+    ActiveBorder: 'rgb(51, 51, 51)',
+    ActiveCaption: 'rgb(255, 255, 255)',
+    ActiveText: 'rgb(255, 0, 0)',
+    AppWorkspace: 'rgb(255, 255, 255)',
+    Background: 'rgb(255, 255, 255)',
+    ButtonBorder: 'rgb(51, 51, 51)',
+    ButtonFace: 'rgb(204, 204, 204)',
+    ButtonHighlight: 'rgb(204, 204, 204)',
+    ButtonShadow: 'rgb(204, 204, 204)',
+    ButtonText: 'rgb(0, 0, 0)',
+    Canvas: 'rgb(255, 255, 255)',
+    CanvasText: 'rgb(0, 0, 0)',
+    CaptionText: 'rgb(0, 0, 0)',
+    Field: 'rgb(255, 255, 255)',
+    FieldText: 'rgb(0, 0, 0)',
+    GrayText: 'rgb(102, 102, 102)',
+    Highlight: 'rgb(0, 153, 255)',
+    HighlightText: 'rgb(255, 255, 255)',
+    InactiveBorder: 'rgb(51, 51, 51)',
+    InactiveCaption: 'rgb(255, 255, 255)',
+    InactiveCaptionText: 'rgb(102, 102, 102)',
+    InfoBackground: 'rgb(255, 255, 255)',
+    InfoText: 'rgb(0, 0, 0)',
+    LinkText: 'rgb(0, 0, 255)',
+    Mark: 'rgb(255, 255, 0)',
+    MarkText: 'rgb(0, 0, 0)',
+    Menu: 'rgb(255, 255, 255)',
+    MenuText: 'rgb(0, 0, 0)',
+    Scrollbar: 'rgb(255, 255, 255)',
+    ThreeDDarkShadow: 'rgb(51, 51, 51)',
+    ThreeDFace: 'rgb(204, 204, 204)',
+    ThreeDHighlight: 'rgb(51, 51, 51)',
+    ThreeDLightShadow: 'rgb(51, 51, 51)',
+    ThreeDShadow: 'rgb(51, 51, 51)',
+    VisitedText: 'rgb(128, 0, 128)',
+    Window: 'rgb(255, 255, 255)',
+    WindowFrame: 'rgb(51, 51, 51)',
+    WindowText: 'rgb(0, 0, 0)',
+  } as const;
+  assert.equal(systemColorsBo39(jsdomLike), '947d9249');
+
+  const a = synthesizeSystemColors('macos-chrome-v149');
+  const b = synthesizeSystemColors('linux-chrome');
+  assert.notEqual(systemColorsBo39(a), '947d9249');
+  assert.notEqual(systemColorsBo39(b), '947d9249');
+  assert.notEqual(systemColorsBo39(a), systemColorsBo39(b));
+  assert.equal(systemColorsBo39(synthesizeSystemColors('macos-chrome-v149')), systemColorsBo39(a));
+  assert.equal(SYSTEM_COLOR_NAMES.length, 38);
+});
+
+test('getComputedStyle BMS pR path uses synthetic palette (not jsdom 947d9249)', async () => {
+  const { engine, plan, runtime } = await open('macos-chrome-v149');
+  assert.equal(plan.support['globals.system-colors'], 'derived');
+  const expected = synthesizeSystemColors(plan.profile.id);
+  const expectedHex = systemColorsBo39(expected);
+
+  try {
+    const namesJson = JSON.stringify([...SYSTEM_COLOR_NAMES]);
+    const result = runtime.run(`(() => {
+      const names = ${namesJson};
+      const el = document.createElement('div');
+      el.style.display = 'none';
+      document.head.appendChild(el);
+      const map = {};
+      for (const name of names) {
+        el.style.cssText = 'background-color: ' + name + ' !important';
+        map[name] = getComputedStyle(el).backgroundColor;
+      }
+      el.remove();
+      return JSON.stringify(map);
+    })()`);
+    assert.equal(result.ok, true, result.ok ? undefined : String(result.error));
+    const map = JSON.parse(String(result.value)) as Record<string, string>;
+    assert.deepEqual(map, systemColorsPayload(expected));
+    // recompute bO(39) like BMS pR
+    let h = 5381;
+    const input = JSON.stringify(map);
+    for (let i = 0; i < input.length; i += 1) h = (h * 33) ^ input.charCodeAt(i);
+    assert.equal((h >>> 0).toString(16), expectedHex);
+    assert.notEqual(expectedHex, '947d9249');
   } finally {
     runtime.dispose();
   }

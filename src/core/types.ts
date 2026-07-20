@@ -164,6 +164,13 @@ export interface AudioData {
   timeSum: number;
 }
 
+/**
+ * Optional CSS system-color map for BMS pR() (ActiveBorder … WindowText).
+ * Values are computed `backgroundColor` strings (`rgb(r, g, b)`).
+ * Absent → runtime synthesizes from profile.id.
+ */
+export type SystemColorsData = Record<string, string>;
+
 export type Part = 'navigator' | 'screen' | 'window' | 'timezone' | 'webgl' | 'canvas' | 'audio' | 'fonts';
 
 export interface Evidence {
@@ -186,6 +193,8 @@ export interface Profile {
   webgl?: WebGlData;
   /** Optional captured/synthetic OfflineAudio 4-tuple; absent → runtime synthesizes from profile id. */
   audio?: AudioData;
+  /** Optional system-color rgb map for getComputedStyle; absent → synthesize from profile id. */
+  systemColors?: SystemColorsData;
   evidence: Record<Part, Evidence>;
 }
 

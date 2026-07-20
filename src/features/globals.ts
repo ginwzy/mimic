@@ -5,6 +5,12 @@ import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { pluginsShape } from './plugins.js';
 import { accessor, ctor, fn, fnShape, refProp, tag } from './ops.js';
+import {
+  resolveSystemColors,
+  systemColorLookup,
+  wrapComputedStyle,
+  type SystemColorsPalette,
+} from './system-colors.js';
 
 type Spec = readonly [name: string, length: number];
 
@@ -134,19 +140,34 @@ export function globalsShape(input: Shape): Shape {
 
 export const globalsFeature: Feature = {
   id: 'globals',
-  rev: '3',
+  rev: '4',
   requires: ['plugins'],
-  build: ({ shape }) => {
+  build: ({ shape, profile }) => {
+    const palette = resolveSystemColors(profile);
+    const fromProfile = profile.systemColors !== undefined;
     const binds = specs(shape).map(([name]) => {
       const source = `window.${name}`;
-      const sources = name === 'matchMedia'
-        ? [source, 'window.EventTarget', 'window.innerWidth', 'window.innerHeight', 'window.navigator.maxTouchPoints']
-        : [source];
+      if (name === 'matchMedia') {
+        return {
+          slot: `globals.${name}`,
+          driver: 'globals',
+          config: { op: 'match-media', source },
+          sources: [source, 'window.EventTarget', 'window.innerWidth', 'window.innerHeight', 'window.navigator.maxTouchPoints'],
+        };
+      }
+      if (name === 'getComputedStyle') {
+        return {
+          slot: `globals.${name}`,
+          driver: 'globals',
+          config: { op: 'computed-style', source, palette: palette as unknown as JsonValue },
+          sources: [source],
+        };
+      }
       return {
         slot: `globals.${name}`,
         driver: 'globals',
-        config: { op: name === 'matchMedia' ? 'match-media' : 'source', source },
-        sources,
+        config: { op: 'source', source },
+        sources: [source],
       };
     });
     return {
@@ -161,7 +182,11 @@ export const globalsFeature: Feature = {
         { slot: 'globals.media.addListener', driver: 'globals', config: { op: 'media-listener', action: 'add' } },
         { slot: 'globals.media.removeListener', driver: 'globals', config: { op: 'media-listener', action: 'remove' } },
       ],
-      support: { 'globals.source': 'emulated' },
+      support: {
+        'globals.source': 'emulated',
+        // System-color rgb map for BMS pR (PL236); shape does not declare this key.
+        'globals.system-colors': fromProfile ? 'captured' : 'derived',
+      },
     };
   },
 };
@@ -171,6 +196,7 @@ interface Config {
   source?: string;
   field?: string;
   action?: string;
+  palette?: SystemColorsPalette;
 }
 
 interface MediaState {
@@ -178,15 +204,24 @@ interface MediaState {
   onchange: unknown;
 }
 
+function readPalette(value: JsonValue | undefined): SystemColorsPalette | undefined {
+  if (value === null || value === undefined || Array.isArray(value) || typeof value !== 'object') return undefined;
+  const raw = value.palette;
+  if (raw === null || raw === undefined || Array.isArray(raw) || typeof raw !== 'object') return undefined;
+  return raw as SystemColorsPalette;
+}
+
 function config(value: JsonValue | undefined): Config {
   if (value === null || Array.isArray(value) || typeof value !== 'object' || typeof value.op !== 'string') {
     throw new TypeError('globals Driver config invalid');
   }
+  const palette = readPalette(value);
   return {
     op: value.op,
     ...(typeof value.source === 'string' ? { source: value.source } : {}),
     ...(typeof value.field === 'string' ? { field: value.field } : {}),
     ...(typeof value.action === 'string' ? { action: value.action } : {}),
+    ...(palette ? { palette } : {}),
   };
 }
 
@@ -305,6 +340,17 @@ export const globalsDriver: Driver = {
           case 'source': {
             const source = port.source(String(item.source));
             return typeof source === 'function' ? Reflect.apply(source, self, args) : undefined;
+          }
+          case 'computed-style': {
+            // BMS pR(): background-color: <SystemColor> !important → getComputedStyle.backgroundColor.
+            // Replace jsdom sandbox defaults with a profile-keyed palette (leave 947d9249).
+            const source = port.source(String(item.source ?? 'window.getComputedStyle'));
+            if (typeof source !== 'function') return undefined;
+            const style = Reflect.apply(source, self, args);
+            if (style === null || style === undefined || typeof style !== 'object') return style;
+            const palette = item.palette;
+            if (!palette) return style;
+            return wrapComputedStyle(style, args[0], systemColorLookup(palette));
           }
           case 'match-media': {
             // Always use emulated MediaQueryList. Host jsdom matchMedia is desktop-biased
