@@ -7,7 +7,7 @@ import { parsePage, parseProfile, parseShape } from '../core/parse.js';
 import { digest, seal } from '../core/seal.js';
 import { shape as builtShape } from '../features/index.js';
 import type {
-  Brand, Data, Evidence, Form, Hash, Host, JsonValue, NavigatorData, Page, Part, Platform,
+  AudioData, Brand, Data, Evidence, Form, Hash, Host, JsonValue, NavigatorData, Page, Part, Platform,
   Profile, ScreenData, Shape, Source, Support, Target, TimezoneData, UaData, WebGlData, WindowData,
 } from '../core/types.js';
 
@@ -465,6 +465,16 @@ function normalizeWebGl(data: Data | undefined): WebGlData | undefined {
   };
 }
 
+function normalizeAudio(data: Data | undefined): AudioData | undefined {
+  if (!data) return undefined;
+  const reduction = Number(data.reduction);
+  const sampleSum = Number(data.sampleSum);
+  const freqSum = Number(data.freqSum);
+  const timeSum = Number(data.timeSum);
+  if (![reduction, sampleSum, freqSum, timeSum].every(Number.isFinite)) return bad('audio');
+  return { reduction, sampleSum, freqSum, timeSum };
+}
+
 function evidenceOf(data: Legacy, source: Source, derived: string[], sections: Partial<Record<Part, unknown>>): Record<Part, Evidence> {
   const fidelity = isData(data.meta?.fidelity) ? data.meta.fidelity : {};
   const output = {} as Record<Part, Evidence>;
@@ -535,7 +545,8 @@ export function importLegacyData(
   const window = normalizeWindow(windowData);
   const timezone = normalizeTimezone(data.timezone);
   const webgl = normalizeWebGl(data.webgl);
-  const sections: Partial<Record<Part, unknown>> = { navigator, screen, window, timezone, webgl };
+  const audio = normalizeAudio(data.audio);
+  const sections: Partial<Record<Part, unknown>> = { navigator, screen, window, timezone, webgl, audio };
 
   const profile = parseProfile(seal({
     schema: 2,
@@ -548,6 +559,7 @@ export function importLegacyData(
     ...(window ? { window } : {}),
     ...(timezone ? { timezone } : {}),
     ...(webgl ? { webgl } : {}),
+    ...(audio ? { audio } : {}),
     evidence: evidenceOf(data, source, derived, sections),
   }));
 

@@ -17,6 +17,7 @@
     "window": { "$ref": "#/definitions/window" },
     "timezone": { "$ref": "#/definitions/timezone" },
     "webgl": { "$ref": "#/definitions/webgl" },
+    "audio": { "$ref": "#/definitions/audio" },
     "evidence": { "$ref": "#/definitions/evidenceMap" }
   },
   "definitions": {
@@ -167,6 +168,17 @@
         "unmaskedVendor": { "type": "string" },
         "unmaskedRenderer": { "type": "string" },
         "shaderPrecision": { "type": "object", "additionalProperties": { "$ref": "#/definitions/precision" } }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reduction", "sampleSum", "freqSum", "timeSum"],
+      "properties": {
+        "reduction": { "type": "number" },
+        "sampleSum": { "type": "number" },
+        "freqSum": { "type": "number" },
+        "timeSum": { "type": "number" }
       }
     },
     "support": { "enum": ["captured", "derived", "emulated", "shape-only", "unsupported"] },

@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { parseShape } from '../core/parse.js';
 import { seal } from '../core/seal.js';
-import type { Bind, JsonValue, Shape } from '../core/types.js';
+import type { AudioData, Bind, JsonValue, Profile, Shape } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature, Ref } from '../shape/types.js';
 import { accessor, fn, fnShape, refProp, tag } from './ops.js';
@@ -10,6 +11,69 @@ const FLOAT32 = 'window.Float32Array';
 
 type Method = readonly [owner: string, name: string, length: number, op: string, kind?: string];
 type Field = readonly [owner: string, name: string, writable: boolean, scope: string, field?: string];
+
+/** Round to 6 decimals so reduce→toFixed(6)→+ is stable for BMS bO(39). */
+export function audioRound6(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+/** Float32Array stores channel/analyser samples; match that rounding before toFixed(6). */
+function asFloat32(value: number): number {
+  return new Float32Array([value])[0]!;
+}
+
+/** Value that survives Float32Array fill → reduce → toFixed(6) → unary-plus. */
+function fingerprintSample(value: number): number {
+  return audioRound6(asFloat32(value));
+}
+
+/**
+ * Deterministic OfflineAudio 4-tuple from a stable id (profile id).
+ * Ranges approximate real offline triangle+compressor/analyser sums so the
+ * JSON object is non-zero and leaves the all-zero cluster `85eefa4e`.
+ */
+export function synthesizeAudioFingerprint(id: string): AudioData {
+  const buf = createHash('sha256').update(`audio-fp:${id}`).digest();
+  const u = (i: number): number => (buf[i] ?? 0) / 255;
+  // f32 then 6-dec so getChannelData/getFloat* fill matches BMS reduce path.
+  const sampleSum = fingerprintSample(20 + u(0) * 160 + u(1));
+  const freqSum = fingerprintSample(-8000 - u(2) * 40000 - u(3) * 100);
+  const timeSum = fingerprintSample((u(4) - 0.5) * 0.02);
+  const reduction = fingerprintSample(u(5) < 0.7 ? 0 : -(u(6) * 5));
+  return { reduction, sampleSum, freqSum, timeSum };
+}
+/** Prefer captured profile.audio; otherwise synthesize from profile.id. */
+export function resolveAudioFingerprint(profile: Profile): AudioData {
+  if (profile.audio) {
+    return {
+      reduction: fingerprintSample(profile.audio.reduction),
+      sampleSum: fingerprintSample(profile.audio.sampleSum),
+      freqSum: fingerprintSample(profile.audio.freqSum),
+      timeSum: fingerprintSample(profile.audio.timeSum),
+    };
+  }
+  return synthesizeAudioFingerprint(profile.id);
+}
+
+/** BMS bO(39) seed 5381 — used by tests and offline checks. */
+export function audioBo39(input: string, seed = 5381): string {
+  let h = seed;
+  for (let i = 0; i < input.length; i += 1) {
+    h = (h * 33) ^ input.charCodeAt(i);
+  }
+  return (h >>> 0).toString(16);
+}
+
+/** Hash the BMS Vk() payload object (key order fixed). */
+export function audioFingerprintHex(fp: AudioData): string {
+  const payload = {
+    reduction: fp.reduction,
+    sampleSum: fp.sampleSum,
+    freqSum: fp.freqSum,
+    timeSum: fp.timeSum,
+  };
+  return audioBo39(JSON.stringify(payload));
+}
 
 const IFACES = [
   ['base', 'BaseAudioContext', { path: 'window.EventTarget.prototype' }, 0],
@@ -43,9 +107,9 @@ const METHODS: readonly Method[] = [
   ['oscillator', 'start', 1, 'void-node'],
   ['oscillator', 'stop', 1, 'void-node'],
   ['oscillator', 'setPeriodicWave', 1, 'void-node'],
-  ['analyser', 'getFloatFrequencyData', 1, 'void-node'],
+  ['analyser', 'getFloatFrequencyData', 1, 'fill-float', 'freq'],
   ['analyser', 'getByteFrequencyData', 1, 'void-node'],
-  ['analyser', 'getFloatTimeDomainData', 1, 'void-node'],
+  ['analyser', 'getFloatTimeDomainData', 1, 'fill-float', 'time'],
   ['analyser', 'getByteTimeDomainData', 1, 'void-node'],
   ['source', 'start', 1, 'void-node'],
   ['source', 'stop', 1, 'void-node'],
@@ -169,47 +233,75 @@ export function audioShape(input: Shape): Shape {
     support: {
       ...shape.support,
       'audio.shape': 'derived',
+      // Channel buffers exist; true device audio capture is not claimed here.
+      // Value sums for BMS OfflineAudio hash come from audioFeature (audio.sums).
       'audio.samples': 'shape-only',
       'audio.fingerprint': 'unsupported',
     },
   }));
 }
 
-function binds(): Bind[] {
+function fingerprintJson(fp: AudioData): JsonValue {
+  return {
+    reduction: fp.reduction,
+    sampleSum: fp.sampleSum,
+    freqSum: fp.freqSum,
+    timeSum: fp.timeSum,
+  };
+}
+
+function binds(fp: AudioData): Bind[] {
+  const fingerprint = fingerprintJson(fp);
   const output: Bind[] = IFACES.map(([id, name]) => ({
     slot: `audio.${id}.ctor`, driver: 'audio',
     config: id === 'offline' || id === 'context'
-      ? { op: 'context-ctor', kind: id, proto: `audio.${id}.proto`, name }
+      ? { op: 'context-ctor', kind: id, proto: `audio.${id}.proto`, name, fingerprint }
       : id === 'buffer'
-        ? { op: 'buffer-ctor', proto: 'audio.buffer.proto', name }
-        : { op: 'illegal', name },
+        ? { op: 'buffer-ctor', proto: 'audio.buffer.proto', name, fingerprint }
+        : { op: 'illegal', name, fingerprint },
   }));
   for (const [owner, name, _length, op, kind] of METHODS) {
     output.push({
       slot: slot(owner, name), driver: 'audio',
-      config: { op, ...(kind ? { kind } : {}) },
+      config: { op, ...(kind ? { kind } : {}), fingerprint },
       ...(op === 'channel' ? { sources: [FLOAT32] } : {}),
     });
   }
   for (const [owner, name, writable, scope, field = name] of FIELDS) {
-    output.push({ slot: slot(owner, name, 'get'), driver: 'audio', config: { op: 'get', scope, field } });
-    if (writable) output.push({ slot: slot(owner, name, 'set'), driver: 'audio', config: { op: 'set', scope, field } });
+    output.push({
+      slot: slot(owner, name, 'get'), driver: 'audio',
+      config: { op: 'get', scope, field, fingerprint },
+    });
+    if (writable) {
+      output.push({
+        slot: slot(owner, name, 'set'), driver: 'audio',
+        config: { op: 'set', scope, field, fingerprint },
+      });
+    }
   }
   return output;
 }
 
 export const audioFeature: Feature = {
   id: 'audio',
-  rev: '1',
+  rev: '2',
   requires: ['dom'],
-  build: () => ({
-    binds: binds(),
-    support: {
-      'audio.runtime': 'emulated',
-      'audio.render': 'shape-only',
-      'audio.events': 'emulated',
-    },
-  }),
+  build: ({ profile }) => {
+    const fp = resolveAudioFingerprint(profile);
+    const fromProfile = profile.audio !== undefined;
+    return {
+      binds: binds(fp),
+      support: {
+        // Keep audio.samples / audio.fingerprint on the Shape (shape-only / unsupported)
+        // so baked shapes do not WRITE_CONFLICT. Announce 4-tuple fidelity here.
+        'audio.runtime': 'emulated',
+        'audio.render': 'emulated',
+        'audio.events': 'emulated',
+        'audio.sums': fromProfile ? 'captured' : 'derived',
+        'audio.data': fromProfile ? profile.evidence.audio.support : 'derived',
+      },
+    };
+  },
 };
 
 interface Config {
@@ -219,6 +311,7 @@ interface Config {
   name?: string;
   scope?: string;
   field?: string;
+  fingerprint?: AudioData;
 }
 
 interface ContextState {
@@ -279,10 +372,28 @@ const PARAMS: Readonly<Record<string, Readonly<Record<string, readonly [number, 
   },
 };
 
+function readFingerprint(value: JsonValue | undefined): AudioData | undefined {
+  if (value === null || value === undefined || Array.isArray(value) || typeof value !== 'object') return undefined;
+  const raw = value.fingerprint;
+  if (raw === null || raw === undefined || Array.isArray(raw) || typeof raw !== 'object') return undefined;
+  const reduction = Number(Reflect.get(raw, 'reduction'));
+  const sampleSum = Number(Reflect.get(raw, 'sampleSum'));
+  const freqSum = Number(Reflect.get(raw, 'freqSum'));
+  const timeSum = Number(Reflect.get(raw, 'timeSum'));
+  if (![reduction, sampleSum, freqSum, timeSum].every(Number.isFinite)) return undefined;
+  return {
+    reduction: audioRound6(reduction),
+    sampleSum: audioRound6(sampleSum),
+    freqSum: audioRound6(freqSum),
+    timeSum: audioRound6(timeSum),
+  };
+}
+
 function config(value: JsonValue | undefined): Config {
   if (value === null || Array.isArray(value) || typeof value !== 'object' || typeof value.op !== 'string') {
     throw new TypeError('audio Driver config invalid');
   }
+  const fingerprint = readFingerprint(value);
   return {
     op: value.op,
     ...(typeof value.kind === 'string' ? { kind: value.kind } : {}),
@@ -290,7 +401,21 @@ function config(value: JsonValue | undefined): Config {
     ...(typeof value.name === 'string' ? { name: value.name } : {}),
     ...(typeof value.scope === 'string' ? { scope: value.scope } : {}),
     ...(typeof value.field === 'string' ? { field: value.field } : {}),
+    ...(fingerprint ? { fingerprint } : {}),
   };
+}
+
+/**
+ * Write sum into index 0 so array.reduce((a,b)=>a+b,0) equals sum (BMS Vk).
+ * Uses float32 truncation when the target is a Float32Array (channel / analyser buffers).
+ */
+function fillSum(target: object, length: number, sum: number): void {
+  const value = ArrayBuffer.isView(target) && target instanceof Float32Array
+    ? asFloat32(sum)
+    : sum;
+  for (let i = 0; i < length; i += 1) {
+    Reflect.set(target, i, i === 0 ? value : 0);
+  }
 }
 
 function object(port: Port, value: unknown): object {
@@ -422,6 +547,9 @@ export const audioDriver: Driver = {
         if (field === 'channelCountMode') return state.fields.get(field) ?? topology[3];
         if (field === 'channelInterpretation') return state.fields.get(field) ?? topology[4];
         if (field === 'context') return state.context;
+        if (field === 'reduction' && state.kind === 'compressor' && item.fingerprint) {
+          return item.fingerprint.reduction;
+        }
         return state.fields.get(field);
       }
       if (item.scope === 'param') return param(self)[1][field as keyof ParamState];
@@ -458,6 +586,19 @@ export const audioDriver: Driver = {
         }
         if (item.op === 'connect') { node(self); return args[0]; }
         if (item.op === 'void-node') { node(self); return undefined; }
+        if (item.op === 'fill-float') {
+          node(self);
+          const target = args[0];
+          if (target !== null && target !== undefined && (typeof target === 'object' || typeof target === 'function')) {
+            const length = Math.max(0, Math.trunc(number(Reflect.get(target, 'length'), 0)));
+            const fp = item.fingerprint;
+            const sum = fp
+              ? (item.kind === 'freq' ? fp.freqSum : item.kind === 'time' ? fp.timeSum : 0)
+              : 0;
+            fillSum(object(port, target), length, sum);
+          }
+          return undefined;
+        }
         if (item.op === 'param-chain') { param(self); return self; }
         if (item.op === 'void-buffer') { buffer(self); return undefined; }
         if (item.op === 'channel') {
@@ -467,6 +608,9 @@ export const audioDriver: Driver = {
           let data = state.data.get(channel);
           if (!data) {
             data = object(port, Reflect.construct(float32, [state.length]));
+            if (item.fingerprint && state.length > 0) {
+              fillSum(data, state.length, item.fingerprint.sampleSum);
+            }
             state.data.set(channel, data);
           }
           return data;

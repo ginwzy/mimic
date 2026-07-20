@@ -147,13 +147,44 @@ export function chromeTouchShape(input: Shape): Shape {
   }));
 }
 
+/** True when Shape already props a key (e.g. dom.missing already stubbed Document.hasPrivateToken). */
+function shapeHasProp(shape: Shape, path: string, key: string): boolean {
+  for (const raw of shape.ops) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const op = raw as DraftOp;
+    if (op.op !== 'prop') continue;
+    const target = op.target;
+    if (!target || typeof target !== 'object' || !('path' in target) || target.path !== path) continue;
+    if (op.key === key) return true;
+  }
+  return false;
+}
+
+/**
+ * Disk shapes may already install Document privacy-token stubs via dom.missing.
+ * Skip those props to avoid WRITE_CONFLICT; still install PushManager / iframe.loading / SAB drop.
+ */
+function bmsCapabilityOpsFor(shape: Shape): DraftOp[] {
+  const doc = 'window.Document.prototype';
+  const skipDoc = new Set(
+    (['hasPrivateToken', 'hasRedemptionRecord'] as const).filter((key) => shapeHasProp(shape, doc, key)),
+  );
+  if (skipDoc.size === 0) return bmsCapabilityOps();
+  return bmsCapabilityOps().filter((op) => {
+    if (op.op !== 'prop') return true;
+    const target = op.target;
+    if (!target || typeof target !== 'object' || !('path' in target) || target.path !== doc) return true;
+    return typeof op.key !== 'string' || !skipDoc.has(op.key as 'hasPrivateToken' | 'hasRedemptionRecord');
+  });
+}
+
 export const chromeFeature: Feature = {
   id: 'chrome',
   rev: '2',
   requires: ['screen'],
   build: ({ shape }) => ({
     // Only chrome host; webview keeps lean surface.
-    operations: shape.target.host === 'chrome' ? bmsCapabilityOps() : [],
+    operations: shape.target.host === 'chrome' ? bmsCapabilityOpsFor(shape) : [],
     binds: [
       { slot: 'chrome.load', driver: 'chrome', config: { op: 'load' } },
       { slot: 'chrome.csi', driver: 'chrome', config: { op: 'csi' } },

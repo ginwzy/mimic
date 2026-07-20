@@ -2,52 +2,24 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal,
+  Catalog, compile, JsdomEngine, LegacyProfiles, parseJob,
 } from '../src/index.js';
-import { audioDriver, audioFeature, audioShape } from '../src/features/audio.js';
-import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
-import { domFeature } from '../src/features/dom.js';
-import { globalsDriver, globalsFeature } from '../src/features/globals.js';
-import { navDriver, navFeature } from '../src/features/nav.js';
-import { netDriver, netFeature, netShape } from '../src/features/net.js';
-import { pluginsDriver, pluginsFeature } from '../src/features/plugins.js';
-import { screenDriver, screenFeature } from '../src/features/screen.js';
-import { uaDriver, uaFeature } from '../src/features/ua.js';
-import { viewDriver, viewFeature } from '../src/features/view.js';
+import {
+  audioBo39,
+  audioFingerprintHex,
+  synthesizeAudioFingerprint,
+} from '../src/features/audio.js';
+import { drivers, features } from '../src/features/index.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
-const features = [
-  viewFeature, screenFeature, chromeFeature, touchFeature, navFeature, uaFeature,
-  pluginsFeature, globalsFeature, domFeature, netFeature, audioFeature,
-];
-const drivers = {
-  view: viewDriver,
-  screen: screenDriver,
-  chrome: chromeDriver,
-  nav: navDriver,
-  ua: uaDriver,
-  plugins: pluginsDriver,
-  globals: globalsDriver,
-  net: netDriver,
-  audio: audioDriver,
-};
 
+/** Use baked shape + full feature set (production path). Rebuilds via audioShape hit chrome/dom WRITE_CONFLICT on hasPrivateToken. */
 async function open(id: string) {
   const imported = await store.load(id);
-  const { hash: _shapeHash, ...shapeBody } = imported.shape;
-  const base = parseShape(seal({
-    ...shapeBody,
-    features: [],
-    ops: [],
-    support: { structure: imported.shape.support.structure || imported.shape.level },
-  }));
-  const shape = audioShape(netShape(base));
-  const { hash: _profileHash, ...profileBody } = imported.profile;
-  const profile = parseProfile(seal({ ...profileBody, shape: { id: shape.id, hash: shape.hash } }));
   const engine = new JsdomEngine();
   const plan = compile({
-    profile,
-    catalog: Catalog.create('builtin', [shape], features),
+    profile: imported.profile,
+    catalog: Catalog.create('builtin', [imported.shape], features),
     ...(imported.page ? { page: imported.page } : {}),
     job: parseJob({ kind: 'probe' }),
     engine: engine.manifest,
@@ -61,6 +33,7 @@ test('audio runs the OfflineAudioContext fingerprint chain with Realm return val
   try {
     assert.equal(plan.support['audio.samples'], 'shape-only');
     assert.equal(plan.support['audio.fingerprint'], 'unsupported');
+    assert.equal(plan.support['audio.sums'], 'derived');
     const result = runtime.run(`(async () => {
       const context = new OfflineAudioContext(1, 44100, 44100);
       const oscillator = context.createOscillator();
@@ -352,4 +325,90 @@ test('audio dispatchEvent composes oncomplete with removable EventTarget listene
     runtime.dispose();
   }
   assert.equal(engine.active, 0);
+});
+
+test('audio fingerprint leaves the all-zero bO(39) cluster and is stable per profile id', () => {
+  const zero = audioFingerprintHex({ reduction: 0, sampleSum: 0, freqSum: 0, timeSum: 0 });
+  assert.equal(zero, '85eefa4e');
+
+  const a = synthesizeAudioFingerprint('android-chrome/a');
+  const b = synthesizeAudioFingerprint('android-chrome/b');
+  assert.notDeepEqual(a, b);
+  const ha = audioFingerprintHex(a);
+  const hb = audioFingerprintHex(b);
+  assert.notEqual(ha, '85eefa4e');
+  assert.notEqual(hb, '85eefa4e');
+  assert.notEqual(ha, hb);
+  assert.equal(audioFingerprintHex(synthesizeAudioFingerprint('android-chrome/a')), ha);
+});
+
+test('audio Offline chain fills BMS-style sums from synthetic fingerprint', async () => {
+  const { engine, plan, runtime } = await open('macos-chrome-v148');
+  // No profile.audio → feature synthesizes from profile.id
+  const expected = synthesizeAudioFingerprint(plan.profile.id);
+  const expectedHex = audioFingerprintHex(expected);
+  assert.notEqual(expectedHex, '85eefa4e');
+  assert.equal(plan.support['audio.sums'], 'derived');
+
+  try {
+    const result = runtime.run(`(async () => {
+      const context = new OfflineAudioContext(1, 5000, 44100);
+      const oscillator = context.createOscillator();
+      oscillator.type = 'triangle';
+      oscillator.frequency.value = 10000;
+      const compressor = context.createDynamicsCompressor();
+      compressor.threshold.value = -50;
+      compressor.knee.value = 40;
+      compressor.ratio.value = 12;
+      compressor.attack.value = 0;
+      compressor.release.value = 0.25;
+      oscillator.connect(compressor);
+      compressor.connect(context.destination);
+      oscillator.start(0);
+      const buffer = await context.startRendering();
+      const channel = buffer.getChannelData(0);
+      const sampleSum = +channel.reduce((a, b) => a + b, 0).toFixed(6);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 2048;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(analyser);
+      source.start();
+      const freq = new Float32Array(analyser.frequencyBinCount);
+      analyser.getFloatFrequencyData(freq);
+      const freqSum = +freq.reduce((a, b) => a + b, 0).toFixed(6);
+      const time = new Float32Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(time);
+      const timeSum = +time.reduce((a, b) => a + b, 0).toFixed(6);
+      const reduction = +compressor.reduction.toFixed(6);
+      const payload = { reduction, sampleSum, freqSum, timeSum };
+      return JSON.stringify(payload);
+    })()`);
+    assert.equal(result.ok, true, result.ok ? '' : String(result.error));
+    const payload = JSON.parse(String(await result.value));
+    assert.deepEqual(payload, {
+      reduction: expected.reduction,
+      sampleSum: expected.sampleSum,
+      freqSum: expected.freqSum,
+      timeSum: expected.timeSum,
+    });
+    assert.equal(audioBo39(JSON.stringify(payload)), expectedHex);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
+test('audio fingerprint differs across profiles', async () => {
+  const first = await open('macos-chrome-v148');
+  const second = await open('linux-chrome');
+  try {
+    const a = synthesizeAudioFingerprint(first.plan.profile.id);
+    const b = synthesizeAudioFingerprint(second.plan.profile.id);
+    assert.notEqual(audioFingerprintHex(a), audioFingerprintHex(b));
+    assert.notEqual(audioFingerprintHex(a), '85eefa4e');
+  } finally {
+    first.runtime.dispose();
+    second.runtime.dispose();
+  }
 });

@@ -55,6 +55,7 @@ export type { ExecutorOptions, ExecutorStats } from './executor/pool.js';
 export { createMimic, Mimic } from './sdk.js';
 export type { MimicOptions } from './sdk.js';
 export type {
+  AudioData,
   Data,
   CatalogDoc,
   Bind,

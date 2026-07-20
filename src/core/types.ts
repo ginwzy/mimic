@@ -153,6 +153,17 @@ export interface WebGlData {
   shaderPrecision?: Record<string, Precision>;
 }
 
+/**
+ * OfflineAudio fingerprint inputs for BMS-style collectors (Vk/xR → bO(39)).
+ * Values are the four numbers after channel/analyser reduce + toFixed(6) unary-plus.
+ */
+export interface AudioData {
+  reduction: number;
+  sampleSum: number;
+  freqSum: number;
+  timeSum: number;
+}
+
 export type Part = 'navigator' | 'screen' | 'window' | 'timezone' | 'webgl' | 'canvas' | 'audio' | 'fonts';
 
 export interface Evidence {
@@ -173,6 +184,8 @@ export interface Profile {
   window?: WindowData;
   timezone?: TimezoneData;
   webgl?: WebGlData;
+  /** Optional captured/synthetic OfflineAudio 4-tuple; absent → runtime synthesizes from profile id. */
+  audio?: AudioData;
   evidence: Record<Part, Evidence>;
 }
 
