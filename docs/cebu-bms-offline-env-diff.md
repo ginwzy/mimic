@@ -226,6 +226,7 @@ tmp/cebu-baseline/
 
 ## 8. 相关
 
+- **确定性坏 key + 复现步骤**：`docs/cebu-bms-bad-keys.md`
 - 端到端工作纪要：`docs/cebu-bms-401-worklog.md`
 - flow：`test/cebu_flow.py`（live e2e）
 - bridge：`test/cebu_capture.mjs`
