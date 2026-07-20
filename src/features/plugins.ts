@@ -18,6 +18,12 @@ const dataRef = (target: Ref, key: string, node: string, enumerable: boolean): D
   desc: { kind: 'data', value: { ref: { node } }, writable: false, enumerable, configurable: true },
 });
 
+/** Data property whose value is a function node; default non-writable like Chrome PluginArray methods. */
+const fnRef = (target: Ref, key: string, node: string, enumerable: boolean, writable = false): DraftOp => ({
+  op: 'prop', target, key,
+  desc: { kind: 'data', value: { ref: { node } }, writable, enumerable, configurable: true },
+});
+
 function baseOps(): DraftOp[] {
   const plugin = { node: 'plugins.plugin.proto' } as const;
   const mime = { node: 'plugins.mime.proto' } as const;
@@ -67,18 +73,19 @@ function baseOps(): DraftOp[] {
     accessor({ path: 'window.Navigator.prototype' }, 'plugins', 'plugins.window.get'),
     accessor({ path: 'window.Navigator.prototype' }, 'mimeTypes', 'plugins.mime-window.get'),
     accessor(plugins, 'length', 'plugins.array.length.get'),
-    refProp(plugins, 'item', 'plugins.array.item', true),
-    refProp(plugins, 'namedItem', 'plugins.array.named', true),
-    refProp(plugins, 'refresh', 'plugins.array.refresh', true),
+    // Chrome: PluginArray methods are non-writable; BMS HD/MU tests refresh overwrite.
+    fnRef(plugins, 'item', 'plugins.array.item', true, false),
+    fnRef(plugins, 'namedItem', 'plugins.array.named', true, false),
+    fnRef(plugins, 'refresh', 'plugins.array.refresh', true, false),
     accessor(mimes, 'length', 'plugins.mime-array.length.get'),
-    refProp(mimes, 'item', 'plugins.mime-array.item', true),
-    refProp(mimes, 'namedItem', 'plugins.mime-array.named', true),
+    fnRef(mimes, 'item', 'plugins.mime-array.item', true, false),
+    fnRef(mimes, 'namedItem', 'plugins.mime-array.named', true, false),
     accessor(plugin, 'name', 'plugins.plugin.name.get'),
     accessor(plugin, 'filename', 'plugins.plugin.filename.get'),
     accessor(plugin, 'description', 'plugins.plugin.description.get'),
     accessor(plugin, 'length', 'plugins.plugin.length.get'),
-    refProp(plugin, 'item', 'plugins.plugin.item', true),
-    refProp(plugin, 'namedItem', 'plugins.plugin.named', true),
+    fnRef(plugin, 'item', 'plugins.plugin.item', true, false),
+    fnRef(plugin, 'namedItem', 'plugins.plugin.named', true, false),
     accessor(mime, 'type', 'plugins.mime.type.get'),
     accessor(mime, 'suffixes', 'plugins.mime.suffixes.get'),
     accessor(mime, 'description', 'plugins.mime.description.get'),
@@ -137,6 +144,7 @@ export function pluginsShape(input: Shape): Shape {
   if (shape.features.includes('plugins')) return shape;
   const { hash: _hash, ...body } = shape;
   // Chrome Android: empty PluginArray (no PDF plugin entries). Desktop Chrome ships 5 PDF aliases.
+  // Chrome Android: empty PluginArray (no PDF plugin entries). Desktop Chrome ships 5 PDF aliases.
   const pluginOps = shape.target.host === 'chrome' && shape.target.form !== 'mobile'
     ? chromeOps()
     : [];
@@ -192,37 +200,76 @@ function config(value: JsonValue | undefined): Record<string, JsonValue> {
   return value;
 }
 
+/** Chrome PluginArray/MimeTypeArray methods are non-writable; BMS MU tests overwrite. */
+function lockArrayMethods(array: object): void {
+  const proto = Object.getPrototypeOf(array) as object | null;
+  if (proto === null) return;
+  for (const key of ['item', 'namedItem', 'refresh'] as const) {
+    const desc = Object.getOwnPropertyDescriptor(proto, key);
+    if (!desc || !('value' in desc) || desc.writable !== true) continue;
+    Object.defineProperty(proto, key, {
+      value: desc.value,
+      writable: false,
+      enumerable: desc.enumerable === true,
+      configurable: desc.configurable !== false,
+    });
+  }
+  // Drop own overrides so prototype non-writable wins (sloppy assign must not stick).
+  for (const key of ['item', 'namedItem', 'refresh'] as const) {
+    if (Object.prototype.hasOwnProperty.call(array, key)) {
+      try {
+        Reflect.deleteProperty(array, key);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 export const pluginsDriver: Driver = {
-  open: (port) => ({
-    call: (raw, self, args) => {
-      const item = config(raw);
-      if (item.op === 'node') return port.node(String(item.id));
-      if (item.op === 'void') return undefined;
-      if (item.op === 'length') {
-        let length = 0;
-        while (self !== null && (typeof self === 'object' || typeof self === 'function') && Reflect.has(self, String(length))) length++;
-        return length;
-      }
-      if (item.op === 'item') {
-        if (self === null || (typeof self !== 'object' && typeof self !== 'function')) return null;
-        const index = Number(args[0]);
-        return Number.isInteger(index) && index >= 0 ? Reflect.get(self, String(index)) ?? null : null;
-      }
-      if (item.op === 'named') {
-        if (self === null || (typeof self !== 'object' && typeof self !== 'function')) return null;
-        return Reflect.get(self, String(args[0])) ?? null;
-      }
-      if (item.op === 'enabled') return item.id === null ? null : port.node(String(item.id));
-      if (item.op === 'field') {
-        const map = config(item.records);
-        for (const [id, value] of Object.entries(map)) if (port.node(id) === self) return value;
-        return '';
-      }
-      throw new TypeError(`plugins Driver op invalid:${String(item.op)}`);
-    },
-    construct: (raw) => {
-      if (config(raw).op === 'illegal') throw port.error('TypeError', 'Illegal constructor');
-      return undefined;
-    },
-  }),
+  open: (port) => {
+    const locked = new WeakSet<object>();
+    return {
+      call: (raw, self, args) => {
+        const item = config(raw);
+        if (item.op === 'node') {
+          const node = port.node(String(item.id));
+          if (node !== null && (typeof node === 'object' || typeof node === 'function') && !locked.has(node as object)) {
+            lockArrayMethods(node as object);
+            locked.add(node as object);
+          }
+          return node;
+        }
+        if (item.op === 'void') return undefined;
+        if (item.op === 'length') {
+          let length = 0;
+          while (self !== null && (typeof self === 'object' || typeof self === 'function') && Reflect.has(self, String(length))) length++;
+          return length;
+        }
+        if (item.op === 'item') {
+          // WebIDL unsigned long → ToUint32 (e.g. -1 → 2^32-1 → out of range → null).
+          if (self === null || (typeof self !== 'object' && typeof self !== 'function')) return null;
+          const index = Number(args[0]);
+          if (!Number.isFinite(index)) return null;
+          const u = index >>> 0;
+          return Reflect.get(self, String(u)) ?? null;
+        }
+        if (item.op === 'named') {
+          if (self === null || (typeof self !== 'object' && typeof self !== 'function')) return null;
+          return Reflect.get(self, String(args[0])) ?? null;
+        }
+        if (item.op === 'enabled') return item.id === null ? null : port.node(String(item.id));
+        if (item.op === 'field') {
+          const map = config(item.records);
+          for (const [id, value] of Object.entries(map)) if (port.node(id) === self) return value;
+          return '';
+        }
+        throw new TypeError(`plugins Driver op invalid:${String(item.op)}`);
+      },
+      construct: (raw) => {
+        if (config(raw).op === 'illegal') throw port.error('TypeError', 'Illegal constructor');
+        return undefined;
+      },
+    };
+  },
 };

@@ -16,10 +16,10 @@
 | key | 修复前 | 2026-07-20 后 | 问题 | 根因线索 |
 |-----|--------|---------------|------|----------|
 | **`PL248`** | `-2` | **`"1"`（已离开 -2）** | 曾为失败哨兵 | deobf：`HD()` VM；缺 PushManager / hasPrivateToken / iframe.loading |
-| **`PL710`** | `-2` | **仍 `-2`** | 传感器失败码 | deobf：`MU()`，另一段 vV 导出；**未修** |
+| **`PL710`** | `-2` | **仍 `-2`** | 传感器失败码 | deobf：`MU()`，plugins/SAB/gOPD 向 VM；**未完全修** |
 
 - `PL248` 修复：`chromeFeature` 安装 PushManager + Document.hasPrivateToken/hasRedemptionRecord + HTMLIFrameElement.loading；chrome android shape 的 Document `order` 键补齐（见 `src/features/chrome.ts`）。
-- `PL710` 与 system colors **无关**；与 `PL248` **不同函数**，勿合并修。
+- `PL710`：与 `PL248` **不同 vV 批**（导出 `qI,EQ,WP,qM,LU,MU`）。同批 `PL588=LU;qM;WP` 在 refresh 非可写修复后由 `-1;1;-1` → **`-1;0;-1`**（中间位=refresh 覆写探测）。`MU()` 仍失败；字节码还涉 `SharedArrayBuffer` / `getOwnPropertyDescriptors` / `userAgentData.brands` 等，需继续拆。
 - 历史 FK 时代同形态：`FK349` / `FK424` = `-2`（**数字已轮换**）。
 
 ### 1.2 成功但假、全 mimic 固定簇（可聚类 tell）
@@ -285,7 +285,8 @@ console.log("n", Object.keys(s).length);
 | system colors 查表 | `PL236`（或同值位）**不再**为 `947d9249`；宜对齐真机 hash |
 | canvas replay | `PL817` **不再**为上表 64-hex |
 | `HD`（PL248） | **已做**：PushManager + hasPrivateToken + iframe.loading → `PL248`≠`-2` |
-| `MU`（PL710） | 仍 `-2`；需另解 vV `MU` 目标面 |
+| plugins.refresh 非可写 | **已做**：`PL588` 中位 `1→0`；`item` ToUint32 |
+| `MU`（PL710） | 仍 `-2`；不随 mobile 填 PDF plugins 消失；继续 dig SAB/gOPD 路径 |
 | 仅改 profile | 固定簇三 hash + `PL710` **仍不变** |
 
 ---
