@@ -7,9 +7,9 @@ import { parsePage, parseProfile, parseShape } from '../core/parse.js';
 import { digest, seal } from '../core/seal.js';
 import { shape as builtShape } from '../features/index.js';
 import type {
-  AudioData, Brand, Data, Evidence, Form, Hash, Host, JsonValue, NavigatorData, Page, Part, Platform,
-  Profile, ScreenData, Shape, Source, Support, SystemColorsData, Target, TimezoneData, UaData, WebGlData,
-  WindowData,
+  AudioData, Brand, CanvasData, Data, Evidence, Form, Hash, Host, JsonValue, NavigatorData, Page, Part,
+  Platform, Profile, ScreenData, Shape, Source, Support, SystemColorsData, Target, TimezoneData, UaData,
+  WebGlData, WindowData,
 } from '../core/types.js';
 
 const IDENTITY = new Set(['canvas', 'webgl', 'audio', 'fonts']);
@@ -486,6 +486,13 @@ function normalizeSystemColors(data: Data | undefined): SystemColorsData | undef
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+function normalizeCanvas(data: Data | undefined): CanvasData | undefined {
+  if (!data) return undefined;
+  const toDataURL = data.toDataURL;
+  if (typeof toDataURL !== 'string' || !toDataURL.startsWith('data:')) return undefined;
+  return { toDataURL };
+}
+
 function evidenceOf(data: Legacy, source: Source, derived: string[], sections: Partial<Record<Part, unknown>>): Record<Part, Evidence> {
   const fidelity = isData(data.meta?.fidelity) ? data.meta.fidelity : {};
   const output = {} as Record<Part, Evidence>;
@@ -558,7 +565,10 @@ export function importLegacyData(
   const webgl = normalizeWebGl(data.webgl);
   const audio = normalizeAudio(data.audio);
   const systemColors = normalizeSystemColors(data.systemColors);
-  const sections: Partial<Record<Part, unknown>> = { navigator, screen, window, timezone, webgl, audio };
+  const canvas = normalizeCanvas(data.canvas);
+  const sections: Partial<Record<Part, unknown>> = {
+    navigator, screen, window, timezone, webgl, audio, canvas,
+  };
 
   const profile = parseProfile(seal({
     schema: 2,
@@ -573,6 +583,7 @@ export function importLegacyData(
     ...(webgl ? { webgl } : {}),
     ...(audio ? { audio } : {}),
     ...(systemColors ? { systemColors } : {}),
+    ...(canvas ? { canvas } : {}),
     evidence: evidenceOf(data, source, derived, sections),
   }));
 

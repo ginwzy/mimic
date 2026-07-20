@@ -1,10 +1,37 @@
+import { createHash } from 'node:crypto';
 import { parseShape } from '../core/parse.js';
 import { seal } from '../core/seal.js';
-import type { JsonValue, Shape } from '../core/types.js';
+import type { CanvasData, JsonValue, Profile, Shape } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature, Ref } from '../shape/types.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
 import { domShape } from './dom.js';
+
+/** Empty toDataURL string → BMS Lj() sha256 cluster `8e726a09…`. */
+export const EMPTY_CANVAS_DATA_URL = 'data:image/png;base64,';
+
+/**
+ * Deterministic unique data: URL per profile id.
+ * BMS Lj() does sha256(toDataURL()); empty base64 is the fixed mimic cluster.
+ */
+export function synthesizeCanvasDataURL(id: string, mime = 'image/png'): string {
+  const type = ['image/png', 'image/jpeg', 'image/webp'].includes(mime) ? mime : 'image/png';
+  const payload = createHash('sha256').update(`canvas-fp:${id}:${type}`).digest('base64');
+  return `data:${type};base64,${payload}`;
+}
+
+export function resolveCanvasData(profile: Profile): CanvasData {
+  const raw = profile.canvas?.toDataURL;
+  if (typeof raw === 'string' && raw.startsWith('data:') && raw.length > 'data:image/png;base64,'.length) {
+    return { toDataURL: raw };
+  }
+  return { toDataURL: synthesizeCanvasDataURL(profile.id) };
+}
+
+/** SHA-256 hex of a toDataURL string (same primitive as BMS kH). */
+export function canvasFingerprintHex(dataURL: string): string {
+  return createHash('sha256').update(dataURL).digest('hex');
+}
 
 const CONTEXTS = 'canvas.contexts';
 const CONTEXT_PROTO = 'canvas.2d.proto';
@@ -197,60 +224,73 @@ export function canvasShape(input: Shape): Shape {
 
 export const canvasFeature: Feature = {
   id: 'canvas',
-  rev: '1',
+  rev: '2',
   requires: ['dom'],
-  build: () => ({
-    binds: [
-      {
-        slot: 'canvas.get', driver: 'canvas', config: { op: 'get', registry: CONTEXTS },
-        sources: [HTML_CANVAS],
+  build: ({ profile }) => {
+    const data = resolveCanvasData(profile);
+    const fromProfile = profile.canvas !== undefined
+      && typeof profile.canvas.toDataURL === 'string'
+      && profile.canvas.toDataURL.length > EMPTY_CANVAS_DATA_URL.length;
+    return {
+      binds: [
+        {
+          slot: 'canvas.get', driver: 'canvas', config: { op: 'get', registry: CONTEXTS },
+          sources: [HTML_CANVAS],
+        },
+        { slot: 'canvas.2d.get', driver: 'canvas', config: { op: 'context', proto: CONTEXT_PROTO } },
+        {
+          slot: 'canvas.url', driver: 'canvas',
+          // BMS Lj: sha256(toDataURL()); inject profile-keyed payload (leave empty-base64 cluster).
+          config: { op: 'url', dataURL: data.toDataURL, profileId: profile.id },
+        },
+        { slot: 'canvas.context.canvas', driver: 'canvas', config: { op: 'canvas' } },
+        {
+          slot: 'canvas.context.image', driver: 'canvas', config: { op: 'image-get', proto: IMAGE_PROTO },
+          sources: [CLAMPED],
+        },
+        { slot: 'canvas.context.create-image', driver: 'canvas', config: { op: 'image-create', proto: IMAGE_PROTO } },
+        { slot: 'canvas.context.measure', driver: 'canvas', config: { op: 'metrics', proto: METRICS_PROTO } },
+        { slot: 'canvas.image.ctor', driver: 'canvas', config: { op: 'image-ctor', proto: IMAGE_PROTO } },
+        {
+          slot: 'canvas.2d.ctor', driver: 'canvas',
+          config: { op: 'illegal', name: 'CanvasRenderingContext2D' },
+        },
+        { slot: 'canvas.metrics.ctor', driver: 'canvas', config: { op: 'illegal', name: 'TextMetrics' } },
+        { slot: 'canvas.gradient.ctor', driver: 'canvas', config: { op: 'illegal', name: 'CanvasGradient' } },
+        { slot: 'canvas.path.ctor', driver: 'canvas', config: { op: 'path-ctor', proto: PATH_PROTO } },
+        ...VOID_METHODS.map(([name]) => ({
+          slot: `canvas.context.${name}`, driver: 'canvas', config: { op: 'void' },
+        })),
+        ...GRADIENT_METHODS.map(([name]) => ({
+          slot: `canvas.context.${name}`, driver: 'canvas', config: { op: 'gradient', proto: GRADIENT_PROTO },
+        })),
+        { slot: 'canvas.context.getContextAttributes', driver: 'canvas', config: { op: 'attributes' } },
+        { slot: 'canvas.context.getTransform', driver: 'canvas', config: { op: 'matrix', proto: MATRIX_PROTO } },
+        { slot: 'canvas.context.isContextLost', driver: 'canvas', config: { op: 'false' } },
+        { slot: 'canvas.context.isPointInPath', driver: 'canvas', config: { op: 'false' } },
+        { slot: 'canvas.context.isPointInStroke', driver: 'canvas', config: { op: 'false' } },
+        { slot: 'canvas.context.getLineDash', driver: 'canvas', config: { op: 'dash' } },
+        { slot: 'canvas.gradient.add', driver: 'canvas', config: { op: 'gradient-add' } },
+        ...PATH_METHODS.map(([name]) => ({
+          slot: `canvas.path.${name}`, driver: 'canvas', config: { op: 'path-method' },
+        })),
+        ...Object.entries(STYLES).flatMap(([name, initial]) => ([
+          { slot: `canvas.context.${name}.get`, driver: 'canvas', config: { op: 'style-get', name, initial } },
+          { slot: `canvas.context.${name}.set`, driver: 'canvas', config: { op: 'style-set', name } },
+        ])),
+        ...IMAGE_FIELDS.map((name) => ({
+          slot: `canvas.image.${name}.get`, driver: 'canvas', config: { op: 'image-field', name },
+        })),
+        ...METRIC_FIELDS.map((name) => ({
+          slot: `canvas.metrics.${name}.get`, driver: 'canvas', config: { op: 'metric-field', name },
+        })),
+      ],
+      support: {
+        'canvas.runtime': 'emulated',
+        'canvas.fingerprint': fromProfile ? 'captured' : 'derived',
       },
-      { slot: 'canvas.2d.get', driver: 'canvas', config: { op: 'context', proto: CONTEXT_PROTO } },
-      { slot: 'canvas.url', driver: 'canvas', config: { op: 'url' } },
-      { slot: 'canvas.context.canvas', driver: 'canvas', config: { op: 'canvas' } },
-      {
-        slot: 'canvas.context.image', driver: 'canvas', config: { op: 'image-get', proto: IMAGE_PROTO },
-        sources: [CLAMPED],
-      },
-      { slot: 'canvas.context.create-image', driver: 'canvas', config: { op: 'image-create', proto: IMAGE_PROTO } },
-      { slot: 'canvas.context.measure', driver: 'canvas', config: { op: 'metrics', proto: METRICS_PROTO } },
-      { slot: 'canvas.image.ctor', driver: 'canvas', config: { op: 'image-ctor', proto: IMAGE_PROTO } },
-      {
-        slot: 'canvas.2d.ctor', driver: 'canvas',
-        config: { op: 'illegal', name: 'CanvasRenderingContext2D' },
-      },
-      { slot: 'canvas.metrics.ctor', driver: 'canvas', config: { op: 'illegal', name: 'TextMetrics' } },
-      { slot: 'canvas.gradient.ctor', driver: 'canvas', config: { op: 'illegal', name: 'CanvasGradient' } },
-      { slot: 'canvas.path.ctor', driver: 'canvas', config: { op: 'path-ctor', proto: PATH_PROTO } },
-      ...VOID_METHODS.map(([name]) => ({
-        slot: `canvas.context.${name}`, driver: 'canvas', config: { op: 'void' },
-      })),
-      ...GRADIENT_METHODS.map(([name]) => ({
-        slot: `canvas.context.${name}`, driver: 'canvas', config: { op: 'gradient', proto: GRADIENT_PROTO },
-      })),
-      { slot: 'canvas.context.getContextAttributes', driver: 'canvas', config: { op: 'attributes' } },
-      { slot: 'canvas.context.getTransform', driver: 'canvas', config: { op: 'matrix', proto: MATRIX_PROTO } },
-      { slot: 'canvas.context.isContextLost', driver: 'canvas', config: { op: 'false' } },
-      { slot: 'canvas.context.isPointInPath', driver: 'canvas', config: { op: 'false' } },
-      { slot: 'canvas.context.isPointInStroke', driver: 'canvas', config: { op: 'false' } },
-      { slot: 'canvas.context.getLineDash', driver: 'canvas', config: { op: 'dash' } },
-      { slot: 'canvas.gradient.add', driver: 'canvas', config: { op: 'gradient-add' } },
-      ...PATH_METHODS.map(([name]) => ({
-        slot: `canvas.path.${name}`, driver: 'canvas', config: { op: 'path-method' },
-      })),
-      ...Object.entries(STYLES).flatMap(([name, initial]) => ([
-        { slot: `canvas.context.${name}.get`, driver: 'canvas', config: { op: 'style-get', name, initial } },
-        { slot: `canvas.context.${name}.set`, driver: 'canvas', config: { op: 'style-set', name } },
-      ])),
-      ...IMAGE_FIELDS.map((name) => ({
-        slot: `canvas.image.${name}.get`, driver: 'canvas', config: { op: 'image-field', name },
-      })),
-      ...METRIC_FIELDS.map((name) => ({
-        slot: `canvas.metrics.${name}.get`, driver: 'canvas', config: { op: 'metric-field', name },
-      })),
-    ],
-    support: { 'canvas.runtime': 'shape-only' },
-  }),
+    };
+  },
 };
 
 function config(value: JsonValue | undefined): Record<string, JsonValue> {
@@ -461,7 +501,15 @@ export const canvasDriver: Driver = {
           canvas(self);
           const requested = typeof args[0] === 'string' ? args[0].toLowerCase() : 'image/png';
           const type = ['image/png', 'image/jpeg', 'image/webp'].includes(requested) ? requested : 'image/png';
-          return `data:${type};base64,`;
+          const configured = typeof item.dataURL === 'string' ? item.dataURL : '';
+          // Prefer profile/synthetic payload; re-encode mime when caller asks jpeg/webp.
+          if (configured.startsWith('data:') && configured.length > EMPTY_CANVAS_DATA_URL.length) {
+            if (type === 'image/png' && configured.startsWith('data:image/png')) return configured;
+            const id = typeof item.profileId === 'string' ? item.profileId : 'default';
+            return synthesizeCanvasDataURL(id, type);
+          }
+          const id = typeof item.profileId === 'string' ? item.profileId : 'default';
+          return synthesizeCanvasDataURL(id, type);
         }
         if (item.op === 'illegal') {
           throw port.error('TypeError', `Failed to construct '${String(item.name)}': Illegal constructor`);

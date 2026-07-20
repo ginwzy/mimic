@@ -19,6 +19,7 @@
     "webgl": { "$ref": "#/definitions/webgl" },
     "audio": { "$ref": "#/definitions/audio" },
     "systemColors": { "$ref": "#/definitions/systemColors" },
+    "canvas": { "$ref": "#/definitions/canvas" },
     "evidence": { "$ref": "#/definitions/evidenceMap" }
   },
   "definitions": {
@@ -186,6 +187,18 @@
       "type": "object",
       "additionalProperties": { "type": "string", "minLength": 1 },
       "description": "Optional CSS system-color → rgb() map for BMS pR / getComputedStyle"
+    },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["toDataURL"],
+      "properties": {
+        "toDataURL": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Full canvas.toDataURL() string hashed by BMS Lj()"
+        }
+      }
     },
     "support": { "enum": ["captured", "derived", "emulated", "shape-only", "unsupported"] },
     "evidence": {

@@ -5,9 +5,12 @@ import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal,
   type Driver, type Feature,
 } from '../src/index.js';
-import { canvasContext, canvasDriver, canvasFeature, canvasShape } from '../src/features/canvas.js';
+import {
+  canvasContext, canvasDriver, canvasFeature, canvasFingerprintHex, canvasShape,
+  EMPTY_CANVAS_DATA_URL, synthesizeCanvasDataURL,
+} from '../src/features/canvas.js';
 import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
-import { domFeature } from '../src/features/dom.js';
+import { domDriver, domFeature } from '../src/features/dom.js';
 import { globalsDriver, globalsFeature } from '../src/features/globals.js';
 import { navDriver, navFeature } from '../src/features/nav.js';
 import { netDriver, netFeature, netShape } from '../src/features/net.js';
@@ -29,6 +32,7 @@ const drivers = {
   ua: uaDriver,
   plugins: pluginsDriver,
   globals: globalsDriver,
+  dom: domDriver,
   net: netDriver,
   canvas: canvasDriver,
 };
@@ -166,11 +170,57 @@ test('canvas exposes native-shaped drawing methods with basic non-pixel returns'
     assert.deepEqual(value.initial, ['#000000', '#000000', 1, 1, '10px sans-serif']);
     assert.deepEqual(value.styles, ['#123456', '#abcdef', 0.5, 3, '12px sans-serif']);
     assert.deepEqual(value.calls, Array(18).fill(null));
-    assert.deepEqual(value.metrics, [35, 'number']);
+    // measureText('mimic') with font 12px → length * size * 0.55
+    assert.deepEqual(value.metrics, [33, 'number']);
     assert.deepEqual(value.image, [2, 3, 'srgb', 24, true]);
     assert.deepEqual(value.made, [1, 2, 'srgb', 8, true]);
-    assert.deepEqual(value.urls, ['data:image/png;base64,', 'data:image/jpeg;base64,']);
+    // Profile-keyed synthetic toDataURL — not the empty-base64 BMS Lj cluster.
+    assert.match(value.urls[0], /^data:image\/png;base64,[A-Za-z0-9+/=]+$/);
+    assert.match(value.urls[1], /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/);
+    assert.notEqual(value.urls[0], EMPTY_CANVAS_DATA_URL);
+    assert.notEqual(canvasFingerprintHex(value.urls[0]), canvasFingerprintHex(EMPTY_CANVAS_DATA_URL));
     assert.deepEqual(value.illegal, [true, true]);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
+test('canvas toDataURL leaves empty-base64 sha256 cluster and is stable per profile', () => {
+  const emptyHex = canvasFingerprintHex(EMPTY_CANVAS_DATA_URL);
+  assert.equal(emptyHex, '8e726a09c196f96bcf104fd83a6a6278c5ccca1c0b841dd8ecef621b87acf56a');
+
+  const a = synthesizeCanvasDataURL('macos-chrome-v149');
+  const b = synthesizeCanvasDataURL('linux-chrome');
+  assert.notEqual(canvasFingerprintHex(a), emptyHex);
+  assert.notEqual(canvasFingerprintHex(b), emptyHex);
+  assert.notEqual(canvasFingerprintHex(a), canvasFingerprintHex(b));
+  assert.equal(canvasFingerprintHex(synthesizeCanvasDataURL('macos-chrome-v149')), canvasFingerprintHex(a));
+});
+
+test('canvas runtime BMS Lj path returns synthetic toDataURL for profile', async () => {
+  const { engine, runtime } = await open('macos-chrome-v149');
+  const expected = synthesizeCanvasDataURL('macos-chrome-v149');
+  try {
+    const result = runtime.run(`(() => {
+      // Mirror BMS Lj drawing ops (values ignored — fingerprint is toDataURL payload).
+      const c = document.createElement('canvas');
+      c.width = 300;
+      c.height = 80;
+      const ctx = c.getContext('2d');
+      ctx.textBaseline = 'top';
+      ctx.font = "15.5px 'Arial'";
+      ctx.fillStyle = '#f60';
+      ctx.fillRect(125, 1, 60, 20);
+      ctx.fillStyle = '#069';
+      ctx.fillText('SomeCanvasFingerPrint.65@345876', 2, 15);
+      ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+      ctx.fillText('SomeCanvasFingerPrint.65@345876', 4, 17);
+      return c.toDataURL();
+    })()`);
+    assert.equal(result.ok, true, result.ok ? undefined : String(result.error));
+    assert.equal(String(result.value), expected);
+    assert.notEqual(canvasFingerprintHex(String(result.value)), canvasFingerprintHex(EMPTY_CANVAS_DATA_URL));
   } finally {
     runtime.dispose();
   }

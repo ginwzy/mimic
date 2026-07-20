@@ -171,6 +171,15 @@ export interface AudioData {
  */
 export type SystemColorsData = Record<string, string>;
 
+/**
+ * Optional canvas fingerprint payload for BMS Lj() (sha256 of toDataURL()).
+ * Absent → runtime synthesizes a unique data: URL from profile.id.
+ */
+export interface CanvasData {
+  /** Full canvas.toDataURL() string (including data: prefix). */
+  toDataURL: string;
+}
+
 export type Part = 'navigator' | 'screen' | 'window' | 'timezone' | 'webgl' | 'canvas' | 'audio' | 'fonts';
 
 export interface Evidence {
@@ -195,6 +204,8 @@ export interface Profile {
   audio?: AudioData;
   /** Optional system-color rgb map for getComputedStyle; absent → synthesize from profile id. */
   systemColors?: SystemColorsData;
+  /** Optional canvas toDataURL for BMS Lj(); absent → synthesize from profile id. */
+  canvas?: CanvasData;
   evidence: Record<Part, Evidence>;
 }
 
