@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import random
 import re
 import secrets
 import sys
@@ -46,10 +47,13 @@ LUMI_PASSWORD = "j48ly0d63top"
 SELECT_FLIGHT = f"{SITE}/en-PH/booking/select-flight"
 SEARCH_URL = "https://soar.cebupacificair.com/ceb-omnix-proxy-v3/availability"
 BRIDGE = Path(__file__).with_name("cebu_capture.mjs")
-# Sensor UA strings are Chrome/145; shape stays v138 (traits.version) for SharedWorker ops.
-PROFILE = "android-chrome/2201116sg-v145-10025"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+PROFILES_DIR = REPO_ROOT / "profiles"
+# Default pool: all android-chrome device profiles (sensor side). Not tied to TLS pin.
+DEFAULT_PROFILE = "android-chrome/2201116sg-v145-10025"
+ANDROID_CHROME_DIR = PROFILES_DIR / "android-chrome"
 
-# TLS (rnet) + wire UA + profile sensor UA all Chrome Android 145 (rnet max useful pin).
+# Wire TLS/UA pin (rnet egress only). Independent of mimic profile selection.
 CHROME_MAJOR = 145
 UA = (
     "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
@@ -61,6 +65,34 @@ SEC_CH_UA = (
 )
 ACCEPT_LANG = "en-GB,en-US;q=0.9,en;q=0.8,pl;q=0.7"
 RNET_EMULATION = Emulation.Chrome145
+
+
+def list_android_chrome_profiles() -> list[str]:
+    """Ids like android-chrome/<stem> for every profiles/android-chrome/*.json."""
+    if not ANDROID_CHROME_DIR.is_dir():
+        return []
+    return sorted(
+        f"android-chrome/{p.stem}"
+        for p in ANDROID_CHROME_DIR.glob("*.json")
+        if p.is_file()
+    )
+
+
+def resolve_profile(explicit: str | None) -> str:
+    """Pick mimic profile for one flow. explicit pins; else random from android-chrome pool."""
+    if explicit:
+        path = PROFILES_DIR / f"{explicit}.json"
+        if not path.is_file():
+            raise FileNotFoundError(f"profile not found: {explicit} ({path})")
+        return explicit
+    pool = list_android_chrome_profiles()
+    if not pool:
+        log(f"no android-chrome profiles under {ANDROID_CHROME_DIR}; using {DEFAULT_PROFILE}")
+        return DEFAULT_PROFILE
+    chosen = random.choice(pool)
+    return chosen
+
+
 DOC_ACCEPT = (
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,"
     "image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
@@ -247,6 +279,7 @@ async def capture_bodies(
     script_source: str,
     cookies: str,
     *,
+    profile: str,
     max_posts: int,
     events: str,
     deadline_ms: int,
@@ -255,7 +288,7 @@ async def capture_bodies(
     if not BRIDGE.is_file():
         raise RuntimeError(f"bridge missing: {BRIDGE}")
     log(
-        f"mimic capture start events={events} max_posts={max_posts} "
+        f"mimic capture start profile={profile} events={events} max_posts={max_posts} "
         f"deadline={deadline_ms}ms script_timeout={script_timeout_ms}ms "
         f"script={script_url} cookies={len([c for c in cookies.split(';') if '=' in c])}"
     )
@@ -266,7 +299,7 @@ async def capture_bodies(
             "scriptUrl": script_url,
             "scriptSource": script_source,
             "cookies": [c.strip() for c in cookies.split(";") if "=" in c],
-            "profile": PROFILE,
+            "profile": profile,
             "deadlineMs": deadline_ms,
             "maxPosts": max_posts,
             "scriptTimeoutMs": script_timeout_ms,
@@ -379,10 +412,14 @@ async def initialize(
     *,
     abck_policy: str = "all",
     proxy_mode: str = "local",
+    profile: str,
 ) -> dict:
     base = browser_headers()
     abck_dl, bms_dl, script_to = capture_deadlines(proxy_mode)
-    log(f"=== init: select-flight (proxy={proxy_mode} abck_policy={abck_policy}) ===")
+    log(
+        f"=== init: select-flight (proxy={proxy_mode} abck_policy={abck_policy} "
+        f"profile={profile} tls=Chrome{CHROME_MAJOR}) ==="
+    )
     status, html = await http_get(
         client,
         SELECT_FLIGHT,
@@ -426,6 +463,7 @@ async def initialize(
 
     sensor_bodies = await capture_bodies(
         SELECT_FLIGHT, html, abck_url, abck_src, cookie_header(client),
+        profile=profile,
         max_posts=8, events="abck", deadline_ms=abck_dl, script_timeout_ms=script_to,
     )
     if not sensor_bodies:
@@ -478,6 +516,7 @@ async def initialize(
         # max_posts=2: real BMS body + optional __BMS_ASSIGN__ multi-id probe post
         bodies = await capture_bodies(
             SELECT_FLIGHT, html, bms_url, bms_src, cookie_header(client),
+            profile=profile,
             max_posts=2, events="none", deadline_ms=bms_dl, script_timeout_ms=script_to,
         )
         if bodies:
@@ -519,6 +558,7 @@ async def initialize(
         "initial_status": status,
         "initial_cookies": initial_cookies,
         "cookies": cookies,
+        "profile": profile,
         "bms_script_url": bms_url,
         "abck_script_url": abck_url,
         "bms_posted": bms_posted,
@@ -711,14 +751,18 @@ async def run_worker(
     proxy_mode: str,
     lumi_country: str = LUMI_COUNTRY,
     abck_policy: str = "all",
+    profile: str | None = None,
 ) -> dict[str, Any]:
     """One full flow: own sticky proxy + client → init → optional search (single pass)."""
     token = _WORKER.set(f"w{worker_id}")
     started = time()
+    # Profile is sensor-only; TLS/wire UA stay on RNET_EMULATION / browser_headers.
+    chosen_profile = resolve_profile(profile)
     try:
         log(
             f"worker start search={do_search} post_count={post_count} "
-            f"abck_policy={abck_policy} proxy={proxy_mode} lumi_country={lumi_country}"
+            f"abck_policy={abck_policy} proxy={proxy_mode} lumi_country={lumi_country} "
+            f"profile={chosen_profile}"
         )
         # Fresh proxy object per worker so Lumi session ids never share.
         # Same Client for entire init+search → sticky session + cookie jar stay bound.
@@ -730,6 +774,8 @@ async def run_worker(
             "worker": worker_id,
             "proxy_mode": proxy_mode,
             "lumi_country": lumi_country if proxy_mode == "lumi" else None,
+            "profile": chosen_profile,
+            "tls_emulation": f"Chrome{CHROME_MAJOR}+Android",
         }
         try:
             init = await initialize(
@@ -737,6 +783,7 @@ async def run_worker(
                 post_count=post_count,
                 abck_policy=abck_policy,
                 proxy_mode=proxy_mode,
+                profile=chosen_profile,
             )
             out.update(init)
             abck = cookie_value(str(out.get("cookies") or ""), "_abck") or ""
@@ -752,7 +799,7 @@ async def run_worker(
             out["class"] = classify_result(out)
             out["elapsed_s"] = round(time() - started, 2)
             log(
-                f"worker done ok={ok} class={out['class']} "
+                f"worker done ok={ok} class={out['class']} profile={chosen_profile} "
                 f"status={out.get('search_status')} elapsed={out['elapsed_s']}s"
             )
             return out
@@ -761,6 +808,8 @@ async def run_worker(
             fail = {
                 "worker": worker_id,
                 "proxy_mode": proxy_mode,
+                "profile": chosen_profile,
+                "tls_emulation": f"Chrome{CHROME_MAJOR}+Android",
                 "ok": False,
                 "error": f"{type(exc).__name__}: {exc}",
                 "elapsed_s": round(time() - started, 2),
@@ -779,11 +828,15 @@ async def run_concurrent(
     proxy_mode: str,
     lumi_country: str = LUMI_COUNTRY,
     abck_policy: str = "all",
+    profile: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Run N independent flows in parallel (each: own sticky proxy+cookies)."""
+    """Run N independent flows in parallel (each: own sticky proxy+cookies+profile pick)."""
+    pool_n = 1 if profile else len(list_android_chrome_profiles())
     log(
         f"concurrent start n={concurrency} search={do_search} "
-        f"proxy={proxy_mode} lumi_country={lumi_country} abck_policy={abck_policy}"
+        f"proxy={proxy_mode} lumi_country={lumi_country} abck_policy={abck_policy} "
+        f"profile={'pin:' + profile if profile else f'random pool={pool_n}'} "
+        f"tls=Chrome{CHROME_MAJOR} (decoupled)"
     )
     tasks = [
         run_worker(
@@ -793,6 +846,7 @@ async def run_concurrent(
             proxy_mode=proxy_mode,
             lumi_country=lumi_country,
             abck_policy=abck_policy,
+            profile=profile,
         )
         for i in range(concurrency)
     ]
@@ -807,13 +861,14 @@ async def run_concurrent(
         if r.get("ok"):
             log(
                 f"summary w{wid}: ok status={r.get('search_status')} "
-                f"class={r.get('class')} abck_posts={r.get('abck_post_count')} "
+                f"class={r.get('class')} profile={r.get('profile')} "
+                f"abck_posts={r.get('abck_post_count')} "
                 f"bms={r.get('bms_posted')} tilde0={r.get('abck_tilde0')} "
                 f"bm_s={r.get('has_bm_s')} elapsed={r.get('elapsed_s')}s"
             )
         else:
             log(
-                f"summary w{wid}: FAIL class={r.get('class')} "
+                f"summary w{wid}: FAIL class={r.get('class')} profile={r.get('profile')} "
                 f"{r.get('error')} elapsed={r.get('elapsed_s')}s"
             )
     return list(results)
@@ -856,6 +911,16 @@ async def main() -> int:
         help=f"Bright Data -country-XX (default {LUMI_COUNTRY}); only with --proxy lumi",
     )
     p.add_argument(
+        "--profile",
+        default=None,
+        metavar="ID",
+        help=(
+            "pin mimic profile id (e.g. android-chrome/2201116sg-v145-10025); "
+            "default: random per worker from profiles/android-chrome/*.json "
+            "(sensor only; wire TLS stays Chrome145)"
+        ),
+    )
+    p.add_argument(
         "--json-out",
         type=Path,
         help="write full results JSON array to this path",
@@ -868,7 +933,8 @@ async def main() -> int:
     log(
         f"start search={args.search} post_count={args.post_count} "
         f"abck_policy={args.abck_policy} concurrency={args.concurrency} "
-        f"proxy={args.proxy} lumi_country={args.lumi_country}"
+        f"proxy={args.proxy} lumi_country={args.lumi_country} "
+        f"profile={args.profile or 'random'} tls=Chrome{CHROME_MAJOR}"
     )
     results = await run_concurrent(
         args.concurrency,
@@ -877,6 +943,7 @@ async def main() -> int:
         proxy_mode=args.proxy,
         lumi_country=args.lumi_country,
         abck_policy=args.abck_policy,
+        profile=args.profile,
     )
     if args.json_out:
         slim = []
@@ -888,6 +955,8 @@ async def main() -> int:
                         "worker",
                         "proxy_mode",
                         "lumi_country",
+                        "profile",
+                        "tls_emulation",
                         "ok",
                         "class",
                         "search_status",
