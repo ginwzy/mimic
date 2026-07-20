@@ -50,17 +50,11 @@ function touchOps(shape: Shape): DraftOp[] {
   ];
 }
 
-/**
- * jsdom omits isSecureContext / crossOriginIsolated.
- * Chrome: SharedArrayBuffer is only exposed when cross-origin isolated; with
- * crossOriginIsolated=false, SAB must be absent (else Cebu BMS MU/PL710 → -2).
- */
+/** jsdom omits Window.isSecureContext / crossOriginIsolated; Chrome exposes both. */
 function securityOps(): DraftOp[] {
   return [
     valueProp({ path: 'window' }, 'isSecureContext', true, true, true),
     valueProp({ path: 'window' }, 'crossOriginIsolated', false, true, true),
-    // Drop host SAB so typeof window.SharedArrayBuffer === 'undefined' (non-isolated).
-    { op: 'drop', target: { path: 'window' }, key: 'SharedArrayBuffer' },
   ];
 }
 
