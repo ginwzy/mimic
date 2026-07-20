@@ -821,6 +821,7 @@ async def run_worker(
 
 
 async def run_concurrent(
+    count: int,
     concurrency: int,
     *,
     do_search: bool,
@@ -830,33 +831,45 @@ async def run_concurrent(
     abck_policy: str = "all",
     profile: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Run N independent flows in parallel (each: own sticky proxy+cookies+profile pick)."""
+    """Run ``count`` independent flows with at most ``concurrency`` in flight.
+
+    Each job: own sticky proxy + cookies + profile pick (unless profile pinned).
+    """
+    if count < 1:
+        raise ValueError("count must be >= 1")
+    if concurrency < 1:
+        raise ValueError("concurrency must be >= 1")
+    concurrency = min(concurrency, count)
     pool_n = 1 if profile else len(list_android_chrome_profiles())
     log(
-        f"concurrent start n={concurrency} search={do_search} "
+        f"concurrent start count={count} concurrency={concurrency} search={do_search} "
         f"proxy={proxy_mode} lumi_country={lumi_country} abck_policy={abck_policy} "
         f"profile={'pin:' + profile if profile else f'random pool={pool_n}'} "
         f"tls=Chrome{CHROME_MAJOR} (decoupled)"
     )
-    tasks = [
-        run_worker(
-            i + 1,
-            do_search=do_search,
-            post_count=post_count,
-            proxy_mode=proxy_mode,
-            lumi_country=lumi_country,
-            abck_policy=abck_policy,
-            profile=profile,
-        )
-        for i in range(concurrency)
-    ]
-    results = await asyncio.gather(*tasks)
-    ok_n = sum(1 for r in results if r.get("ok"))
-    fail_n = concurrency - ok_n
-    log(f"concurrent summary ok={ok_n} fail={fail_n} total={concurrency}")
-    buckets = Counter(str(r.get("class") or "?") for r in results)
+    sem = asyncio.Semaphore(concurrency)
+    results: list[dict[str, Any] | None] = [None] * count
+
+    async def one(job_id: int) -> None:
+        async with sem:
+            results[job_id - 1] = await run_worker(
+                job_id,
+                do_search=do_search,
+                post_count=post_count,
+                proxy_mode=proxy_mode,
+                lumi_country=lumi_country,
+                abck_policy=abck_policy,
+                profile=profile,
+            )
+
+    await asyncio.gather(*(one(i + 1) for i in range(count)))
+    out = [r for r in results if r is not None]
+    ok_n = sum(1 for r in out if r.get("ok"))
+    fail_n = count - ok_n
+    log(f"concurrent summary ok={ok_n} fail={fail_n} total={count} concurrency={concurrency}")
+    buckets = Counter(str(r.get("class") or "?") for r in out)
     log(f"class buckets: {dict(buckets)}")
-    for r in results:
+    for r in out:
         wid = r.get("worker")
         if r.get("ok"):
             log(
@@ -871,7 +884,7 @@ async def run_concurrent(
                 f"summary w{wid}: FAIL class={r.get('class')} profile={r.get('profile')} "
                 f"{r.get('error')} elapsed={r.get('elapsed_s')}s"
             )
-    return list(results)
+    return out
 
 
 async def main() -> int:
@@ -894,7 +907,18 @@ async def main() -> int:
         type=int,
         default=1,
         metavar="N",
-        help="run N full flows in parallel (each own proxy+cookies); default 1",
+        help="max parallel flows (each own proxy+cookies); default 1",
+    )
+    p.add_argument(
+        "-n",
+        "--count",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "total number of flows to run (default: same as --concurrency). "
+            "Use e.g. -n 20 -j 4 for 20 jobs with 4 in flight"
+        ),
     )
     p.add_argument(
         "--proxy",
@@ -929,14 +953,19 @@ async def main() -> int:
     if args.concurrency < 1:
         log("concurrency must be >= 1")
         return 2
+    count = args.concurrency if args.count is None else args.count
+    if count < 1:
+        log("count must be >= 1")
+        return 2
 
     log(
         f"start search={args.search} post_count={args.post_count} "
-        f"abck_policy={args.abck_policy} concurrency={args.concurrency} "
+        f"abck_policy={args.abck_policy} count={count} concurrency={args.concurrency} "
         f"proxy={args.proxy} lumi_country={args.lumi_country} "
         f"profile={args.profile or 'random'} tls=Chrome{CHROME_MAJOR}"
     )
     results = await run_concurrent(
+        count,
         args.concurrency,
         do_search=args.search,
         post_count=args.post_count,
