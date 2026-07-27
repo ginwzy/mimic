@@ -12,7 +12,7 @@ import {
   seal,
 } from '../src/index.js';
 import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
-import { domFeature } from '../src/features/dom.js';
+import { domDriver, domFeature } from '../src/features/dom.js';
 import { globalsDriver, globalsFeature } from '../src/features/globals.js';
 import { navDriver, navFeature } from '../src/features/nav.js';
 import { netDriver, netFeature, netShape } from '../src/features/net.js';
@@ -34,6 +34,7 @@ const drivers = {
   ua: uaDriver,
   plugins: pluginsDriver,
   globals: globalsDriver,
+  dom: domDriver,
   net: netDriver,
 };
 
