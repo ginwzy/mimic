@@ -17,6 +17,7 @@ const NODE_KEYS = [
 ] as const;
 
 const EVENT_KEYS = ['length', 'name', 'prototype', 'NONE', 'CAPTURING_PHASE', 'AT_TARGET', 'BUBBLING_PHASE'] as const;
+const PRIVACY_TOKEN_KEYS = ['hasPrivateToken', 'hasRedemptionRecord'] as const;
 
 const token = (owner: string, key: string, part: FnPart): string => `${owner}\u0000${key}\u0000${part}`;
 
@@ -297,9 +298,16 @@ function missingOps(shape: Shape, writes: ReadonlySet<string>): DraftOp[] {
         },
       });
     }
+    const keys = [...proto.keys];
+    // Android Chrome reuses the WebView DOM surface but exposes these Chrome-only methods.
+    if (shape.target.host === 'chrome' && proto.owner === 'window.Document.prototype') {
+      const missing = PRIVACY_TOKEN_KEYS.filter((key) => !keys.includes(key));
+      const touchIndex = keys.indexOf('ontouchcancel');
+      keys.splice(touchIndex < 0 ? keys.length : touchIndex, 0, ...missing);
+    }
     ops.push({
       op: 'order', target: { path: proto.owner },
-      keys: [...proto.keys, ...proto.symbols.map((symbol) => ({ symbol }))],
+      keys: [...keys, ...proto.symbols.map((symbol) => ({ symbol }))],
     });
   }
   return ops;

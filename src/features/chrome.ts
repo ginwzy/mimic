@@ -90,11 +90,7 @@ function mediaSurfaceOps(): DraftOp[] {
   ];
 }
 
-/**
- * BMS HD (PL248) capability surface via chromeFeature.operations.
- * Document order keys for hasPrivateToken are patched on chromium/chrome shapes (see generate:shapes
- * post-step / docs); props install here so stage order (prop before order) matches.
- */
+/** BMS HD capability surface; domShape owns Document key order. */
 function notificationStaticOps(): DraftOp[] {
   const ctor = { node: 'chrome.Notification.ctor' } as const;
   return [

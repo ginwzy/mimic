@@ -7,6 +7,8 @@ import {
 } from '../src/index.js';
 import { chromeDriver, chromeFeature, chromeTouchShape, touchFeature } from '../src/features/chrome.js';
 import { screenDriver, screenFeature } from '../src/features/screen.js';
+import { legacyShape } from '../src/legacy/profiles.js';
+import type { DraftOp } from '../src/shape/types.js';
 import { viewDriver, viewFeature } from '../src/features/view.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
@@ -146,6 +148,29 @@ test('Chrome Android exposes PushManager, hasPrivateToken, iframe loading for BM
     runtime.dispose();
   }
   assert.equal(engine.active, 0);
+});
+
+test('generated Android Chrome Shape keeps privacy-token methods in Document order', () => {
+  const keys = (shape: ReturnType<typeof legacyShape>) => {
+    const operation = shape.ops.map((op) => op as DraftOp).find((op) =>
+      op.op === 'order' && 'path' in op.target && op.target.path === 'window.Document.prototype');
+    assert.ok(operation && operation.op === 'order');
+    return operation.keys;
+  };
+  const android = { engine: 'chromium', platform: 'android', form: 'mobile', version: 145 } as const;
+  const chrome = keys(legacyShape({ ...android, host: 'chrome' }));
+  const webview = keys(legacyShape({ ...android, host: 'webview' }));
+  const desktop = keys(legacyShape({
+    engine: 'chromium', host: 'chrome', platform: 'macos', form: 'desktop', version: 149,
+  }));
+
+  const tokenIndex = chrome.indexOf('hasPrivateToken');
+  assert.deepEqual(chrome.slice(tokenIndex, tokenIndex + 2), ['hasPrivateToken', 'hasRedemptionRecord']);
+  assert.ok(tokenIndex < chrome.indexOf('ontouchcancel'));
+  for (const key of ['hasPrivateToken', 'hasRedemptionRecord']) {
+    assert.equal(webview.includes(key), false);
+    assert.equal(desktop.filter((item) => item === key).length, 1);
+  }
 });
 
 test('Shape alone controls Chrome/WebView and mobile/desktop presence', async () => {
