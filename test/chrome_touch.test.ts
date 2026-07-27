@@ -74,6 +74,38 @@ test('chrome host exposes only the captured chrome surface', async () => {
   assert.equal(engine.active, 0);
 });
 
+test('Chrome Notification matches the captured static surface', async () => {
+  const { engine, runtime } = await open('macos-chrome-v149');
+  try {
+    const result = runtime.run(`(() => {
+      const permission = Notification.requestPermission();
+      return JSON.stringify({
+        ownNames: Object.getOwnPropertyNames(Notification).sort(),
+        maxActions: Notification.maxActions,
+        permission: Notification.permission,
+        requestShape: [
+          Notification.requestPermission.name,
+          Notification.requestPermission.length,
+          Notification.requestPermission.toString(),
+          Reflect.ownKeys(Notification.requestPermission),
+        ],
+        promiseRealm: Object.getPrototypeOf(permission) === Promise.prototype,
+      });
+    })()`);
+    assert.equal(result.ok, true, result.ok ? '' : String(result.error));
+    assert.deepEqual(JSON.parse(String(result.value)), {
+      ownNames: ['length', 'maxActions', 'name', 'permission', 'prototype', 'requestPermission'],
+      maxActions: 2,
+      permission: 'default',
+      requestShape: ['requestPermission', 0, 'function requestPermission() { [native code] }', ['length', 'name']],
+      promiseRealm: true,
+    });
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
 test('Chrome Android exposes PushManager, hasPrivateToken, iframe loading for BMS HD', async () => {
   const { engine, runtime } = await open('android-chrome/2201116sg-v145-10025');
   try {

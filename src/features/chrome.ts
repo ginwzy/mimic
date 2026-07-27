@@ -95,6 +95,15 @@ function mediaSurfaceOps(): DraftOp[] {
  * Document order keys for hasPrivateToken are patched on chromium/chrome shapes (see generate:shapes
  * post-step / docs); props install here so stage order (prop before order) matches.
  */
+function notificationStaticOps(): DraftOp[] {
+  const ctor = { node: 'chrome.Notification.ctor' } as const;
+  return [
+    fn('chrome.Notification.requestPermission', 'chrome.Notification.requestPermission', 'requestPermission', 0),
+    valueProp(ctor, 'maxActions', 2, true, true),
+    refProp(ctor, 'requestPermission', 'chrome.Notification.requestPermission', true),
+  ];
+}
+
 function bmsCapabilityOps(): DraftOp[] {
   const pushProto = { node: 'chrome.PushManager.proto' } as const;
   const iframeProto = { path: 'window.HTMLIFrameElement.prototype' } as const;
@@ -180,11 +189,13 @@ function bmsCapabilityOpsFor(shape: Shape): DraftOp[] {
 
 export const chromeFeature: Feature = {
   id: 'chrome',
-  rev: '2',
+  rev: '3',
   requires: ['screen'],
   build: ({ shape }) => ({
     // Only chrome host; webview keeps lean surface.
-    operations: shape.target.host === 'chrome' ? bmsCapabilityOpsFor(shape) : [],
+    operations: shape.target.host === 'chrome'
+      ? [...notificationStaticOps(), ...bmsCapabilityOpsFor(shape)]
+      : [],
     binds: [
       { slot: 'chrome.load', driver: 'chrome', config: { op: 'load' } },
       { slot: 'chrome.csi', driver: 'chrome', config: { op: 'csi' } },
@@ -195,6 +206,11 @@ export const chromeFeature: Feature = {
       { slot: 'chrome.speech.getVoices', driver: 'chrome', config: { op: 'value', value: [] } },
       ...(shape.target.host === 'chrome'
         ? [
+            {
+              slot: 'chrome.Notification.requestPermission',
+              driver: 'chrome',
+              config: { op: 'promise-value' as const, value: 'default' },
+            },
             { slot: 'chrome.hasPrivateToken', driver: 'chrome', config: { op: 'token-false' as const } },
             { slot: 'chrome.hasRedemptionRecord', driver: 'chrome', config: { op: 'token-false' as const } },
             { slot: 'chrome.iframe.loading.get', driver: 'chrome', config: { op: 'iframe-loading-get' as const } },
@@ -243,6 +259,9 @@ export const chromeDriver: Driver = {
         }
         if (item.op === 'value') {
           return item.value !== null && typeof item.value === 'object' ? port.clone(item.value) : item.value;
+        }
+        if (item.op === 'promise-value') {
+          return port.resolve(item.value);
         }
         if (item.op === 'token-false') {
           return Promise.resolve(false);
