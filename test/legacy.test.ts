@@ -39,9 +39,9 @@ test('LegacyProfiles splits an inherited WebView profile without inventing data'
   assert.equal(imported.report.ledger['meta.traits.host']?.status, 'consumed');
 });
 
-test('LegacyProfiles imports the complete v1 corpus into twelve explicit Shapes', async () => {
+test('LegacyProfiles imports the complete v1 corpus into thirteen explicit Shapes', async () => {
   const ids = await store.list();
-  assert.equal(ids.length, 1012);
+  assert.equal(ids.length, 1013);
 
   const imported = await Promise.all(ids.map((id) => store.load(id)));
   const shapes = new Map<string, number>();
@@ -68,6 +68,7 @@ test('LegacyProfiles imports the complete v1 corpus into twelve explicit Shapes'
     'chromium/chrome/android/mobile/139': 796,
     'chromium/chrome/android/mobile/140': 185,
     'chromium/chrome/android/mobile/141': 2,
+    'chromium/chrome/android/mobile/145': 1,
     'chromium/chrome/linux/desktop/143': 1,
     'chromium/chrome/macos/desktop/131': 1,
     'chromium/chrome/macos/desktop/148': 1,
@@ -75,10 +76,10 @@ test('LegacyProfiles imports the complete v1 corpus into twelve explicit Shapes'
     'chromium/webview/android/mobile/131': 1,
     'chromium/webview/android/mobile/138': 1,
   });
-  assert.deepEqual(Object.fromEntries([...sources].sort()), { capture: 3, 'fp-env': 1006, manual: 3 });
+  assert.deepEqual(Object.fromEntries([...sources].sort()), { capture: 3, 'fp-env': 1007, manual: 3 });
   assert.equal(captured, 4);
-  assert.equal(imported.length - captured, 1008);
-  assert.equal(pages, 999);
+  assert.equal(imported.length - captured, 1009);
+  assert.equal(pages, 1000);
 });
 
 async function withProfiles(files: Record<string, unknown>, run: (profiles: LegacyProfiles) => Promise<void>): Promise<void> {

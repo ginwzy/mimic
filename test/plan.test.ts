@@ -598,5 +598,5 @@ test('compile produces a unique base Plan for every migrated Profile', async () 
     assert.equal(Object.hasOwn(plan, 'synthetic'), false, id);
     assert.doesNotThrow(() => JSON.stringify(plan), id);
   }
-  assert.equal(plans.size, 1012);
+  assert.equal(plans.size, ids.length);
 });
