@@ -3,7 +3,7 @@
 **日期**: 2026-07-20  
 **范围**: mimic 执行 **已保存 live BMS** 后解密得到的 `signals`（非 Lumi 出口 403）。  
 **对照脚本**: `tmp/cebu-baseline/matched/bms.js` + `url.txt`（id 前缀为 **PL**）。  
-**更长背景**: `docs/cebu-bms-offline-env-diff.md`、`docs/cebu-bms-401-worklog.md`
+**更长背景**: `docs/notes/cebu-bms-offline-env-diff.md`、`docs/notes/cebu-bms-401-worklog.md`
 
 ---
 
@@ -296,9 +296,9 @@ console.log("n", Object.keys(s).length);
 
 | 用途 | 路径 |
 |------|------|
-| 本清单 | `docs/cebu-bms-bad-keys.md` |
-| 离线方法长文 | `docs/cebu-bms-offline-env-diff.md` |
-| e2e worklog | `docs/cebu-bms-401-worklog.md` |
+| 本清单 | `docs/notes/cebu-bms-bad-keys.md` |
+| 离线方法长文 | `docs/notes/cebu-bms-offline-env-diff.md` |
+| e2e worklog | `docs/notes/cebu-bms-401-worklog.md` |
 | capture bridge | `test/cebu_capture.mjs` |
 | live 脚本 | `tmp/cebu-baseline/matched/bms.js` |
 | deobf | `tmp/cebu-baseline/matched/deobf/bms.deobfuscated.js`（`pR` / `Lj` / `bO` case 39） |

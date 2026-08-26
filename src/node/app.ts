@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Application, type CaptureOptions, type ProfilesPort } from '../app/index.js';
-import { JsdomEngine } from '../engines/jsdom.js';
+import { JsdomEngine } from '../engine/jsdom.js';
 import type { Engine } from '../engine/types.js';
 import { drivers, features } from '../features/index.js';
 import { LegacyProfiles } from '../legacy/profiles.js';

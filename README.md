@@ -114,6 +114,7 @@ resources/    Shape、结构探针、真机基线与冻结行为 Oracle
 scripts/      构建、数据校验与 Shape 生成工具
 test/         单元、集成、安全、性能与发布包契约测试
 docs/spec/    架构与运行时契约
+docs/notes/   会话工作笔记,非正式契约
 ```
 
 ## License

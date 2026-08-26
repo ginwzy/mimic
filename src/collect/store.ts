@@ -7,7 +7,7 @@ import { MimicError } from '../core/error.js';
 import { jsonCopy } from '../core/json.js';
 import { parseCollect } from '../core/parse.js';
 import type { CatalogDoc, Page, Profile, Shape } from '../core/types.js';
-import { artifactPath } from '../profile/files.js';
+import { artifactPath } from './profiles.js';
 import { migrateCollect } from './contract.js';
 import { normalizeCollect, type NormalizedCollect } from './normalize.js';
 import type { CollectBundle } from './types.js';

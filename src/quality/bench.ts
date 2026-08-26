@@ -5,7 +5,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import type { Application, TaskRequest } from '../app/index.js';
-import { JsdomEngine } from '../engines/jsdom.js';
+import { JsdomEngine } from '../engine/jsdom.js';
 import { WorkerExecutor } from '../executor/pool.js';
 import { drivers } from '../features/index.js';
 import { createNodeApplication } from '../node/app.js';

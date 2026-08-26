@@ -20,7 +20,7 @@ export {
 } from './collect/server.js';
 export type { CollectServerHandle, CollectServerOptions } from './collect/server.js';
 export type { CollectBundle, LegacyCollectV1, RawEvidence } from './collect/types.js';
-export { ProfileFiles } from './profile/files.js';
+export { ProfileFiles } from './collect/profiles.js';
 export { compile, explain } from './compile/index.js';
 export { parsePlan } from './compile/parse.js';
 export type { PlanExplanation } from './compile/index.js';
@@ -42,7 +42,7 @@ export type {
   Ref,
   StoredValue,
 } from './shape/types.js';
-export { JsdomEngine } from './engines/jsdom.js';
+export { JsdomEngine } from './engine/jsdom.js';
 export type { Driver, DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult } from './engine/types.js';
 export { Application } from './app/index.js';
 export type {

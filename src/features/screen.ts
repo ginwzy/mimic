@@ -1,4 +1,4 @@
-import { dataDriver } from '../drivers/data.js';
+import { dataDriver } from '../engine/data.js';
 import { parseShape } from '../core/parse.js';
 import { seal } from '../core/seal.js';
 import type { Shape } from '../core/types.js';

@@ -264,7 +264,7 @@ node cli.mjs deobf --target bms
 | 区域 | 路径 |
 |------|------|
 | capture lifecycle | `src/app/index.ts` |
-| currentScript / iframe | `src/engines/jsdom.ts` |
+| currentScript / iframe | `src/engine/jsdom.ts` |
 | **SharedWorker** / Worker / OffscreenCanvas | `src/features/dom.ts` |
 | matchMedia coarse | `src/features/globals.ts` |
 | Cebu flow / 出口 / Chrome145 pin | `test/cebu_flow.py` |

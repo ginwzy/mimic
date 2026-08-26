@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob } from '../src/index.js';
 import { drivers, features } from '../src/features/index.js';
-import { diff, summarize, type ProbeSnapshot } from '../src/probe/diff.js';
+import { diff, summarize, type ProbeSnapshot } from '../src/collect/probe.js';
 
 interface Budget {
   TELL: number;

@@ -41,6 +41,13 @@ const RETIRED_VERSION_PATHS = [
   'docs/spec/v2-architecture.md',
 ] as const;
 
+const COLLAPSED_ADAPTER_PATHS = [
+  'src/engines',
+  'src/drivers',
+  'src/profile',
+  'src/probe',
+] as const;
+
 function command(
   commandName: string,
   args: string[],
@@ -73,6 +80,16 @@ test('retired v1 source surface does not return to the repository', async () => 
 
 test('retired implementation version paths do not return to the repository', async () => {
   for (const relativePath of RETIRED_VERSION_PATHS) {
+    await assert.rejects(
+      access(path.join(root, relativePath)),
+      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
+      `repository still contains ${relativePath}`,
+    );
+  }
+});
+
+test('collapsed adapter directories do not return to the repository', async () => {
+  for (const relativePath of COLLAPSED_ADAPTER_PATHS) {
     await assert.rejects(
       access(path.join(root, relativePath)),
       (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',

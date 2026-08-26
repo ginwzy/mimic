@@ -3,7 +3,7 @@ import { parseShape } from '../core/parse.js';
 import { seal } from '../core/seal.js';
 import type { JsonValue, Shape, Support } from '../core/types.js';
 import type { FnShape, Key, Ref } from '../shape/types.js';
-import type { FnTell, ProbeFlags, ProbeKey, ProbeSnapshot } from '../probe/diff.js';
+import type { FnTell, ProbeFlags, ProbeKey, ProbeSnapshot } from './probe.js';
 
 type RawOp = Record<string, JsonValue>;
 

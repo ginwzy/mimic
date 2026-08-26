@@ -1,5 +1,5 @@
 import type { JsonValue } from '../core/types.js';
-import type { Driver, Port } from '../engine/types.js';
+import type { Driver, Port } from './types.js';
 
 function config(value: JsonValue | undefined): Record<string, JsonValue> {
   if (value === null || Array.isArray(value) || typeof value !== 'object') throw new TypeError('data Driver config invalid');

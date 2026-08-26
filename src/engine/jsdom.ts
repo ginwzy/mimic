@@ -5,7 +5,7 @@ import { CookieJar, JSDOM } from 'jsdom';
 import { MimicError } from '../core/error.js';
 import { deepFreeze, jsonCopy } from '../core/json.js';
 import type { Data, JsonValue, Plan } from '../core/types.js';
-import type { DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult } from '../engine/types.js';
+import type { DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult } from './types.js';
 import type { Desc, EngineManifest, FnShape, Key, Op, PlanBind, Ref, StoredValue } from '../shape/types.js';
 import { parsePlan } from '../compile/parse.js';
 import { REQUESTED_JSDOM_VERSION } from '../node/metadata.js';

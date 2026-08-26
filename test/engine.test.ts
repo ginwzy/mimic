@@ -16,7 +16,7 @@ import {
   type Profile,
   type Shape,
 } from '../src/index.js';
-import { JSDOM_ENGINE_ABI } from '../src/engines/jsdom.js';
+import { JSDOM_ENGINE_ABI } from '../src/engine/jsdom.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 

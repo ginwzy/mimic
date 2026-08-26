@@ -2,7 +2,7 @@ import { parseShape } from '../core/parse.js';
 import { seal } from '../core/seal.js';
 import type { JsonValue, Shape, Support, WindowData } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
-import { dataDriver } from '../drivers/data.js';
+import { dataDriver } from '../engine/data.js';
 import type { DraftOp, Feature, FnShape } from '../shape/types.js';
 
 const method = (name: string, length = 0, constructable = false, hasPrototype = false): FnShape => ({

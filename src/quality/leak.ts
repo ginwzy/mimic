@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { TaskRequest } from '../app/index.js';
-import { JsdomEngine } from '../engines/jsdom.js';
+import { JsdomEngine } from '../engine/jsdom.js';
 import { WorkerExecutor, type ExecutorStats } from '../executor/pool.js';
 import { createNodeApplication } from '../node/app.js';
 

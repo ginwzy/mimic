@@ -7,7 +7,7 @@ import { migrateCollect } from '../src/collect/contract.js';
 import { CollectStore } from '../src/collect/store.js';
 import { MimicError } from '../src/core/error.js';
 import { createNodeApplication } from '../src/node/app.js';
-import { ProfileFiles } from '../src/profile/files.js';
+import { ProfileFiles } from '../src/collect/profiles.js';
 
 const FIXTURES = {
   'android-webview-v138': 'android-webview-v138',

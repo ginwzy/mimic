@@ -15,7 +15,7 @@ import type { JsonValue } from './core/types.js';
 import { DEFAULT_TIMEOUT_MS } from './executor/pool.js';
 import { createMimic } from './sdk.js';
 import { DEFAULT_PROBE_PATH, DEFAULT_PROFILES_ROOT } from './node/assets.js';
-import { diff, summarize, type ProbeSnapshot } from './probe/diff.js';
+import { diff, summarize, type ProbeSnapshot } from './collect/probe.js';
 
 export type CliServerHandle = Pick<ServerHandle, 'server' | 'close'>;
 

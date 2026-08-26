@@ -12,7 +12,7 @@ import {
 } from '../legacy/profiles.js';
 import type { CollectBundle, RawEvidence } from './types.js';
 import { probeShape } from './shape.js';
-import type { ProbeSnapshot } from '../probe/diff.js';
+import type { ProbeSnapshot } from './probe.js';
 
 export interface NormalizedCollect {
   readonly capture: Readonly<{ id: string; hash: Hash }>;
