@@ -1,11 +1,8 @@
 import { dataDriver } from '../engine/data.js';
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
 import type { Shape, Support } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
-import { chromeTouchShape } from './chrome.js';
 
 const SCALARS = [
   'userAgent', 'appVersion', 'platform', 'vendor', 'language', 'languages',
@@ -16,7 +13,7 @@ const FIXED = ['webdriver', 'pdfViewerEnabled', 'doNotTrack', 'onLine'] as const
 // Cebu BMS packs [effectiveType, rtt, type] into iV864/iV261.
 const CONNECTION = ['effectiveType', 'downlink', 'rtt', 'saveData', 'type'] as const;
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   return [
     { op: 'alloc', id: 'nav.instance', kind: 'proxy', source: { path: 'window.navigator' }, symbols: ['impl'] },
     fn('nav.window.get', 'nav.window', 'get navigator'),
@@ -237,22 +234,6 @@ function cachesOperations(): DraftOp[] {
       keys: ['match', 'has', 'open', 'delete', 'keys', 'constructor', { symbol: 'toStringTag' }],
     },
   ];
-}
-
-export function navShape(input: Shape): Shape {
-  const shape = chromeTouchShape(input);
-  if (shape.features.includes('nav')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'nav'].sort(),
-    ops: [...shape.ops, ...operations()],
-    support: {
-      ...shape.support,
-      'nav.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'nav.api': 'emulated',
-    },
-  }));
 }
 
 export const navFeature: Feature = {

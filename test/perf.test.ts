@@ -14,8 +14,10 @@ import {
   type Profile,
   type Shape,
 } from '../src/index.js';
-import { perfDriver, perfFeature, perfShape } from '../src/features/perf.js';
-import { timeDriver, timeFeature, timeShape } from '../src/features/time.js';
+import { perfDriver, perfFeature } from '../src/features/perf.js';
+import { perfShape } from '../src/features/perf.shape.js';
+import { timeDriver, timeFeature } from '../src/features/time.js';
+import { timeShape } from '../src/features/time.shape.js';
 
 const source = { kind: 'manual' as const, hash: 'a'.repeat(64) };
 const parts = ['navigator', 'screen', 'window', 'timezone', 'webgl', 'canvas', 'audio', 'fonts'] as const;

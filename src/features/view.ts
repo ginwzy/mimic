@@ -1,6 +1,4 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { JsonValue, Shape, Support, WindowData } from '../core/types.js';
+import type { JsonValue, Support, WindowData } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
 import { dataDriver } from '../engine/data.js';
 import type { DraftOp, Feature } from '../shape/types.js';
@@ -9,7 +7,7 @@ import { accessor, ctor, fn, refProp, tag } from './ops.js';
 const GEOMETRY = ['innerWidth', 'innerHeight', 'outerWidth', 'outerHeight', 'devicePixelRatio'] as const;
 const VIEW_VALUES = ['offsetLeft', 'offsetTop', 'pageLeft', 'pageTop', 'width', 'height', 'scale'] as const;
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   return [
     { op: 'alloc', id: 'view.proto', kind: 'object' },
     { op: 'alloc', id: 'view.instance', kind: 'event' },
@@ -36,21 +34,6 @@ function operations(): DraftOp[] {
       keys: [...VIEW_VALUES, 'onresize', 'onscroll', 'constructor', { symbol: 'toStringTag' }],
     },
   ];
-}
-
-export function viewShape(shape: Shape): Shape {
-  if (shape.features.includes('view')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'view'].sort(),
-    ops: [...shape.ops, ...operations()],
-    support: {
-      ...shape.support,
-      'view.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'view.api': 'emulated',
-    },
-  }));
 }
 
 type ValueConfig = { op: 'value'; value: JsonValue } | { op: 'source'; path: string };

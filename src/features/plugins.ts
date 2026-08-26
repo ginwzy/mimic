@@ -1,10 +1,7 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
 import type { JsonValue, Shape } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
 import type { DraftOp, Feature, Ref } from '../shape/types.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
-import { uaShape } from './ua.js';
 
 const DESCRIPTION = 'Portable Document Format';
 const NAMES = ['PDF Viewer', 'Chrome PDF Viewer', 'Chromium PDF Viewer', 'Microsoft Edge PDF Viewer', 'WebKit built-in PDF'];
@@ -139,25 +136,12 @@ function chromeOps(): DraftOp[] {
   return ops;
 }
 
-export function pluginsShape(input: Shape): Shape {
-  const shape = uaShape(input);
-  if (shape.features.includes('plugins')) return shape;
-  const { hash: _hash, ...body } = shape;
-  // Chrome Android: empty PluginArray (no PDF plugin entries). Desktop Chrome ships 5 PDF aliases.
+export function operations(shape: Shape): DraftOp[] {
   // Chrome Android: empty PluginArray (no PDF plugin entries). Desktop Chrome ships 5 PDF aliases.
   const pluginOps = shape.target.host === 'chrome' && shape.target.form !== 'mobile'
     ? chromeOps()
     : [];
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'plugins'].sort(),
-    ops: [...shape.ops, ...baseOps(), ...pluginOps],
-    support: {
-      ...shape.support,
-      'plugins.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'plugins.api': 'emulated',
-    },
-  }));
+  return [...baseOps(), ...pluginOps];
 }
 
 function records(values: readonly string[], prefix: string): Record<string, JsonValue> {

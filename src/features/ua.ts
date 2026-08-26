@@ -1,12 +1,9 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { JsonValue, Shape } from '../core/types.js';
+import type { JsonValue } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
-import { navShape } from './nav.js';
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   const proto = { node: 'ua.proto' } as const;
   return [
     { op: 'alloc', id: 'ua.proto', kind: 'object' },
@@ -33,22 +30,6 @@ function operations(): DraftOp[] {
       keys: ['brands', 'mobile', 'platform', 'getHighEntropyValues', 'toJSON', 'constructor', { symbol: 'toStringTag' }],
     },
   ];
-}
-
-export function uaShape(input: Shape): Shape {
-  const shape = navShape(input);
-  if (shape.features.includes('ua')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'ua'].sort(),
-    ops: [...shape.ops, ...operations()],
-    support: {
-      ...shape.support,
-      'ua.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'ua.api': 'emulated',
-    },
-  }));
 }
 
 export const uaFeature: Feature = {

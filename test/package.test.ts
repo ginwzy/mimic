@@ -122,6 +122,20 @@ test('execute catalog does not import DOM capture tables', async () => {
   );
 });
 
+test('execute catalog does not import Shape compilers', async () => {
+  await assertImportGraph(
+    ['src/features/index.ts', 'src/node/runtime.ts', 'src/executor/worker.ts', 'src/public.ts'],
+    (resolved) => {
+      if (resolved.endsWith(`${path.sep}features${path.sep}shape.ts`)) return path.relative(root, resolved);
+      if (resolved.endsWith(`${path.sep}features${path.sep}extend.ts`)) return path.relative(root, resolved);
+      if (resolved.includes(`${path.sep}features${path.sep}`) && resolved.endsWith('.shape.ts')) {
+        return path.relative(root, resolved);
+      }
+      return undefined;
+    },
+  );
+});
+
 test('worker runtime does not import the Profile importer', async () => {
   await assertImportGraph(
     ['src/executor/worker.ts'],

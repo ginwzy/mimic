@@ -5,7 +5,8 @@ import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, seal,
   parseShape,
 } from '../src/index.js';
-import { chromeDriver, chromeFeature, chromeTouchShape, touchFeature } from '../src/features/chrome.js';
+import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
+import { chromeTouchShape } from '../src/features/chrome.shape.js';
 import { screenDriver, screenFeature } from '../src/features/screen.js';
 import { viewDriver, viewFeature } from '../src/features/view.js';
 

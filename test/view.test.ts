@@ -5,7 +5,8 @@ import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, seal,
   parseShape,
 } from '../src/index.js';
-import { viewDriver, viewFeature, viewShape } from '../src/features/view.js';
+import { viewDriver, viewFeature } from '../src/features/view.js';
+import { viewShape } from '../src/features/view.shape.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 

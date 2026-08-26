@@ -1,6 +1,4 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { Data, JsonValue, Shape } from '../core/types.js';
+import type { Data, JsonValue } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { fnShape, refProp } from './ops.js';
@@ -23,16 +21,6 @@ function operations(): DraftOp[] {
     refProp({ path: 'window' }, 'Function', 'trace.Function'),
     refProp({ path: 'window.Function.prototype' }, 'constructor', 'trace.Function'),
   ];
-}
-
-export function traceShape(input: Shape): Shape {
-  if (input.features.includes('trace')) return input;
-  const { hash: _hash, ...body } = input;
-  return parseShape(seal({
-    ...body,
-    features: [...input.features, 'trace'].sort(),
-    support: { ...input.support, 'trace.feature': 'emulated' },
-  }));
 }
 
 export const traceFeature: Feature = {

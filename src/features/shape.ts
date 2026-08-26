@@ -3,9 +3,9 @@ import type { Shape } from '../core/types.js';
 import { audioShape } from './audio.shape.js';
 import { canvasShape } from './canvas.shape.js';
 import { netShape } from './net.shape.js';
-import { perfShape } from './perf.js';
-import { timeShape } from './time.js';
-import { traceShape } from './trace.js';
+import { perfShape } from './perf.shape.js';
+import { timeShape } from './time.shape.js';
+import { traceShape } from './trace.shape.js';
 import { webglShape } from './webgl.shape.js';
 
 export function shape(input: Shape): Shape {

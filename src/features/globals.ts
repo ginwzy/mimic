@@ -1,9 +1,6 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
 import type { JsonValue, Shape } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
-import { pluginsShape } from './plugins.js';
 import { accessor, ctor, fn, fnShape, refProp, tag } from './ops.js';
 import {
   resolveSystemColors,
@@ -76,7 +73,7 @@ function specs(shape: Shape): readonly Spec[] {
   return shape.target.host === 'chrome' ? [...COMMON, ...CHROME] : COMMON;
 }
 
-function operations(shape: Shape): DraftOp[] {
+export function operations(shape: Shape): DraftOp[] {
   const ops: DraftOp[] = [];
   for (const [name, length] of specs(shape)) {
     const id = `globals.${name}`;
@@ -120,22 +117,6 @@ function mediaOperations(): DraftOp[] {
       keys: ['media', 'matches', 'onchange', 'addListener', 'removeListener', 'constructor', { symbol: 'toStringTag' }],
     },
   ];
-}
-
-export function globalsShape(input: Shape): Shape {
-  const shape = pluginsShape(input);
-  if (shape.features.includes('globals')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'globals'].sort(),
-    ops: [...shape.ops, ...operations(shape)],
-    support: {
-      ...shape.support,
-      'globals.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'globals.api': 'shape-only',
-    },
-  }));
 }
 
 export const globalsFeature: Feature = {

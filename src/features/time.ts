@@ -1,6 +1,4 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { JsonValue, Shape } from '../core/types.js';
+import type { JsonValue } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { fnShape, refProp } from './ops.js';
@@ -52,7 +50,7 @@ const DATE_ZONE_METHODS = [
   { key: 'toLocaleTimeString', id: 'time.date.locale-time', slot: 'time.date.locale-time', mode: 'locale', path: DATE_LOCALE_TIME, length: 0 },
 ] as const;
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   const date = { node: 'time.date' } as const;
   const proto = { path: 'window.Date.prototype' } as const;
   const format = { node: 'time.format' } as const;
@@ -90,21 +88,6 @@ function operations(): DraftOp[] {
     { op: 'order', target: date, keys: ['length', 'name', 'prototype', 'now', 'parse', 'UTC'] },
     { op: 'order', target: format, keys: ['length', 'name', 'prototype', 'supportedLocalesOf'] },
   ];
-}
-
-export function timeShape(input: Shape): Shape {
-  if (input.features.includes('time')) return input;
-  const { hash: _hash, ...body } = input;
-  return parseShape(seal({
-    ...body,
-    features: [...input.features, 'time'].sort(),
-    ops: [...input.ops, ...operations()],
-    support: {
-      ...input.support,
-      'time.shape': input.level === 'captured' ? 'captured' : 'derived',
-      'time.api': 'emulated',
-    },
-  }));
 }
 
 export const timeFeature: Feature = {

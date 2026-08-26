@@ -1,8 +1,7 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
 import type { JsonValue, Shape } from '../core/types.js';
 import type { DraftOp, FnPart } from '../shape/types.js';
-import { globalsShape } from './globals.js';
+import { extendShape, shapeSupport } from './extend.js';
+import { globalsShape } from './globals.shape.js';
 import { accessor, fn, fnShape, refProp, tag } from './ops.js';
 import { PROTOS } from './dom.data.js';
 import { SURFACES, type SurfaceId } from './dom.missing.data.js';
@@ -341,17 +340,9 @@ function interfaceOps(shape: Shape): DraftOp[] {
 
 export function domShape(input: Shape): Shape {
   const shape = globalsShape(input);
-  if (shape.features.includes('dom')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'dom'].sort(),
-    ops: [...shape.ops, ...operations(shape)],
-    support: {
-      ...shape.support,
-      'dom.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'dom.api': 'shape-only',
-    },
-  }));
+  return extendShape(shape, 'dom', operations(shape), {
+    'dom.shape': shapeSupport(shape),
+    'dom.api': 'shape-only',
+  });
 }
 

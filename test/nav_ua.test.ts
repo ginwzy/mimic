@@ -3,9 +3,11 @@ import path from 'node:path';
 import test from 'node:test';
 import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal } from '../src/index.js';
 import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
-import { navDriver, navFeature, navShape } from '../src/features/nav.js';
+import { navDriver, navFeature } from '../src/features/nav.js';
+import { navShape } from '../src/features/nav.shape.js';
 import { screenDriver, screenFeature } from '../src/features/screen.js';
-import { uaDriver, uaFeature, uaShape } from '../src/features/ua.js';
+import { uaDriver, uaFeature } from '../src/features/ua.js';
+import { uaShape } from '../src/features/ua.shape.js';
 import { viewDriver, viewFeature } from '../src/features/view.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));

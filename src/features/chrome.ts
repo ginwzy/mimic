@@ -1,10 +1,7 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
 import type { JsonValue, Shape } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { accessor, fn, fnShape, refProp, tag, valueProp } from './ops.js';
-import { screenShape } from './screen.js';
 
 const TOUCH = ['ontouchstart', 'ontouchend', 'ontouchmove', 'ontouchcancel'] as const;
 
@@ -122,29 +119,14 @@ function bmsCapabilityOps(): DraftOp[] {
   ];
 }
 
-export function chromeTouchShape(input: Shape): Shape {
-  const shape = screenShape(input);
-  if (shape.features.includes('touch')) return shape;
+export function operations(shape: Shape): DraftOp[] {
   const chrome = shape.target.host === 'chrome';
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'touch', ...(chrome ? ['chrome'] : [])].sort(),
-    ops: [
-      ...shape.ops,
-      ...(chrome ? chromeOps() : [{ op: 'drop', target: { path: 'window' }, key: 'chrome' } as DraftOp]),
-      ...touchOps(shape),
-      ...securityOps(),
-      ...(chrome ? mediaSurfaceOps() : []),
-    ],
-    support: {
-      ...shape.support,
-      'chrome.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'touch.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'window.secure-context': 'emulated',
-      ...(chrome ? { 'chrome.media-surface': 'emulated' as const } : {}),
-    },
-  }));
+  return [
+    ...(chrome ? chromeOps() : [{ op: 'drop', target: { path: 'window' }, key: 'chrome' } as DraftOp]),
+    ...touchOps(shape),
+    ...securityOps(),
+    ...(chrome ? mediaSurfaceOps() : []),
+  ];
 }
 
 /** True when Shape already props a key (e.g. dom.missing already stubbed Document.hasPrivateToken). */

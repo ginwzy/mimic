@@ -1,5 +1,3 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
 import type { JsonValue, Page, PerformanceResource, Shape, Support } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature, Ref } from '../shape/types.js';
@@ -37,7 +35,7 @@ const INTERFACES = [
   ['observer-list', 'PerformanceObserverEntryList', { path: 'window.Object.prototype' }],
 ] as const satisfies readonly (readonly [string, string, Ref])[];
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   const ops: DraftOp[] = [
     {
       op: 'fn', target: { path: 'window.Performance' },
@@ -141,21 +139,6 @@ function operations(): DraftOp[] {
     },
   );
   return ops;
-}
-
-export function perfShape(input: Shape): Shape {
-  if (input.features.includes('perf')) return input;
-  const { hash: _hash, ...body } = input;
-  return parseShape(seal({
-    ...body,
-    features: [...input.features, 'perf'].sort(),
-    ops: [...input.ops, ...operations()],
-    support: {
-      ...input.support,
-      'perf.shape': input.level === 'captured' ? 'captured' : 'derived',
-      'perf.api': 'emulated',
-    },
-  }));
 }
 
 function resourceSupport(page: Page | undefined): Support {

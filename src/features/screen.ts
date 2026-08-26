@@ -1,15 +1,11 @@
 import { dataDriver } from '../engine/data.js';
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { Shape } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
-import { viewShape } from './view.js';
 
 const SCREEN = ['availWidth', 'availHeight', 'width', 'height', 'colorDepth', 'pixelDepth', 'availLeft', 'availTop'] as const;
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   const screen = { node: 'screen.proto' } as const;
   const orientation = { node: 'screen.orientation.proto' } as const;
   return [
@@ -60,22 +56,6 @@ function operations(): DraftOp[] {
       keys: ['type', 'angle', 'onchange', 'lock', 'unlock', 'constructor', { symbol: 'toStringTag' }],
     },
   ];
-}
-
-export function screenShape(input: Shape): Shape {
-  const shape = viewShape(input);
-  if (shape.features.includes('screen')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'screen'].sort(),
-    ops: [...shape.ops, ...operations()],
-    support: {
-      ...shape.support,
-      'screen.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'screen.api': 'emulated',
-    },
-  }));
 }
 
 export const screenFeature: Feature = {

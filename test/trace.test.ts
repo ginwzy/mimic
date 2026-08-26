@@ -11,7 +11,8 @@ import {
   parseShape,
   seal,
 } from '../src/index.js';
-import { traceDriver, traceFeature, traceShape } from '../src/features/trace.js';
+import { traceDriver, traceFeature } from '../src/features/trace.js';
+import { traceShape } from '../src/features/trace.shape.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 
