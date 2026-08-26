@@ -48,6 +48,16 @@ const COLLAPSED_ADAPTER_PATHS = [
   'src/probe',
 ] as const;
 
+async function assertMissing(paths: readonly string[]): Promise<void> {
+  for (const relativePath of paths) {
+    await assert.rejects(
+      access(path.join(root, relativePath)),
+      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
+      `repository still contains ${relativePath}`,
+    );
+  }
+}
+
 function command(
   commandName: string,
   args: string[],
@@ -69,33 +79,15 @@ function command(
 }
 
 test('retired v1 source surface does not return to the repository', async () => {
-  for (const relativePath of RETIRED_SOURCE_PATHS) {
-    await assert.rejects(
-      access(path.join(root, relativePath)),
-      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
-      `repository still contains ${relativePath}`,
-    );
-  }
+  await assertMissing(RETIRED_SOURCE_PATHS);
 });
 
 test('retired implementation version paths do not return to the repository', async () => {
-  for (const relativePath of RETIRED_VERSION_PATHS) {
-    await assert.rejects(
-      access(path.join(root, relativePath)),
-      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
-      `repository still contains ${relativePath}`,
-    );
-  }
+  await assertMissing(RETIRED_VERSION_PATHS);
 });
 
 test('collapsed adapter directories do not return to the repository', async () => {
-  for (const relativePath of COLLAPSED_ADAPTER_PATHS) {
-    await assert.rejects(
-      access(path.join(root, relativePath)),
-      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
-      `repository still contains ${relativePath}`,
-    );
-  }
+  await assertMissing(COLLAPSED_ADAPTER_PATHS);
 });
 
 test('npm tarball exposes only the current public surfaces', async (t) => {

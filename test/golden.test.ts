@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import { JsdomEngine } from '../src/engine/jsdom.js';
-import { createNodeApplication } from '../src/node/app.js';
+import { createNodeApplication, JsdomEngine } from '../src/index.js';
 import {
   collectApplicationOracle,
   evaluateGoldenOracle,

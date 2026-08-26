@@ -41,9 +41,7 @@ venv/
 dist/
 build/
 
-# Local scratch (HAR dumps, session baselines)
+# Session scratch (HAR dumps, workflow/agent 临时件)
 tmp/
-
-# Session scratch (workflow/agent 临时件)
 scratchpad/
 .tokensave
