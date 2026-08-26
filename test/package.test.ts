@@ -145,6 +145,19 @@ test('worker runtime does not import the Profile importer', async () => {
   );
 });
 
+test('worker runtime does not import the planner Application', async () => {
+  const forbidden = [
+    `${path.sep}app${path.sep}index.ts`,
+    `${path.sep}catalog${path.sep}index.ts`,
+    `${path.sep}compile${path.sep}index.ts`,
+    `${path.sep}core${path.sep}parse.ts`,
+  ];
+  await assertImportGraph(
+    ['src/executor/worker.ts', 'src/node/runtime.ts'],
+    (resolved) => forbidden.find((suffix) => resolved.endsWith(suffix)),
+  );
+});
+
 test('npm tarball exposes only the current public surfaces', async (t) => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'mimic-package-'));
   t.after(() => rm(temp, { recursive: true, force: true }));

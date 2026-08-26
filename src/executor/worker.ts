@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { executePrepared, type TaskRequest } from '../app/index.js';
+import type { TaskRequest } from '../app/types.js';
 import { trustPlan } from '../compile/trusted.js';
 import { deepFreeze } from '../core/json.js';
 import { encodeResult } from '../core/result.js';
@@ -41,7 +41,7 @@ parentPort.on('message', async ({ id, request, planId, plan: wire }: {
       plans.set(planId, plan);
       while (plans.size > PLAN_CACHE_LIMIT) plans.delete(plans.keys().next().value!);
     }
-    result = await executePrepared(app, request, plan);
+    result = await app.executePrepared(request, plan);
   } catch (cause) {
     result = failure(cause);
   }

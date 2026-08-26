@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { Application, type CaptureOptions, type ProfilesPort } from '../app/index.js';
+import { Application } from '../app/index.js';
+import type { CaptureOptions, ProfilesPort } from '../app/types.js';
 import type { Engine } from '../engine/types.js';
 import { LegacyProfiles } from '../legacy/profiles.js';
 import { DEFAULT_PROFILES_ROOT, DEFAULT_SHAPES_ROOT } from './assets.js';

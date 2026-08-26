@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { Application, type ApplicationOptions, type CaptureOptions, type ProfilesPort } from '../app/index.js';
-import { MimicError } from '../core/error.js';
+import { RuntimeApplication } from '../app/runtime.js';
+import type { CaptureOptions, RuntimeOptions } from '../app/types.js';
 import { JsdomEngine } from '../engine/jsdom.js';
 import type { Engine } from '../engine/types.js';
 import { drivers, features } from '../features/index.js';
@@ -13,16 +13,7 @@ export interface NodeRuntimeOptions {
   capture?: CaptureOptions;
 }
 
-const RUNTIME_PROFILES: ProfilesPort = {
-  async load(id) {
-    throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: `runtime Application 不能加载 Profile:${id}` });
-  },
-  async list() {
-    throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: 'runtime Application 不能列出 Profile' });
-  },
-};
-
-export function nodeRuntimeHost(options: NodeRuntimeOptions = {}): Omit<ApplicationOptions, 'profiles'> {
+export function nodeRuntimeHost(options: NodeRuntimeOptions = {}): RuntimeOptions {
   const probePath = path.resolve(options.probePath ?? DEFAULT_PROBE_PATH);
   return {
     engine: options.engine ?? new JsdomEngine(),
@@ -33,7 +24,7 @@ export function nodeRuntimeHost(options: NodeRuntimeOptions = {}): Omit<Applicat
   };
 }
 
-/** Execute-only Application. Workers receive a Plan from the parent planner and must not load Profiles. */
-export function createNodeRuntime(options: NodeRuntimeOptions = {}): Application {
-  return new Application({ profiles: RUNTIME_PROFILES, ...nodeRuntimeHost(options) });
+/** Execute-only host. Workers receive a Plan from the parent planner and must not load Profiles. */
+export function createNodeRuntime(options: NodeRuntimeOptions = {}): RuntimeApplication {
+  return new RuntimeApplication(nodeRuntimeHost(options));
 }
