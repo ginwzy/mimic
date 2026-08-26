@@ -8,7 +8,6 @@ import { checkContribution, checkManifest, checkSupport } from '../shape/check.j
 import { canonical } from '../core/canonical.js';
 import { STAGE, validateGraph } from './graph.js';
 import { trustPlan } from './trusted.js';
-import { isTrustedShape } from '../core/trusted.js';
 
 type SequencedOp = Op & { sequence: number };
 
@@ -51,7 +50,7 @@ function prepareShape(input: unknown): PreparedShape {
     if (cached) return cached;
   }
 
-  const shape = isTrustedShape(input) ? input : parseShape(jsonCopy(input));
+  const shape = parseShape(input);
   const contribution = deepFreeze(checkContribution({ operations: shape.ops, support: shape.support }));
   const operations = deepFreeze((contribution.operations || []).map((operation, sequence) => ({
     ...operation,
@@ -141,7 +140,7 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
     throw new TypeError('drivers 必须是非空字符串数组');
   }
   const driverList = deepFreeze(jsonCopy(input.drivers) as string[]);
-  const profile = parseProfile(jsonCopy(input.profile));
+  const profile = parseProfile(input.profile);
   if (input.catalog === null || typeof input.catalog !== 'object' || typeof input.catalog.id !== 'string'
     || !/^[a-z][a-z0-9.-]*$/.test(input.catalog.id) || !/^[a-f0-9]{64}$/.test(input.catalog.hash)
     || typeof input.catalog.resolve !== 'function') {
@@ -169,8 +168,8 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
     ...(feature.requires === undefined ? {} : { requires: deepFreeze([...feature.requires]) }),
     build: feature.build,
   })) as Feature[];
-  const page = input.page === undefined ? undefined : parsePage(jsonCopy(input.page));
-  const job = parseJob(jsonCopy(input.job));
+  const page = input.page === undefined ? undefined : parsePage(input.page);
+  const job = parseJob(input.job);
   const engine = checkManifest(input.engine);
   const required = checkSupport(input.require === undefined ? {} : input.require);
   const features = orderFeatures(featureList);

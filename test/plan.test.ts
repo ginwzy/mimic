@@ -133,6 +133,30 @@ test('compile creates a deterministic JSON Plan independent of feature registrat
   });
 });
 
+test('compile keeps trusted Profile and Page identity for Feature.build', async () => {
+  const imported = await store.load('chrome-mac');
+  assert.ok(imported.page);
+  let seenProfile: unknown;
+  let seenPage: unknown;
+  const withWitness = select(imported.profile, imported.shape, [{
+    id: 'base',
+    build: ({ profile, page }) => {
+      seenProfile = profile;
+      seenPage = page;
+      return {};
+    },
+  }]);
+  compile({
+    ...withWitness,
+    page: imported.page,
+    job: parseJob({ kind: 'run', code: '1' }),
+    engine: { id: 'test', hash: 'engine-shape-v1', blocked: [] },
+    drivers: [],
+  });
+  assert.equal(seenProfile, withWitness.profile);
+  assert.equal(seenPage, imported.page);
+});
+
 test('compile accepts non-canonical Shape feature order and normalizes Plan features', async () => {
   const imported = await store.load('chrome-mac');
   const canonicalShape = shapeFor(imported.shape, [base, child]);

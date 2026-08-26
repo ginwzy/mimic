@@ -112,10 +112,10 @@ export function parsePlan(input: unknown): Plan<Op, PlanBind> {
   if (expected !== id) fail('content id 不匹配');
   validateGraph(operations, binds, { phase: 'parse', ordered: true });
 
-  return trustPlan(deepFreeze(jsonCopy({
+  return trustPlan(deepFreeze({
     ...root,
     operations,
     binds,
-    support: contribution.support || {},
-  }) as unknown as Plan<Op, PlanBind>));
+    support: { ...(contribution.support || {}) },
+  } as unknown as Plan<Op, PlanBind>));
 }

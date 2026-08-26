@@ -218,7 +218,7 @@ test('parseJob rejects invalid input with a stable parse error', () => {
 });
 
 test('parseShape accepts a normalized browser selector', () => {
-  assert.deepEqual(parseShape(shape), shape);
+  assert.equal(parseShape(shape), shape);
 });
 
 test('parseShape rejects an invalid browser version', () => {
@@ -286,8 +286,9 @@ test('parseProfile accepts device identity without page state', () => {
   };
   const profile = seal(body);
 
-  assert.deepEqual(parseProfile(profile), profile);
   const parsed = parseProfile(profile);
+  assert.deepEqual(parsed, profile);
+  assert.equal(parseProfile(parsed), parsed);
   assert.ok(Object.isFrozen(parsed));
   assert.ok(Object.isFrozen(parsed.navigator));
   const { target: _target, ...withoutTarget } = body;
@@ -374,7 +375,9 @@ test('parsePage accepts execution state separately from Profile', () => {
     },
   });
 
-  assert.deepEqual(parsePage(page), page);
+  const parsed = parsePage(page);
+  assert.deepEqual(parsed, page);
+  assert.equal(parsePage(parsed), parsed);
 });
 
 test('parsePage rejects incomplete or impossible Performance resource evidence', () => {
