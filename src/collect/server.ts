@@ -3,7 +3,6 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MimicError } from '../core/error.js';
-import { DEFAULT_PROBE_PATH } from '../node/assets.js';
 import { CollectStore } from './store.js';
 
 export const DEFAULT_COLLECT_PORT = 8970;
@@ -11,7 +10,7 @@ export const DEFAULT_COLLECT_MAX_BODY_BYTES = 32 * 1024 * 1024;
 
 export interface CollectServerOptions {
   readonly root: string;
-  readonly probePath?: string;
+  readonly probePath: string;
   readonly host?: string;
   readonly port?: number;
   readonly maxBodyBytes?: number;
@@ -193,7 +192,7 @@ function message(error: unknown): string {
 export function startCollectServer(options: CollectServerOptions): CollectServerHandle {
   const {
     root,
-    probePath = DEFAULT_PROBE_PATH,
+    probePath,
     host = '0.0.0.0',
     port = DEFAULT_COLLECT_PORT,
     maxBodyBytes = DEFAULT_COLLECT_MAX_BODY_BYTES,

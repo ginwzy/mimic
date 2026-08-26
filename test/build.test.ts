@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { REQUESTED_JSDOM_VERSION } from '../src/node/metadata.js';
+import { REQUESTED_JSDOM_VERSION } from '../src/engine/jsdom.js';
 
 const root = process.cwd();
 const production = path.join(root, 'dist');

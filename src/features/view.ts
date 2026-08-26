@@ -3,68 +3,29 @@ import { seal } from '../core/seal.js';
 import type { JsonValue, Shape, Support, WindowData } from '../core/types.js';
 import type { Driver } from '../engine/types.js';
 import { dataDriver } from '../engine/data.js';
-import type { DraftOp, Feature, FnShape } from '../shape/types.js';
-
-const method = (name: string, length = 0, constructable = false, hasPrototype = false): FnShape => ({
-  name,
-  length,
-  native: true,
-  constructable,
-  hasPrototype,
-  keys: hasPrototype ? ['length', 'name', 'prototype'] : ['length', 'name'],
-});
-
-const get = (id: string, slot: string, name: string): DraftOp => ({
-  op: 'alloc', id, kind: 'function', slot, shape: method(`get ${name}`),
-});
-
-const prop = (target: { path: string } | { node: string }, key: string | { symbol: string }, value: { node: string }): DraftOp => ({
-  op: 'prop', target, key,
-  desc: { kind: 'data', value: { ref: value }, writable: true, enumerable: false, configurable: true },
-});
-
-const accessor = (
-  target: { path: string } | { node: string },
-  key: string,
-  getter: string,
-  setter?: string,
-): DraftOp => ({
-  op: 'prop', target, key,
-  desc: {
-    kind: 'accessor', get: { node: getter }, ...(setter ? { set: { node: setter } } : {}),
-    enumerable: true, configurable: true,
-  },
-});
+import type { DraftOp, Feature } from '../shape/types.js';
+import { accessor, ctor, fn, refProp, tag } from './ops.js';
 
 const GEOMETRY = ['innerWidth', 'innerHeight', 'outerWidth', 'outerHeight', 'devicePixelRatio'] as const;
 const VIEW_VALUES = ['offsetLeft', 'offsetTop', 'pageLeft', 'pageTop', 'width', 'height', 'scale'] as const;
 
 function operations(): DraftOp[] {
-  const ops: DraftOp[] = [
+  return [
     { op: 'alloc', id: 'view.proto', kind: 'object' },
     { op: 'alloc', id: 'view.instance', kind: 'event' },
-    {
-      op: 'alloc', id: 'view.ctor', kind: 'function', slot: 'view.ctor',
-      shape: method('VisualViewport', 0, true, true), prototype: { node: 'view.proto' },
-    },
-    ...GEOMETRY.map((name) => get(`view.window.${name}.get`, `view.window.${name}`, name)),
-    ...VIEW_VALUES.map((name) => get(`view.${name}.get`, `view.${name}`, name)),
-    get('view.window.get', 'view.window', 'visualViewport'),
-    get('view.onresize.get', 'view.onresize.get', 'onresize'),
-    { op: 'alloc', id: 'view.onresize.set', kind: 'function', slot: 'view.onresize.set', shape: method('set onresize', 1) },
-    get('view.onscroll.get', 'view.onscroll.get', 'onscroll'),
-    { op: 'alloc', id: 'view.onscroll.set', kind: 'function', slot: 'view.onscroll.set', shape: method('set onscroll', 1) },
+    ctor('view.ctor', 'view.ctor', 'VisualViewport', { node: 'view.proto' }),
+    ...GEOMETRY.map((name) => fn(`view.window.${name}.get`, `view.window.${name}`, `get ${name}`)),
+    ...VIEW_VALUES.map((name) => fn(`view.${name}.get`, `view.${name}`, `get ${name}`)),
+    fn('view.window.get', 'view.window', 'get visualViewport'),
+    fn('view.onresize.get', 'view.onresize.get', 'get onresize'),
+    fn('view.onresize.set', 'view.onresize.set', 'set onresize', 1),
+    fn('view.onscroll.get', 'view.onscroll.get', 'get onscroll'),
+    fn('view.onscroll.set', 'view.onscroll.set', 'set onscroll', 1),
     { op: 'proto', target: { node: 'view.proto' }, value: { path: 'window.EventTarget.prototype' } },
     { op: 'proto', target: { node: 'view.instance' }, value: { node: 'view.proto' } },
-    prop({ path: 'window' }, 'VisualViewport', { node: 'view.ctor' }),
-    {
-      op: 'prop', target: { node: 'view.proto' }, key: 'constructor',
-      desc: { kind: 'data', value: { ref: { node: 'view.ctor' } }, writable: true, enumerable: false, configurable: true },
-    },
-    {
-      op: 'prop', target: { node: 'view.proto' }, key: { symbol: 'toStringTag' },
-      desc: { kind: 'data', value: { json: 'VisualViewport' }, writable: false, enumerable: false, configurable: true },
-    },
+    refProp({ path: 'window' }, 'VisualViewport', 'view.ctor'),
+    refProp({ node: 'view.proto' }, 'constructor', 'view.ctor'),
+    tag({ node: 'view.proto' }, 'VisualViewport'),
     ...GEOMETRY.map((name) => accessor({ path: 'window' }, name, `view.window.${name}.get`)),
     ...VIEW_VALUES.map((name) => accessor({ node: 'view.proto' }, name, `view.${name}.get`)),
     accessor({ node: 'view.proto' }, 'onresize', 'view.onresize.get', 'view.onresize.set'),
@@ -75,7 +36,6 @@ function operations(): DraftOp[] {
       keys: [...VIEW_VALUES, 'onresize', 'onscroll', 'constructor', { symbol: 'toStringTag' }],
     },
   ];
-  return ops;
 }
 
 export function viewShape(shape: Shape): Shape {

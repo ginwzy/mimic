@@ -8,7 +8,6 @@ import type { Data, JsonValue, Plan } from '../core/types.js';
 import type { DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult } from './types.js';
 import type { Desc, EngineManifest, FnShape, Key, Op, PlanBind, Ref, StoredValue } from '../shape/types.js';
 import { parsePlan } from '../compile/parse.js';
-import { REQUESTED_JSDOM_VERSION } from '../node/metadata.js';
 
 type BrowserWindow = Window & typeof globalThis;
 type Callable = (...args: unknown[]) => unknown;
@@ -16,6 +15,7 @@ type FunctionOp = Extract<Op, { op: 'alloc'; kind: 'function' }>;
 type ShapeOp = Extract<Op, { op: 'fn' }>;
 
 export const JSDOM_ENGINE_ABI = 'mimic-jsdom-v2.7';
+export const REQUESTED_JSDOM_VERSION = '29.1.1';
 
 const FRAME_OWNERS = new WeakMap<object, (child: unknown) => void>();
 const FRAME_ATTACH_HOOKS = new WeakSet<object>();

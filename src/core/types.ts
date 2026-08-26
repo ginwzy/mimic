@@ -75,6 +75,14 @@ export type Source =
 
 export type Data = Record<string, JsonValue>;
 
+export interface CollectBundle {
+  readonly schema: 2;
+  readonly id: string;
+  readonly hash: Hash;
+  readonly profileRaw: Data | null;
+  readonly probeSnapshot: Data | null;
+}
+
 export interface Brand {
   brand: string;
   version: string;

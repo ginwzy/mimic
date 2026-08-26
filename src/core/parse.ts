@@ -10,8 +10,7 @@ import shapeSchema from '../../schemas/v2/shape.schema.json' with { type: 'json'
 import { MimicError } from './error.js';
 import { deepFreeze, jsonCopy } from './json.js';
 import { validHash } from './seal.js';
-import type { CollectBundle } from '../collect/types.js';
-import type { CatalogDoc, ErrorCode, Job, Page, ParseIssue, Profile, Shape, Target } from './types.js';
+import type { CatalogDoc, CollectBundle, ErrorCode, Job, Page, ParseIssue, Profile, Shape, Target } from './types.js';
 import {
   isTrustedPage,
   isTrustedProfile,
