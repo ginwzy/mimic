@@ -4,13 +4,13 @@ import { trustPlan } from '../compile/trusted.js';
 import { deepFreeze } from '../core/json.js';
 import { encodeResult } from '../core/result.js';
 import type { Plan, Result } from '../core/types.js';
-import { createNodeApplication } from '../node/app.js';
+import { createNodeRuntime } from '../node/runtime.js';
 import type { Op, PlanBind } from '../shape/types.js';
 import type { WorkerConfig } from './pool.js';
 
 if (!parentPort) throw new Error('executor/worker must run inside worker_threads');
 
-const app = createNodeApplication(workerData as WorkerConfig);
+const app = createNodeRuntime(workerData as WorkerConfig);
 const plans = new Map<string, Plan<Op, PlanBind>>();
 const PLAN_CACHE_LIMIT = 128;
 

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import os from 'node:os';
 import { Worker } from 'node:worker_threads';
-import type { CaptureOptions, TaskRequest } from '../app/index.js';
+import { Application, type CaptureOptions, type TaskRequest } from '../app/index.js';
 import { MimicError } from '../core/error.js';
 import { parseResult } from '../core/result.js';
 import type { Plan, Result } from '../core/types.js';
@@ -19,6 +19,8 @@ export interface ExecutorOptions {
   shapesRoot?: string;
   probePath?: string;
   capture?: CaptureOptions;
+  /** Parent Application that compiles Plans. SDK/HTTP pass the instance they already use for list/plan. */
+  planner?: Application;
   size?: number;
   timeoutMs?: number | null;
   maxQueue?: number;
@@ -39,8 +41,6 @@ export interface WorkerLifecycle {
 }
 
 export interface WorkerConfig {
-  profilesRoot: string;
-  shapesRoot: string;
   probePath: string;
   capture?: CaptureOptions;
 }
@@ -130,8 +130,13 @@ export class WorkerExecutor {
   readonly size: number;
   readonly timeoutMs: number | null;
   readonly maxQueue: number;
-  private readonly config: WorkerConfig;
-  private readonly planner: ReturnType<typeof createNodeApplication>;
+  private readonly config: {
+    profilesRoot: string;
+    shapesRoot: string;
+    probePath: string;
+    capture?: CaptureOptions;
+  };
+  private readonly planner: Application;
   private readonly workers: Slot[] = [];
   private readonly idle: Slot[] = [];
   private readonly queue: Queued[] = [];
@@ -153,7 +158,7 @@ export class WorkerExecutor {
       probePath: path.resolve(options.probePath ?? DEFAULT_PROBE_PATH),
       ...(options.capture === undefined ? {} : { capture: structuredClone(options.capture) }),
     };
-    this.planner = createNodeApplication(this.config);
+    this.planner = options.planner ?? createNodeApplication(this.config);
     this.spawn();
   }
 
@@ -222,7 +227,13 @@ export class WorkerExecutor {
 
   private spawn(): void {
     if (this.destroyed || this.workers.length >= this.size) return;
-    const worker = new Worker(WORKER_URL, { workerData: this.config, execArgv: [] });
+    const worker = new Worker(WORKER_URL, {
+      workerData: {
+        probePath: this.config.probePath,
+        ...(this.config.capture === undefined ? {} : { capture: this.config.capture }),
+      } satisfies WorkerConfig,
+      execArgv: [],
+    });
     this.createdWorkers++;
     const slot: Slot = { worker, id: null, timeoutMs: null, watchdog: null, down: false, plans: new Map() };
     worker.on('message', (message: WorkerMessage) => this.message(slot, message));

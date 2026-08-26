@@ -5,7 +5,7 @@ import { WorkerExecutor, type ExecutorOptions } from './executor/pool.js';
 import { createNodeApplication } from './node/app.js';
 import type { Op, PlanBind } from './shape/types.js';
 
-export interface MimicOptions extends ExecutorOptions {
+export interface MimicOptions extends Omit<ExecutorOptions, 'planner'> {
   profile?: string;
   page?: Page;
   shape?: Shape;
@@ -38,7 +38,7 @@ export class Mimic {
       ...(options.probePath === undefined ? {} : { probePath: options.probePath }),
       ...(options.capture === undefined ? {} : { capture: options.capture }),
     });
-    this.executor = new WorkerExecutor(options);
+    this.executor = new WorkerExecutor({ ...options, planner: this.app });
   }
 
   async run(job: Job): Promise<Result> {

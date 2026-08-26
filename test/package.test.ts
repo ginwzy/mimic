@@ -90,9 +90,12 @@ test('collapsed adapter directories do not return to the repository', async () =
   await assertMissing(COLLAPSED_ADAPTER_PATHS);
 });
 
-test('execute catalog does not import DOM capture tables', async () => {
-  const tables = ['dom.data.ts', 'dom.missing.data.ts'];
+async function assertImportGraph(
+  roots: readonly string[],
+  forbidden: (resolved: string) => string | undefined,
+): Promise<void> {
   const visited = new Set<string>();
+  const srcRoot = path.join(root, 'src');
   const walk = async (file: string): Promise<void> => {
     if (visited.has(file)) return;
     visited.add(file);
@@ -103,16 +106,29 @@ test('execute catalog does not import DOM capture tables', async () => {
       const match = /from ['"](\.[^'"]+)['"]/.exec(line);
       if (!match) continue;
       const resolved = path.normalize(path.join(dir, match[1]!.replace(/\.js$/, '.ts')));
-      if (tables.some((table) => resolved.endsWith(table))) {
-        throw new Error(`${path.relative(root, file)} reaches ${path.relative(root, resolved)}`);
-      }
-      if (resolved.startsWith(path.join(root, 'src')) && resolved.endsWith('.ts')) await walk(resolved);
+      const reached = forbidden(resolved);
+      if (reached) throw new Error(`${path.relative(root, file)} reaches ${reached}`);
+      if (resolved.startsWith(srcRoot) && resolved.endsWith('.ts')) await walk(resolved);
     }
   };
-  await walk(path.join(root, 'src/features/index.ts'));
-  await walk(path.join(root, 'src/node/app.ts'));
-  await walk(path.join(root, 'src/executor/worker.ts'));
-  await walk(path.join(root, 'src/public.ts'));
+  for (const relative of roots) await walk(path.join(root, relative));
+}
+
+test('execute catalog does not import DOM capture tables', async () => {
+  const tables = ['dom.data.ts', 'dom.missing.data.ts'];
+  await assertImportGraph(
+    ['src/features/index.ts', 'src/node/app.ts', 'src/executor/worker.ts', 'src/public.ts'],
+    (resolved) => tables.find((table) => resolved.endsWith(table)),
+  );
+});
+
+test('worker runtime does not import the Profile importer', async () => {
+  await assertImportGraph(
+    ['src/executor/worker.ts'],
+    (resolved) => (resolved.endsWith(`${path.sep}legacy${path.sep}profiles.ts`)
+      ? path.relative(root, resolved)
+      : undefined),
+  );
 });
 
 test('npm tarball exposes only the current public surfaces', async (t) => {

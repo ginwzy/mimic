@@ -126,19 +126,20 @@ export function startServer(options: ServerOptions): ServerHandle {
     port = 3000,
     host = '127.0.0.1',
     maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
+    planner,
     ...executorOptions
   } = options;
   if (typeof host !== 'string' || !host.trim()) throw new TypeError('host must be a non-empty string');
   integer(port, 'port', 0, 65_535);
   integer(maxBodyBytes, 'maxBodyBytes', 1, Number.MAX_SAFE_INTEGER);
 
-  const executor = new WorkerExecutor(executorOptions);
-  const application = createNodeApplication({
+  const application = planner ?? createNodeApplication({
     ...(executorOptions.profilesRoot === undefined ? {} : { profilesRoot: executorOptions.profilesRoot }),
     ...(executorOptions.shapesRoot === undefined ? {} : { shapesRoot: executorOptions.shapesRoot }),
     ...(executorOptions.probePath === undefined ? {} : { probePath: executorOptions.probePath }),
     ...(executorOptions.capture === undefined ? {} : { capture: executorOptions.capture }),
   });
+  const executor = new WorkerExecutor({ ...executorOptions, planner: application });
 
   const server = http.createServer((request, response) => {
     void (async () => {
