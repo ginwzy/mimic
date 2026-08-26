@@ -1,11 +1,8 @@
 import { createHash } from 'node:crypto';
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { AudioData, Bind, JsonValue, Profile, Shape } from '../core/types.js';
+import type { AudioData, Bind, JsonValue, Profile } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature, Ref } from '../shape/types.js';
 import { accessor, fn, fnShape, refProp, tag } from './ops.js';
-import { domShape } from './dom.js';
 
 const FLOAT32 = 'window.Float32Array';
 
@@ -182,7 +179,7 @@ const slot = (owner: string, name: string, part?: 'get' | 'set'): string => (
   `audio.${owner}.${name}${part ? `.${part}` : ''}`
 );
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   const ops: DraftOp[] = [];
   const keys = new Map<string, string[]>(IFACES.map(([id]) => [id, []]));
   for (const [id, name, parent, length] of IFACES) {
@@ -220,25 +217,6 @@ function operations(): DraftOp[] {
     });
   }
   return ops;
-}
-
-export function audioShape(input: Shape): Shape {
-  const shape = domShape(input);
-  if (shape.features.includes('audio')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'audio'].sort(),
-    ops: [...shape.ops, ...operations()],
-    support: {
-      ...shape.support,
-      'audio.shape': 'derived',
-      // Channel buffers exist; true device audio capture is not claimed here.
-      // Value sums for BMS OfflineAudio hash come from audioFeature (audio.sums).
-      'audio.samples': 'shape-only',
-      'audio.fingerprint': 'unsupported',
-    },
-  }));
 }
 
 function fingerprintJson(fp: AudioData): JsonValue {

@@ -6,7 +6,8 @@ import {
   type Feature,
 } from '../src/index.js';
 import { canvasDriver, canvasFeature } from '../src/features/canvas.js';
-import { webglDriver, webglFeature, webglShape } from '../src/features/webgl.js';
+import { webglDriver, webglFeature } from '../src/features/webgl.js';
+import { webglShape } from '../src/features/webgl.shape.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 // Keep the Runtime seam real while excluding unrelated upstream feature graphs from this slice.

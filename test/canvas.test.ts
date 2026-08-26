@@ -6,14 +6,16 @@ import {
   type Driver, type Feature,
 } from '../src/index.js';
 import {
-  canvasContext, canvasDriver, canvasFeature, canvasFingerprintHex, canvasShape,
+  canvasContext, canvasDriver, canvasFeature, canvasFingerprintHex,
   EMPTY_CANVAS_DATA_URL, synthesizeCanvasDataURL,
 } from '../src/features/canvas.js';
+import { canvasShape } from '../src/features/canvas.shape.js';
 import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
 import { domDriver, domFeature } from '../src/features/dom.js';
 import { globalsDriver, globalsFeature } from '../src/features/globals.js';
 import { navDriver, navFeature } from '../src/features/nav.js';
-import { netDriver, netFeature, netShape } from '../src/features/net.js';
+import { netDriver, netFeature } from '../src/features/net.js';
+import { netShape } from '../src/features/net.shape.js';
 import { pluginsDriver, pluginsFeature } from '../src/features/plugins.js';
 import { screenDriver, screenFeature } from '../src/features/screen.js';
 import { uaDriver, uaFeature } from '../src/features/ua.js';

@@ -1,10 +1,8 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { JsonValue, Shape } from '../core/types.js';
+import type { JsonValue } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
-import { canvasContext, canvasShape } from './canvas.js';
+import { canvasContext } from './canvas.js';
 
 const GL1_PROTO = 'webgl.1.proto';
 const GL2_PROTO = 'webgl.2.proto';
@@ -71,7 +69,7 @@ function constant(target: { node: string }, key: string, value: number): DraftOp
   };
 }
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   const gl1 = { node: GL1_PROTO } as const;
   const gl2 = { node: GL2_PROTO } as const;
   const debug = { node: DEBUG_PROTO } as const;
@@ -146,22 +144,6 @@ function operations(): DraftOp[] {
     );
   }
   return ops;
-}
-
-export function webglShape(input: Shape): Shape {
-  const shape = canvasShape(input);
-  if (shape.features.includes('webgl')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'webgl'].sort(),
-    ops: [...shape.ops, ...operations()],
-    support: {
-      ...shape.support,
-      'webgl.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'webgl.api': 'shape-only',
-    },
-  }));
 }
 
 export const webglFeature: Feature = {

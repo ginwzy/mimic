@@ -29,7 +29,7 @@ let changed = false;
 
 for (const id of ids) {
   const [, host, platform, form, rawVersion] = id.split('/');
-  const shape = legacyShape({ engine: 'chromium', host, platform, form, version: Number(rawVersion) });
+  const shape = await legacyShape({ engine: 'chromium', host, platform, form, version: Number(rawVersion) });
   const text = `${JSON.stringify(shape)}\n`;
   const relative = `${id}.json`;
   const file = path.join(output, relative);

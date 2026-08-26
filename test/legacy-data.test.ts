@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MimicError, digest, parseShape, seal } from '../src/index.js';
-import { importLegacyData, legacyTarget } from '../src/legacy/profiles.js';
+import { importLegacyData, legacyShape, legacyTarget } from '../src/legacy/profiles.js';
 import type { Shape, Source } from '../src/index.js';
 
 function legacyFixture(): Record<string, unknown> {
@@ -56,34 +56,35 @@ function otherTargetShape(shape: Shape): Shape {
   }));
 }
 
-test('pure legacy import leaves expanded input unchanged', () => {
+test('pure legacy import leaves expanded input unchanged', async () => {
   const input = legacyFixture();
   const before = structuredClone(input);
 
   assert.deepEqual(legacyTarget(input), {
     engine: 'chromium', host: 'chrome', platform: 'android', form: 'mobile', version: 140,
   });
-  const imported = importLegacyData('pure-import', input);
+  const imported = importLegacyData('pure-import', input, { shape: await legacyShape(legacyTarget(input)) });
 
   assert.deepEqual(input, before);
   assert.equal(imported.profile.id, 'pure-import');
   assert.equal(imported.page?.url, 'https://example.test/');
 });
 
-test('pure legacy import is stable for the same expanded input', () => {
+test('pure legacy import is stable for the same expanded input', async () => {
   const input = legacyFixture();
+  const shape = await legacyShape(legacyTarget(input));
 
-  const first = importLegacyData('pure-import', input);
-  const second = importLegacyData('pure-import', structuredClone(input));
+  const first = importLegacyData('pure-import', input, { shape });
+  const second = importLegacyData('pure-import', structuredClone(input), { shape });
 
   assert.deepEqual(second, first);
   assert.equal(first.profile.source.hash, second.profile.source.hash);
   assert.deepEqual(first.report.chain, ['pure-import']);
 });
 
-test('pure legacy import accepts matching custom source and Shape', () => {
+test('pure legacy import accepts matching custom source and Shape', async () => {
   const input = legacyFixture();
-  const defaultImport = importLegacyData('pure-import', input);
+  const defaultImport = importLegacyData('pure-import', input, { shape: await legacyShape(legacyTarget(input)) });
   const source: Source = {
     kind: 'manual',
     hash: digest({ fixture: 'custom-source' }),
@@ -97,9 +98,9 @@ test('pure legacy import accepts matching custom source and Shape', () => {
   assert.equal(imported.profile.shape.hash, defaultImport.shape.hash);
 });
 
-test('pure legacy import rejects a Shape for another target', () => {
+test('pure legacy import rejects a Shape for another target', async () => {
   const input = legacyFixture();
-  const shape = otherTargetShape(importLegacyData('pure-import', input).shape);
+  const shape = otherTargetShape(importLegacyData('pure-import', input, { shape: await legacyShape(legacyTarget(input)) }).shape);
 
   assert.throws(
     () => importLegacyData('pure-import', input, { shape }),

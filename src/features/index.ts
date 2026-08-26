@@ -1,21 +1,21 @@
-import type { Shape } from '../core/types.js';
+/** Feature/Driver catalog for execute. Shape compile is `./shape.ts`. */
 import type { Drivers } from '../engine/types.js';
 import type { Feature } from '../shape/types.js';
-import { audioDriver, audioFeature, audioShape } from './audio.js';
-import { canvasDriver, canvasFeature, canvasShape } from './canvas.js';
+import { audioDriver, audioFeature } from './audio.js';
+import { canvasDriver, canvasFeature } from './canvas.js';
 import { chromeDriver, chromeFeature, touchFeature } from './chrome.js';
 import { domDriver, domFeature } from './dom.js';
 import { globalsDriver, globalsFeature } from './globals.js';
 import { navDriver, navFeature } from './nav.js';
-import { netDriver, netFeature, netShape } from './net.js';
-import { perfDriver, perfFeature, perfShape } from './perf.js';
+import { netDriver, netFeature } from './net.js';
+import { perfDriver, perfFeature } from './perf.js';
 import { pluginsDriver, pluginsFeature } from './plugins.js';
 import { screenDriver, screenFeature } from './screen.js';
-import { timeDriver, timeFeature, timeShape } from './time.js';
-import { traceDriver, traceFeature, traceShape } from './trace.js';
+import { timeDriver, timeFeature } from './time.js';
+import { traceDriver, traceFeature } from './trace.js';
 import { uaDriver, uaFeature } from './ua.js';
 import { viewDriver, viewFeature } from './view.js';
-import { webglDriver, webglFeature, webglShape } from './webgl.js';
+import { webglDriver, webglFeature } from './webgl.js';
 
 export const features: readonly Feature[] = Object.freeze([
   viewFeature,
@@ -53,13 +53,3 @@ export const drivers: Drivers = Object.freeze({
   audio: audioDriver,
   trace: traceDriver,
 });
-
-export function shape(input: Shape): Shape {
-  let output = netShape(input);
-  output = timeShape(output);
-  output = perfShape(output);
-  output = canvasShape(output);
-  output = webglShape(output);
-  output = audioShape(output);
-  return traceShape(output);
-}

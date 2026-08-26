@@ -1,9 +1,6 @@
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { Data, JsonValue, Shape } from '../core/types.js';
+import type { Data, JsonValue } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
-import { domShape } from './dom.js';
 import { accessor, fn, fnShape, refProp, tag } from './ops.js';
 
 const XHR = 'window.XMLHttpRequest';
@@ -30,7 +27,7 @@ type Config =
   | { op: 'response-field'; field: 'ok' | 'status' | 'statusText' }
   | { op: 'response-body'; kind: 'text' | 'json' | 'arrayBuffer' };
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   return [
     { op: 'alloc', id: RESPONSE_PROTO, kind: 'object' },
     {
@@ -64,22 +61,6 @@ function operations(): DraftOp[] {
       keys: ['ok', 'status', 'statusText', 'text', 'json', 'arrayBuffer', 'constructor', { symbol: 'toStringTag' }],
     },
   ];
-}
-
-export function netShape(input: Shape): Shape {
-  const shape = domShape(input);
-  if (shape.features.includes('net')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'net'].sort(),
-    ops: [...shape.ops, ...operations()],
-    support: {
-      ...shape.support,
-      'net.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'net.api': 'emulated',
-    },
-  }));
 }
 
 export const netFeature: Feature = {

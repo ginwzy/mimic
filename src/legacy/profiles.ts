@@ -5,7 +5,6 @@ import { MimicError } from '../core/error.js';
 import { deepFreeze, jsonCopy } from '../core/json.js';
 import { parsePage, parseProfile, parseShape } from '../core/parse.js';
 import { digest, seal } from '../core/seal.js';
-import { shape as builtShape } from '../features/index.js';
 import type {
   AudioData, Brand, CanvasData, Data, Evidence, Form, Hash, Host, JsonValue, NavigatorData, Page, Part,
   Platform, Profile, ScreenData, Shape, Source, Support, SystemColorsData, Target, TimezoneData, UaData,
@@ -182,7 +181,7 @@ export function legacyTarget(input: unknown): Target {
   return deriveTarget(legacyData(input));
 }
 
-export function legacyShape(target: Target): Shape {
+export async function legacyShape(target: Target): Promise<Shape> {
   const id = `chromium/${target.host}/${target.platform}/${target.form}/${target.version}`;
   const cached = SHAPES.get(id);
   if (cached) return cached;
@@ -190,6 +189,8 @@ export function legacyShape(target: Target): Shape {
   const source: Source = baseline
     ? { kind: 'capture', hash: baseline.hash, file: baseline.file }
     : { kind: 'derived', hash: digest({ rule: 'legacy-shape-v1', target }), rule: 'legacy-shape-v1' };
+  // Derived targets compile from feature tables. Dynamic so worker init stays on baked JSON.
+  const { shape: builtShape } = await import('../features/shape.js');
   const shape = builtShape(parseShape(seal({
     schema: 2 as const,
     id,
@@ -537,7 +538,7 @@ function compatibleShape(shape: Shape, target: Target): Shape {
 export function importLegacyData(
   id: string,
   input: unknown,
-  options: { source?: Source; shape?: Shape } = {},
+  options: { source?: Source; shape: Shape },
 ): ImportedProfile {
   const data = legacyData(input);
   if (!isData(data.navigator) || !isData(data.screen)) {
@@ -549,7 +550,7 @@ export function importLegacyData(
   }
 
   const target = deriveTarget(data);
-  const shape = options.shape ? compatibleShape(options.shape, target) : legacyShape(target);
+  const shape = compatibleShape(options.shape, target);
   const inputHash = digest(data);
   const source = options.source || sourceOf(id, data, [inputHash]);
   const navigatorRaw = clone(data.navigator);
@@ -759,8 +760,9 @@ export class LegacyProfiles {
   async load(id: string): Promise<ImportedProfile> {
     const resolved = await this.resolve(id);
     const source = sourceOf(id, resolved.data, resolved.hashes);
-    const shape = await this.artifactShape(resolved.data);
-    const imported = importLegacyData(id, resolved.data, { source, ...(shape === undefined ? {} : { shape }) });
+    const baked = await this.artifactShape(resolved.data);
+    const shape = baked ?? await legacyShape(deriveTarget(resolved.data));
+    const imported = importLegacyData(id, resolved.data, { source, shape });
     const ledger = ledgerOf(resolved.data, resolved.origins);
     const report: MigrationReport = {
       ...imported.report,

@@ -90,6 +90,31 @@ test('collapsed adapter directories do not return to the repository', async () =
   await assertMissing(COLLAPSED_ADAPTER_PATHS);
 });
 
+test('execute catalog does not import DOM capture tables', async () => {
+  const tables = ['dom.data.ts', 'dom.missing.data.ts'];
+  const visited = new Set<string>();
+  const walk = async (file: string): Promise<void> => {
+    if (visited.has(file)) return;
+    visited.add(file);
+    const text = await readFile(file, 'utf8');
+    const dir = path.dirname(file);
+    for (const line of text.split('\n')) {
+      if (line.includes('import type ')) continue;
+      const match = /from ['"](\.[^'"]+)['"]/.exec(line);
+      if (!match) continue;
+      const resolved = path.normalize(path.join(dir, match[1]!.replace(/\.js$/, '.ts')));
+      if (tables.some((table) => resolved.endsWith(table))) {
+        throw new Error(`${path.relative(root, file)} reaches ${path.relative(root, resolved)}`);
+      }
+      if (resolved.startsWith(path.join(root, 'src')) && resolved.endsWith('.ts')) await walk(resolved);
+    }
+  };
+  await walk(path.join(root, 'src/features/index.ts'));
+  await walk(path.join(root, 'src/node/app.ts'));
+  await walk(path.join(root, 'src/executor/worker.ts'));
+  await walk(path.join(root, 'src/public.ts'));
+});
+
 test('npm tarball exposes only the current public surfaces', async (t) => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'mimic-package-'));
   t.after(() => rm(temp, { recursive: true, force: true }));

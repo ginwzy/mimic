@@ -1,11 +1,8 @@
 import { createHash } from 'node:crypto';
-import { parseShape } from '../core/parse.js';
-import { seal } from '../core/seal.js';
-import type { CanvasData, JsonValue, Profile, Shape } from '../core/types.js';
+import type { CanvasData, JsonValue, Profile } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { DraftOp, Feature, Ref } from '../shape/types.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
-import { domShape } from './dom.js';
 
 /** Empty toDataURL string → BMS Lj() sha256 cluster `8e726a09…`. */
 export const EMPTY_CANVAS_DATA_URL = 'data:image/png;base64,';
@@ -96,7 +93,7 @@ export function canvasContext(type: string, provider: string): DraftOp {
   };
 }
 
-function operations(): DraftOp[] {
+export function operations(): DraftOp[] {
   const contexts = { node: CONTEXTS } as const;
   const context = { node: CONTEXT_PROTO } as const;
   const image = { node: IMAGE_PROTO } as const;
@@ -204,22 +201,6 @@ function operations(): DraftOp[] {
     { op: 'order', target: matrix, keys: [{ symbol: 'toStringTag' }] },
   );
   return ops;
-}
-
-export function canvasShape(input: Shape): Shape {
-  const shape = domShape(input);
-  if (shape.features.includes('canvas')) return shape;
-  const { hash: _hash, ...body } = shape;
-  return parseShape(seal({
-    ...body,
-    features: [...shape.features, 'canvas'].sort(),
-    ops: [...shape.ops, ...operations()],
-    support: {
-      ...shape.support,
-      'canvas.shape': shape.level === 'captured' ? 'captured' : 'derived',
-      'canvas.2d': 'shape-only',
-    },
-  }));
 }
 
 export const canvasFeature: Feature = {

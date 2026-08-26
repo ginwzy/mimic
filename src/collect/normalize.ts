@@ -3,7 +3,7 @@ import { jsonCopy } from '../core/json.js';
 import { parseShape } from '../core/parse.js';
 import { digest, seal } from '../core/seal.js';
 import type { Data, Hash, JsonValue, Target } from '../core/types.js';
-import { shape as builtShape } from '../features/index.js';
+import { shape as builtShape } from '../features/shape.js';
 import {
   importLegacyData,
   legacyTarget,
