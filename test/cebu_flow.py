@@ -33,7 +33,7 @@ SITE = "https://www.cebupacificair.com"
 # use LOCAL_PROXY (Clash etc.) for a non-whitelist path when not on Lumi.
 LOCAL_PROXY = "http://127.0.0.1:7890"
 # HTTP CONNECT proxy; X-ClientHello-Id is sent on the CONNECT hop.
-REQABLE_PROXY = "http://10.5.2.79:9001"
+REQABLE_PROXY = "http://10.5.2.163:9001"
 MITM_PROXY = "http://95.179.202.136:24800"
 PROXY_HEADERS = {"X-ClientHello-Id": "hellochrome_150"}
 # Bright Data: country via username (and optional host); do not hard-pin only in host.
