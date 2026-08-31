@@ -11,7 +11,8 @@ import {
   parseShape,
   seal,
 } from '../src/index.js';
-import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
+import { chromeDriver, chromeFeature, touchDriver, touchFeature } from '../src/features/chrome.js';
+import { domDriver } from '../src/features/dom.js';
 import { domFeature } from '../src/features/dom.js';
 import { globalsDriver, globalsFeature } from '../src/features/globals.js';
 import { navDriver, navFeature } from '../src/features/nav.js';
@@ -31,6 +32,8 @@ const drivers = {
   view: viewDriver,
   screen: screenDriver,
   chrome: chromeDriver,
+  touch: touchDriver,
+  dom: domDriver,
   nav: navDriver,
   ua: uaDriver,
   plugins: pluginsDriver,

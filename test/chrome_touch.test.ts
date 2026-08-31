@@ -5,8 +5,8 @@ import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, seal,
   parseShape,
 } from '../src/index.js';
-import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
-import { chromeTouchShape } from '../src/features/chrome.shape.js';
+import { chromeDriver, chromeFeature, touchDriver, touchFeature } from '../src/features/chrome.js';
+import { chromeShape } from '../src/features/chrome.shape.js';
 import { screenDriver, screenFeature } from '../src/features/screen.js';
 import { viewDriver, viewFeature } from '../src/features/view.js';
 
@@ -20,7 +20,7 @@ async function open(id: string) {
     ...shapeBody, features: [], ops: [],
     support: { structure: imported.shape.support.structure || imported.shape.level },
   }));
-  const shape = chromeTouchShape(base);
+  const shape = chromeShape(base);
   const { hash: _hash, ...body } = imported.profile;
   const profile = parseProfile(seal({ ...body, shape: { id: shape.id, hash: shape.hash } }));
   const engine = new JsdomEngine();
@@ -30,10 +30,46 @@ async function open(id: string) {
     ...(imported.page ? { page: imported.page } : {}),
     job: parseJob({ kind: 'probe' }),
     engine: engine.manifest,
-    drivers: ['view', 'screen', 'chrome'],
+    drivers: ['view', 'screen', 'chrome', 'touch'],
   });
-  return { engine, runtime: engine.open(plan, { view: viewDriver, screen: screenDriver, chrome: chromeDriver }) };
+  return {
+    plan,
+    engine,
+    runtime: engine.open(plan, { view: viewDriver, screen: screenDriver, chrome: chromeDriver, touch: touchDriver }),
+  };
 }
+
+test('touch Shape owns structure while the Feature owns runtime bindings', async () => {
+  const opened = await open('android-webview-v138');
+  try {
+    const touchAlloc = opened.plan.operations.find((op) =>
+      op.op === 'alloc' && op.id === 'touch.Touch.ctor');
+    const touchBind = opened.plan.binds.find((bind) => bind.slot === 'touch.Touch.ctor');
+    assert.equal(touchAlloc?.feature, '_shape');
+    assert.equal(touchBind?.feature, 'touch');
+  } finally {
+    opened.runtime.dispose();
+  }
+  assert.equal(opened.engine.active, 0);
+});
+
+test('touch Feature retains a structural fallback for old mobile Shapes', async () => {
+  const imported = await store.load('android-webview-v138');
+  const { hash: _shapeHash, ...shapeBody } = imported.shape;
+  const oldShape = parseShape(seal({
+    ...shapeBody,
+    features: ['touch'],
+    ops: [],
+    support: { structure: imported.shape.support.structure || imported.shape.level },
+  }));
+  const contribution = touchFeature.build({
+    profile: imported.profile,
+    shape: oldShape,
+    job: parseJob({ kind: 'probe' }),
+  });
+  assert.equal(contribution.operations?.some((op) => op.op === 'alloc' && op.id === 'touch.Touch.ctor'), true);
+  assert.equal(contribution.binds?.some((bind) => bind.slot === 'touch.Touch.ctor'), true);
+});
 
 test('chrome host exposes only the captured chrome surface', async () => {
   const { engine, runtime } = await open('macos-chrome-v149');

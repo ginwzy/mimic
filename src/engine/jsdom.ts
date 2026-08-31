@@ -1,11 +1,12 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import { CookieJar, JSDOM } from 'jsdom';
 import { MimicError } from '../core/error.js';
 import { deepFreeze, jsonCopy } from '../core/json.js';
 import type { Data, JsonValue, Plan } from '../core/types.js';
-import type { DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult } from './types.js';
+import { createTouchList } from './touch.js';
+import type { DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult, RuntimeRunOptions } from './types.js';
 import type { Desc, EngineManifest, FnShape, Key, Op, PlanBind, Ref, StoredValue } from '../shape/types.js';
 import { parsePlan } from '../compile/parse.js';
 
@@ -14,8 +15,32 @@ type Callable = (...args: unknown[]) => unknown;
 type FunctionOp = Extract<Op, { op: 'alloc'; kind: 'function' }>;
 type ShapeOp = Extract<Op, { op: 'fn' }>;
 
-export const JSDOM_ENGINE_ABI = 'mimic-jsdom-v2.7';
+export const JSDOM_ENGINE_ABI = 'mimic-jsdom-v2.9';
 export const REQUESTED_JSDOM_VERSION = '29.1.1';
+
+type TouchEventInitModule = {
+  convert(globalObject: object, value: unknown, options: unknown): Record<string, unknown>;
+};
+
+const HOOKED_TOUCH_EVENT_INIT = new WeakSet<object>();
+const TOUCH_LIST_FIELDS = ['touches', 'targetTouches', 'changedTouches'] as const;
+
+function hookTouchEventInit(require: NodeRequire): void {
+  const touchEventInit = require('jsdom/lib/generated/idl/TouchEventInit.js') as TouchEventInitModule;
+  if (HOOKED_TOUCH_EVENT_INIT.has(touchEventInit)) return;
+  const originalConvert = touchEventInit.convert;
+  touchEventInit.convert = (globalObject, value, options) => {
+    const output = Reflect.apply(originalConvert, touchEventInit, [globalObject, value, options]) as Record<string, unknown>;
+    const touchListConstructor = Reflect.get(globalObject, 'TouchList');
+    if (typeof touchListConstructor !== 'function') return output;
+    for (const field of TOUCH_LIST_FIELDS) {
+      const items = output[field];
+      if (Array.isArray(items)) output[field] = createTouchList(touchListConstructor, items);
+    }
+    return output;
+  };
+  HOOKED_TOUCH_EVENT_INIT.add(touchEventInit);
+}
 
 const FRAME_OWNERS = new WeakMap<object, (child: unknown) => void>();
 const FRAME_ATTACH_HOOKS = new WeakSet<object>();
@@ -155,6 +180,20 @@ function recordedNetReport(current: JsonValue | undefined, records: readonly Jso
   };
 }
 
+type JsdomImplementation = Record<PropertyKey, unknown>;
+
+function jsdomImplementation(wrapper: unknown, name: string): JsdomImplementation {
+  if ((typeof wrapper !== 'object' && typeof wrapper !== 'function') || wrapper === null) {
+    throw new TypeError(`${name} is not a jsdom wrapper`);
+  }
+  const key = Object.getOwnPropertySymbols(wrapper).find((symbol) => symbol.description === 'impl');
+  const implementation = key === undefined ? undefined : Reflect.get(wrapper, key);
+  if ((typeof implementation !== 'object' && typeof implementation !== 'function') || implementation === null) {
+    throw new TypeError(`${name} has no jsdom implementation`);
+  }
+  return implementation as JsdomImplementation;
+}
+
 class JsdomRuntime implements Runtime {
   readonly plan: Plan<Op, PlanBind>;
   private context: vm.Context | null;
@@ -162,6 +201,8 @@ class JsdomRuntime implements Runtime {
   private closeInstall: (() => void) | null;
   private readInstall: (() => Data) | null;
   private onDispose: (() => void) | null;
+  private readonly hiddenSymbols: Set<symbol>;
+  private readonly trustedDispatchKey = `mimic.trusted-dispatch.${randomUUID()}`;
   private disposed = false;
 
   constructor(
@@ -171,6 +212,7 @@ class JsdomRuntime implements Runtime {
     closeInstall: () => void,
     readInstall: () => Data,
     onDispose: () => void,
+    hiddenSymbols: Set<symbol>,
   ) {
     this.plan = plan;
     this.context = context;
@@ -178,15 +220,33 @@ class JsdomRuntime implements Runtime {
     this.closeInstall = closeInstall;
     this.readInstall = readInstall;
     this.onDispose = onDispose;
+    this.hiddenSymbols = hiddenSymbols;
   }
 
-  run(code: string, options: { timeout?: number; url?: string } = {}): RuntimeResult {
-    if (this.disposed) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: 'Runtime 已 dispose' });
+  run(code: string, options: RuntimeRunOptions = {}): RuntimeResult {
+    const context = this.context;
+    if (this.disposed || context === null) {
+      throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: 'Runtime 已 dispose' });
+    }
     // Akamai BMS 等从 document.currentScript.src 取 ?v= 派生 urlKey;
     // vm.runInContext 不会设置 currentScript,缺省时脚本回退 location → urlKey=0。
     return this.withScriptUrl(options.url, () => {
+      let bridgeSymbol: symbol | undefined;
       try {
-        const value = vm.runInContext(code, this.context!, {
+        let source = code;
+        if (options.trustedEvents === true) {
+          const realm = context as unknown as { Symbol: SymbolConstructor };
+          bridgeSymbol = realm.Symbol.for(this.trustedDispatchKey);
+          this.hiddenSymbols.add(bridgeSymbol);
+          Object.defineProperty(context, bridgeSymbol, {
+            value: this.dispatchTrustedEvent,
+            writable: false,
+            enumerable: false,
+            configurable: true,
+          });
+          source = `((__mimicDispatchTrustedEvent) => (${code}))(globalThis[Symbol.for(${JSON.stringify(this.trustedDispatchKey)})])`;
+        }
+        const value = vm.runInContext(source, context, {
           filename: options.url || this.plan.boot.url,
           ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
         });
@@ -197,9 +257,28 @@ class JsdomRuntime implements Runtime {
         const message = value && typeof value.message === 'string' ? value.message : String(error);
         const stack = value && typeof value.stack === 'string' ? publicStack(value.stack, name, message) : undefined;
         return { ok: false, error: message, ...(stack ? { stack } : {}) };
+      } finally {
+        if (bridgeSymbol !== undefined) {
+          Reflect.deleteProperty(context, bridgeSymbol);
+          this.hiddenSymbols.delete(bridgeSymbol);
+        }
       }
     });
   }
+
+  private readonly dispatchTrustedEvent = (target: unknown, event: unknown): unknown => {
+    const targetImpl = jsdomImplementation(target, 'event target');
+    const eventImpl = jsdomImplementation(event, 'event');
+    const dispatch = targetImpl._dispatch;
+    if (typeof dispatch !== 'function'
+      || eventImpl._dispatchFlag === true
+      || eventImpl._initializedFlag !== true
+      || eventImpl.eventPhase !== 0) {
+      throw new TypeError('Trusted event cannot be dispatched');
+    }
+    eventImpl.isTrusted = true;
+    return Reflect.apply(dispatch, targetImpl, [eventImpl]);
+  };
 
   /** Bind document.currentScript (+ scripts entry) for the duration of fn when url is set. */
   private withScriptUrl<T>(url: string | undefined, fn: () => T): T {
@@ -406,6 +485,10 @@ class Installer {
       if (records?.length) output.net = recordedNetReport(output.net, records);
     }
     return output;
+  }
+
+  hiddenSymbols(): Set<symbol> {
+    return this.registry.hiddenSymbols;
   }
 
   private prepare(): void {
@@ -1093,6 +1176,7 @@ export class JsdomEngine implements Engine {
 
   constructor() {
     const require = createRequire(import.meta.url);
+    hookTouchEventInit(require);
     const jsdomVersion = (require('jsdom/package.json') as { version: string }).version;
     const source = {
       engine: 'jsdom',
@@ -1141,6 +1225,7 @@ export class JsdomEngine implements Engine {
         () => installer.close(),
         () => installer.report(),
         () => { this.activeCount--; },
+        installer.hiddenSymbols(),
       );
       this.activeCount++;
       return runtime;

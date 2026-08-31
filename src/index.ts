@@ -67,6 +67,8 @@ export type {
   Form,
   Hash,
   Host,
+  InteractionAdapter,
+  InteractionOptions,
   Job,
   JsonValue,
   Page,

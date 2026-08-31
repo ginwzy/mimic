@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal } from '../src/index.js';
-import { chromeDriver, chromeFeature, touchFeature } from '../src/features/chrome.js';
+import { chromeDriver, chromeFeature, touchDriver, touchFeature } from '../src/features/chrome.js';
 import { navDriver, navFeature } from '../src/features/nav.js';
 import { navShape } from '../src/features/nav.shape.js';
 import { screenDriver, screenFeature } from '../src/features/screen.js';
@@ -12,7 +12,9 @@ import { viewDriver, viewFeature } from '../src/features/view.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 const features = [viewFeature, screenFeature, chromeFeature, touchFeature, navFeature, uaFeature];
-const drivers = { view: viewDriver, screen: screenDriver, chrome: chromeDriver, nav: navDriver, ua: uaDriver };
+const drivers = {
+  view: viewDriver, screen: screenDriver, chrome: chromeDriver, touch: touchDriver, nav: navDriver, ua: uaDriver,
+};
 
 async function open(id: string) {
   const imported = await store.load(id);

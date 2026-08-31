@@ -66,7 +66,6 @@ SEC_CH_UA = (
     f'"Google Chrome";v="{CHROME_MAJOR}"'
 )
 ACCEPT_LANG = "en-US,en;q=0.9,ja;q=0.8"
-RNET_EMULATION = Emulation.Chrome145
 
 DOC_ACCEPT = (
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,"
@@ -86,7 +85,7 @@ VERIFY_IDENTIFICATION_ID = "a19d5424-de0e-4d5c-b784-557a512f5737"
 VERIFY_SYS_ID = "ABE"
 DEFAULT_BODY = (
     '{"itineraries":[{"originLocationCode":"TYO","destinationLocationCode":"HNL",'
-    '"departureDate":"2026-08-27"}],"travelers":{"ADT":1,"B15":0,"CHD":0,"INF":0},'
+    '"departureDate":"2026-09-27"}],"travelers":{"ADT":1,"B15":0,"CHD":0,"INF":0},'
     '"fare":{"isMixedCabin":false,"cabinClass":"eco","fareOptionType":"0"},'
     '"searchPreferences":{"getAirCalendarOnly":false,"getLatestOperation":true}}'
 )
@@ -262,12 +261,11 @@ def make_client(proxy: Proxy | None = None, *, proxy_mode: str = "local") -> Cli
     http_timeout = 60 if proxy_mode == "lumi" else 30
     kwargs: dict[str, Any] = {
         "emulation": EmulationOption(
-            emulation=RNET_EMULATION,
+            emulation=Emulation.Chrome145,
             emulation_os=EmulationOS.Android,
         ),
         "cookie_store": True,
         "timeout": timedelta(seconds=http_timeout),
-        "redirect": Policy.limited(10),
         "verify": False,
     }
     if proxy is not None:

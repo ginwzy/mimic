@@ -33,9 +33,16 @@ export type RuntimeResult =
   | { ok: true; value: unknown }
   | { ok: false; error: string; stack?: string };
 
+export interface RuntimeRunOptions {
+  timeout?: number;
+  url?: string;
+  /** Internal dispatch authority for mimic-owned interaction source. */
+  trustedEvents?: true;
+}
+
 export interface Runtime {
   readonly plan: Plan<Op, PlanBind>;
-  run(code: string, options?: { timeout?: number; url?: string }): RuntimeResult;
+  run(code: string, options?: RuntimeRunOptions): RuntimeResult;
   report(): Data;
   dispose(): void;
 }

@@ -130,6 +130,94 @@
     return { length: length, items: items };
   }
 
+  var touchFixtureValue;
+  var touchFixtureReady = false;
+  var touchFixtureError = '';
+
+  /** Build one stable TouchEvent snapshot so all touch targets describe the same identities. */
+  function touchFixture() {
+    if (touchFixtureReady) return touchFixtureValue;
+    touchFixtureReady = true;
+    if (typeof W.TouchEvent !== 'function') {
+      touchFixtureError = 'TouchEvent unavailable';
+      return undefined;
+    }
+    var target = W.document && (W.document.documentElement || W.document);
+    var init = {
+      identifier: 7,
+      target: target,
+      screenX: 111,
+      screenY: 222,
+      clientX: 33,
+      clientY: 44,
+      pageX: 55,
+      pageY: 66,
+      radiusX: 2,
+      radiusY: 3,
+      rotationAngle: 4,
+      force: 0.5,
+      altitudeAngle: 0.75,
+      azimuthAngle: 1.25,
+      touchType: 'direct'
+    };
+    var point = init;
+    var touchConstructed = false;
+    if (typeof W.Touch === 'function') {
+      try {
+        point = new W.Touch(init);
+        touchConstructed = true;
+      } catch (e) {
+        touchFixtureError = String(e && e.message || e);
+      }
+    } else {
+      touchFixtureError = 'Touch unavailable';
+    }
+    try {
+      var event = new W.TouchEvent('touchstart', {
+        bubbles: true,
+        cancelable: true,
+        touches: [point],
+        targetTouches: [point],
+        changedTouches: [point]
+      });
+      touchFixtureValue = { event: event, touchConstructed: touchConstructed };
+      return touchFixtureValue;
+    } catch (e) {
+      touchFixtureError = String(e && e.message || e);
+      return undefined;
+    }
+  }
+
+  function touchFacts() {
+    var fixture = touchFixture();
+    if (!fixture) return [{ available: false, error: touchFixtureError }];
+    var event = fixture.event;
+    var list = event.changedTouches;
+    var point = list && list[0];
+    var item = list && typeof list.item === 'function' ? list.item(0) : undefined;
+    var missing = list && typeof list.item === 'function' ? list.item(999) : undefined;
+    return [{
+      available: true,
+      error: touchFixtureError,
+      touchConstructed: fixture.touchConstructed,
+      touchType: typeof W.Touch,
+      touchListType: typeof W.TouchList,
+      eventTrusted: event.isTrusted,
+      listIsArray: Array.isArray(list),
+      listTag: tagOf(list),
+      listConstructor: list && list.constructor && list.constructor.name || '',
+      listItemType: list && typeof list.item,
+      listIterable: !!(list && typeof Symbol === 'function' && Symbol.iterator && typeof list[Symbol.iterator] === 'function'),
+      itemMatchesIndex: item === point,
+      missingItemNull: missing === null,
+      pointTag: tagOf(point),
+      pointConstructor: point && point.constructor && point.constructor.name || '',
+      pointInstanceOfTouch: typeof W.Touch === 'function' && point instanceof W.Touch,
+      touchesSharePoint: event.touches[0] === point,
+      targetTouchesSharePoint: event.targetTouches[0] === point
+    }];
+  }
+
   /** 对象 target:类型标签 + 原型链 + own 键(原始枚举顺序)+ 每键形态 + symbol 键。 */
   function objectRecord(o) {
     var keys = {};
@@ -162,6 +250,10 @@
   function C(id, get, itemFields) { return { id: id, category: 'object', kind: 'collection', get: get, itemFields: itemFields }; }
 
   var W = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
+  var TOUCH_FIELDS = [
+    'identifier', 'target', 'screenX', 'screenY', 'clientX', 'clientY', 'pageX', 'pageY',
+    'radiusX', 'radiusY', 'rotationAngle', 'force', 'altitudeAngle', 'azimuthAngle', 'touchType'
+  ];
 
   var TARGETS = [
     // —— window 函数(T1 核心验证:对照 sdenv 真机表的 name/length/native)——
@@ -226,6 +318,22 @@
     O('HTMLElement.prototype', 'prototype', function () { return W.HTMLElement.prototype; }),
     O('HTMLDivElement.prototype', 'prototype', function () { return W.HTMLDivElement.prototype; }),
     O('Event.prototype', 'prototype', function () { return W.Event.prototype; }),
+    F('window.Touch', function () { return W.Touch; }),
+    O('Touch.prototype', 'prototype', function () { return W.Touch.prototype; }),
+    F('window.TouchList', function () { return W.TouchList; }),
+    O('TouchList.prototype', 'prototype', function () { return W.TouchList.prototype; }),
+    F('window.TouchEvent', function () { return W.TouchEvent; }),
+    O('TouchEvent.prototype', 'prototype', function () { return W.TouchEvent.prototype; }),
+    O('touch.fixture.event', 'instance', function () { var f = touchFixture(); return f && f.event; }),
+    C('touch.fixture.touches', function () { var f = touchFixture(); return f && f.event.touches; }, TOUCH_FIELDS),
+    C('touch.fixture.targetTouches', function () { var f = touchFixture(); return f && f.event.targetTouches; }, TOUCH_FIELDS),
+    C('touch.fixture.changedTouches', function () { var f = touchFixture(); return f && f.event.changedTouches; }, TOUCH_FIELDS),
+    O('touch.fixture.point', 'instance', function () { var f = touchFixture(); return f && f.event.changedTouches[0]; }),
+    C('touch.fixture.invariants', touchFacts, [
+      'available', 'error', 'touchConstructed', 'touchType', 'touchListType', 'eventTrusted', 'listIsArray',
+      'listTag', 'listConstructor', 'listItemType', 'listIterable', 'itemMatchesIndex', 'missingItemNull',
+      'pointTag', 'pointConstructor', 'pointInstanceOfTouch', 'touchesSharePoint', 'targetTouchesSharePoint'
+    ]),
     O('navigator', 'instance', function () { return W.navigator; }),
     O('screen', 'instance', function () { return W.screen; }),
     O('navigator.connection', 'instance', function () { return W.navigator.connection; }),

@@ -106,6 +106,23 @@ const mimic = createMimic({
 });
 ```
 
+`capture` Job 可选择内置交互策略。省略 `interaction` 等同于 `adapter: 'none'`。`seed` 不参与
+Plan 缓存键；相同 `seed` 可重复生成相同事件序列。
+
+```js
+const result = await mimic.capture({
+  kind: 'capture',
+  code: sensorSource,
+  scriptUrl: sensorUrl,
+  interaction: { adapter: 'akamai-sensor', seed: 'optional-replay-seed' },
+});
+```
+
+`akamai-sensor` 在首个非空请求后派发 motion burst，在第二个非空请求后派发一次 swipe。无请求进展时，
+分别在 120ms 和 450ms 触发有界 fallback。事件由 Realm 原生构造器创建，并通过 jsdom Engine 的内部
+派发路径呈现 `isTrusted: true`；touch 列表和触点分别保持 Realm `TouchList`、`Touch` 身份。以上语义
+仍属于模拟结果，不代表操作系统或真实浏览器输入。
+
 `lifecycle` 默认为 `auto`,兼容原有行为:脚本求值后由 mimic 主动派发尚未完成的
 `readystatechange`、`DOMContentLoaded`、`load`,并派发 `pageshow`。设为 `none` 后只等待环境自然产生的
 事件和异步任务,不会抑制 jsdom 自身的生命周期事件。

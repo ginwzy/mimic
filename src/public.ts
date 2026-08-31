@@ -7,6 +7,8 @@ export { MimicError };
 export type {
   ErrorInfo,
   Hash,
+  InteractionAdapter,
+  InteractionOptions,
   Page,
   PagePerformance,
   Plan,
@@ -19,9 +21,8 @@ export type {
   Target,
 } from './core/types.js';
 
-type ScriptJob = Extract<Job, { code: string }>;
-export type RunJob = Omit<ScriptJob, 'kind'> & { kind: 'run' };
-export type CaptureJob = Omit<ScriptJob, 'kind'> & { kind: 'capture' };
+export type RunJob = Extract<Job, { kind: 'run' }>;
+export type CaptureJob = Extract<Job, { kind: 'capture' }>;
 export type PlanJob = RunJob | CaptureJob;
 export type ListKind = 'profiles' | 'shapes' | 'features' | 'drivers';
 export type MimicClientOptions = MimicOptions;

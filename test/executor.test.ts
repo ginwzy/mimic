@@ -53,6 +53,39 @@ test('WorkerExecutor returns clone-safe Results and recovers after sync and micr
   }
 });
 
+test('WorkerExecutor runs capture interaction policies in the execute-only worker', async () => {
+  const pool = new WorkerExecutor({
+    profilesRoot,
+    probePath,
+    size: 1,
+    timeoutMs: 3_000,
+    maxQueue: 1,
+    capture: { deadlineMs: 300, pollMs: 5, maxPosts: 1 },
+  });
+  try {
+    const result = await pool.run({
+      profile: 'android-webview-v138',
+      job: {
+        kind: 'capture',
+        interaction: { adapter: 'akamai-sensor', seed: 'worker-seed' },
+        code: `addEventListener('devicemotion', event => {
+          const manual = new Event('manual');
+          document.dispatchEvent(manual);
+          navigator.sendBeacon('/motion', String(event.isTrusted) + ':' + String(manual.isTrusted));
+        }, { once: true })`,
+      },
+    });
+    if (!result.ok) assert.fail(result.error.message);
+    assert.deepEqual(result.value, {
+      syncCaptured: false,
+      captured: 'true:false',
+      posts: [{ via: 'beacon', tag: '[object String]', len: 10, body: 'true:false' }],
+    });
+  } finally {
+    await pool.destroy();
+  }
+});
+
 test('WorkerExecutor watchdog covers serialization traps and close pollution', async () => {
   const pool = executor();
   try {

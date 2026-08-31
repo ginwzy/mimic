@@ -3,7 +3,7 @@ import type { Drivers } from '../engine/types.js';
 import type { Feature } from '../shape/types.js';
 import { audioDriver, audioFeature } from './audio.js';
 import { canvasDriver, canvasFeature } from './canvas.js';
-import { chromeDriver, chromeFeature, touchFeature } from './chrome.js';
+import { chromeDriver, chromeFeature } from './chrome.js';
 import { domDriver, domFeature } from './dom.js';
 import { globalsDriver, globalsFeature } from './globals.js';
 import { navDriver, navFeature } from './nav.js';
@@ -12,6 +12,7 @@ import { perfDriver, perfFeature } from './perf.js';
 import { pluginsDriver, pluginsFeature } from './plugins.js';
 import { screenDriver, screenFeature } from './screen.js';
 import { timeDriver, timeFeature } from './time.js';
+import { touchDriver, touchFeature } from './touch.js';
 import { traceDriver, traceFeature } from './trace.js';
 import { uaDriver, uaFeature } from './ua.js';
 import { viewDriver, viewFeature } from './view.js';
@@ -52,4 +53,5 @@ export const drivers: Drivers = Object.freeze({
   webgl: webglDriver,
   audio: audioDriver,
   trace: traceDriver,
+  touch: touchDriver,
 });

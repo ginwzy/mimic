@@ -8,7 +8,40 @@
       "additionalProperties": false,
       "required": ["kind", "code"],
       "properties": {
-        "kind": { "enum": ["run", "capture", "diagnose"] },
+        "kind": { "const": "run" },
+        "code": { "type": "string" },
+        "scriptUrl": { "type": "string", "pattern": "^https?://" },
+        "trace": { "type": "boolean" },
+        "timeout": { "type": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "code"],
+      "properties": {
+        "kind": { "const": "capture" },
+        "code": { "type": "string" },
+        "scriptUrl": { "type": "string", "pattern": "^https?://" },
+        "trace": { "type": "boolean" },
+        "timeout": { "type": "integer", "minimum": 1 },
+        "interaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["adapter"],
+          "properties": {
+            "adapter": { "enum": ["none", "akamai-sensor"] },
+            "seed": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "code"],
+      "properties": {
+        "kind": { "const": "diagnose" },
         "code": { "type": "string" },
         "scriptUrl": { "type": "string", "pattern": "^https?://" },
         "trace": { "type": "boolean" },

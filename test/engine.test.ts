@@ -21,7 +21,7 @@ import { JSDOM_ENGINE_ABI } from '../src/engine/jsdom.js';
 const store = new LegacyProfiles(path.resolve('profiles'));
 
 test('JsdomEngine locks the current ABI', () => {
-  assert.equal(JSDOM_ENGINE_ABI, 'mimic-jsdom-v2.7');
+  assert.equal(JSDOM_ENGINE_ABI, 'mimic-jsdom-v2.9');
 });
 
 function shapeFor(shape: Shape, features: readonly Feature[]): Shape {

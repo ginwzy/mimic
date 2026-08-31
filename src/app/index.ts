@@ -46,6 +46,12 @@ function normalizedJob(input: unknown): Job {
   return parseJob({ ...job, trace: true });
 }
 
+function jobForPlanKey(job: Job): JsonValue {
+  if (job.kind !== 'capture' || job.interaction?.seed === undefined) return job as unknown as JsonValue;
+  const { seed: _seed, ...interaction } = job.interaction;
+  return { ...job, interaction } as unknown as JsonValue;
+}
+
 function requestShape(input: unknown): Shape | undefined {
   return input === undefined ? undefined : parseShape(input);
 }
@@ -177,7 +183,7 @@ export class Application extends RuntimeApplication {
       profile: { id: input.profile.id, hash: input.profile.hash },
       page: input.page === undefined ? null : { id: input.page.id, hash: input.page.hash },
       shapes: input.shapes.map((shape) => ({ id: shape.id, hash: shape.hash })),
-      job: input.job,
+      job: jobForPlanKey(input.job),
       require: input.require ?? {},
       synthetic: input.synthetic ?? null,
       catalog: input.catalog,

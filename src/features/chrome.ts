@@ -3,6 +3,8 @@ import type { Driver } from '../engine/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { accessor, fn, fnShape, refProp, tag, valueProp } from './ops.js';
 
+export { touchDriver, touchFeature } from './touch.js';
+
 const TOUCH = ['ontouchstart', 'ontouchend', 'ontouchmove', 'ontouchcancel'] as const;
 
 function chromeOps(): DraftOp[] {
@@ -97,7 +99,7 @@ function bmsCapabilityOps(): DraftOp[] {
   const iframeProto = { path: 'window.HTMLIFrameElement.prototype' } as const;
   const docProto = { path: 'window.Document.prototype' } as const;
   return [
-    // Disk shapes skip chromeTouchShape; re-assert non-isolated SAB absence (PL710/MU).
+    // Disk shapes skip chromeShape; re-assert non-isolated SAB absence (PL710/MU).
     { op: 'drop', target: { path: 'window' }, key: 'SharedArrayBuffer' },
     { op: 'alloc', id: 'chrome.PushManager.proto', kind: 'object' },
     {
@@ -189,13 +191,6 @@ export const chromeFeature: Feature = {
       ...(shape.target.host === 'chrome' ? { 'chrome.bms-capability': 'emulated' as const } : {}),
     },
   }),
-};
-
-export const touchFeature: Feature = {
-  id: 'touch',
-  rev: '1',
-  requires: ['screen'],
-  build: () => ({ support: { 'touch.api': 'shape-only' } }),
 };
 
 function config(value: JsonValue | undefined): Record<string, JsonValue> {

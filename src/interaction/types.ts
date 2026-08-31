@@ -1,0 +1,38 @@
+export type InteractionRecipe = 'motion-burst' | 'swipe';
+
+interface TimedFrame {
+  readonly at: number;
+}
+
+export interface MotionFrame extends TimedFrame {
+  readonly kind: 'motion';
+  readonly acceleration: readonly [number, number, number];
+  readonly gravity: readonly [number, number, number];
+  readonly rotation: readonly [number, number, number];
+  readonly interval: number;
+}
+
+export interface OrientationFrame extends TimedFrame {
+  readonly kind: 'orientation';
+  readonly alpha: number;
+  readonly beta: number;
+  readonly gamma: number;
+}
+
+export interface TouchFrame extends TimedFrame {
+  readonly kind: 'touch';
+  readonly phase: 'start' | 'move' | 'end';
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface MouseFrame extends TimedFrame {
+  readonly kind: 'mouse';
+  readonly phase: 'down' | 'move' | 'up';
+  readonly x: number;
+  readonly y: number;
+}
+
+export type InteractionFrame = MotionFrame | OrientationFrame | TouchFrame | MouseFrame;
+
+export type InteractionPolicy = (elapsedMs: number, postCount: number) => InteractionRecipe | null;

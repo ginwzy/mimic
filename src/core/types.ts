@@ -260,12 +260,31 @@ export interface Page {
   performance?: PagePerformance;
 }
 
-interface ScriptJob {
-  kind: 'run' | 'capture' | 'diagnose';
+export type InteractionAdapter = 'none' | 'akamai-sensor';
+
+export interface InteractionOptions {
+  adapter: InteractionAdapter;
+  seed?: string;
+}
+
+interface ScriptJobBase {
   code: string;
   scriptUrl?: string;
   trace?: boolean;
   timeout?: number;
+}
+
+interface RunJob extends ScriptJobBase {
+  kind: 'run';
+}
+
+interface CaptureJob extends ScriptJobBase {
+  kind: 'capture';
+  interaction?: InteractionOptions;
+}
+
+interface DiagnoseJob extends ScriptJobBase {
+  kind: 'diagnose';
 }
 
 interface ProbeJob {
@@ -273,7 +292,7 @@ interface ProbeJob {
   timeout?: number;
 }
 
-export type Job = ScriptJob | ProbeJob;
+export type Job = RunJob | CaptureJob | DiagnoseJob | ProbeJob;
 
 export type ParseIssue = {
   [key: string]: JsonValue;

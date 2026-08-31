@@ -204,6 +204,30 @@ test('parseJob accepts a run job through the public contract', () => {
   });
 });
 
+test('parseJob accepts interaction only on capture jobs', () => {
+  const job = parseJob({
+    kind: 'capture',
+    code: 'void 0',
+    interaction: { adapter: 'akamai-sensor', seed: 'capture-seed' },
+  });
+
+  assert.deepEqual(job, {
+    kind: 'capture',
+    code: 'void 0',
+    interaction: { adapter: 'akamai-sensor', seed: 'capture-seed' },
+  });
+  for (const invalid of [
+    { kind: 'run', code: 'void 0', interaction: { adapter: 'akamai-sensor' } },
+    { kind: 'capture', code: 'void 0', interaction: { adapter: 'unknown' } },
+    { kind: 'capture', code: 'void 0', interaction: { adapter: 'akamai-sensor', seed: '' } },
+  ]) {
+    assert.throws(
+      () => parseJob(invalid),
+      (error: unknown) => error instanceof MimicError && error.code === 'BAD_JOB',
+    );
+  }
+});
+
 test('parseJob rejects invalid input with a stable parse error', () => {
   assert.throws(
     () => parseJob({ kind: 'run', timeout: -1 }),
