@@ -45,7 +45,7 @@ PROXY_HEADERS = {"X-ClientHello-Id": "hellochrome_150"}
 
 LUMI_PROXY_HOST = "brd.superproxy.io"
 LUMI_PROXY_PORT = 22225
-LUMI_COUNTRY = "jp"
+LUMI_COUNTRY = "tw"
 LUMI_CUSTOMER_ZONE = "lum-customer-travel_fusion-zone-gen"
 LUMI_PASSWORD = "j48ly0d63top"
 
@@ -417,6 +417,7 @@ async def capture_bodies(
     events: str,
     deadline_ms: int,
     script_timeout_ms: int,
+    interaction_seed: str | None = None,
 ) -> list[str]:
     if not BRIDGE.is_file():
         raise RuntimeError(f"bridge missing: {BRIDGE}")
@@ -437,6 +438,7 @@ async def capture_bodies(
             "maxPosts": max_posts,
             "scriptTimeoutMs": script_timeout_ms,
             "events": events,
+            "interactionSeed": interaction_seed,
         },
         ensure_ascii=False,
     ).encode()
@@ -548,6 +550,7 @@ async def initialize(
     abck_policy: str = "all",
     proxy_mode: str = "local",
     profile: str,
+    interaction_seed: str,
 ) -> dict:
     abck_dl, bms_dl, script_to = capture_deadlines(proxy_mode)
     log(
@@ -577,6 +580,7 @@ async def initialize(
         SELECT_URL, html, abck_url, abck_src, cookie_header(client),
         profile=profile,
         max_posts=8, events="abck", deadline_ms=abck_dl, script_timeout_ms=script_to,
+        interaction_seed=interaction_seed,
     )
     if not sensor_bodies:
         raise RuntimeError("no _abck bodies captured")
@@ -717,6 +721,7 @@ async def run_worker(
     token = _WORKER.set(f"w{worker_id}")
     started = time()
     chosen_profile = resolve_profile(profile)
+    interaction_seed = secrets.token_hex(16)
     try:
         log(
             f"worker start verify={do_verify} post_count={post_count} "
@@ -732,6 +737,7 @@ async def run_worker(
             "lumi_country": lumi_country if proxy_mode == "lumi" else None,
             "profile": chosen_profile,
             "tls_emulation": f"Chrome{CHROME_MAJOR}+Android",
+            "interaction_seed": interaction_seed,
         }
         try:
             init = await initialize(
@@ -740,6 +746,7 @@ async def run_worker(
                 abck_policy=abck_policy,
                 proxy_mode=proxy_mode,
                 profile=chosen_profile,
+                interaction_seed=interaction_seed,
             )
             out.update(init)
             cookies = str(out.get("cookies") or "")
@@ -767,6 +774,7 @@ async def run_worker(
                 "proxy_mode": proxy_mode,
                 "profile": chosen_profile,
                 "tls_emulation": f"Chrome{CHROME_MAJOR}+Android",
+                "interaction_seed": interaction_seed,
                 "ok": False,
                 "error": f"{type(exc).__name__}: {exc}",
                 "elapsed_s": round(time() - started, 2),
@@ -831,14 +839,17 @@ async def run_concurrent(
             )
         else:
             log(
-                f"summary w{wid}: FAIL class={r.get('class')} profile={r.get('profile')} "
-                f"{r.get('error')} elapsed={r.get('elapsed_s')}s"
+                f"summary w{wid}: FAIL status={r.get('verify_status')} class={r.get('class')} "
+                f"verify_class={r.get('verify_class')} profile={r.get('profile')} "
+                f"abck_posts={r.get('abck_post_count')} tilde0={r.get('abck_tilde0')} "
+                f"error={r.get('error')} elapsed={r.get('elapsed_s')}s"
             )
     return out
 
 
 _JSON_OUT_KEYS = (
     "worker", "proxy_mode", "lumi_country", "profile", "tls_emulation",
+    "interaction_seed",
     "ok", "class", "verify_status", "verify_success", "verify_class",
     "abck_post_count", "abck_body_count", "abck_policy", "bms_posted",
     "abck_tilde0", "has_bm_s", "elapsed_s", "error",

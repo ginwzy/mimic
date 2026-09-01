@@ -24,6 +24,9 @@ export interface TouchFrame extends TimedFrame {
   readonly phase: 'start' | 'move' | 'end';
   readonly x: number;
   readonly y: number;
+  readonly radiusX: number;
+  readonly radiusY: number;
+  readonly force: number;
 }
 
 export interface MouseFrame extends TimedFrame {

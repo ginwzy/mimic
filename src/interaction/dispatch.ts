@@ -11,10 +11,17 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
       const height = Math.max(1, Number(screen.height) || Number(innerHeight) || 1);
       const x = Math.max(0, Math.min(width - 1, Math.round(frame.x * (width - 1))));
       const y = Math.max(0, Math.min(height - 1, Math.round(frame.y * (height - 1))));
+      const radiusX = Number(frame.radiusX);
+      const radiusY = Number(frame.radiusY);
+      const force = Number(frame.force);
+      const touchForce = Number.isFinite(force) ? Math.max(0, Math.min(1, force)) : 0.5;
       const fields = {
         identifier: 1, target: document,
         clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y,
-        radiusX: 1, radiusY: 1, rotationAngle: 0, force: frame.phase === 'end' ? 0 : 0.5,
+        radiusX: Number.isFinite(radiusX) ? Math.max(0, radiusX * width) : 1,
+        radiusY: Number.isFinite(radiusY) ? Math.max(0, radiusY * height) : 1,
+        rotationAngle: 0,
+        force: frame.phase === 'end' ? 0 : touchForce,
       };
       try { return new globalThis.Touch(fields); }
       catch { return fields; }

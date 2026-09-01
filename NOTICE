@@ -1,0 +1,14 @@
+mimic includes an adapted statistical model derived from:
+
+CSD4CA: A Contextual Swipe Gesture Dataset for Continuous Authentication
+Copyright (c) Zakaria Naji and Driss Bouzidi
+https://doi.org/10.5281/zenodo.17931118
+
+The source dataset is licensed under the Creative Commons Attribution 4.0
+International License (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+The mimic adaptation removes participant identifiers, resamples the sensor
+streams, aggregates gestures by context/hand/direction, and stores only group
+means and low-rank principal components. It does not contain source records or
+individual gesture traces.

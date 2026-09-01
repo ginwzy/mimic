@@ -123,6 +123,17 @@ const result = await mimic.capture({
 派发路径呈现 `isTrusted: true`；touch 列表和触点分别保持 Realm `TouchList`、`Touch` 身份。以上语义
 仍属于模拟结果，不代表操作系统或真实浏览器输入。
 
+motion/touch 数值由内置的 CSD4CA 匿名低秩模型生成；模型保留聚合后的时序、压力和触点面积，不包含
+参与者标识或单条原始轨迹。重新编译需要单独安装 `scripts/csd4ca-requirements.txt`，然后执行：
+
+```bash
+npm run generate:interaction-model -- \
+  --input /path/to/CSD4CA \
+  --output src/interaction/csd4ca.model.ts
+```
+
+数据集来源、许可证和改动说明见包内 `NOTICE`。正常构建和运行只使用已生成模型，不读取原始 CSV。
+
 `lifecycle` 默认为 `auto`,兼容原有行为:脚本求值后由 mimic 主动派发尚未完成的
 `readystatechange`、`DOMContentLoaded`、`load`,并派发 `pageshow`。设为 `none` 后只等待环境自然产生的
 事件和异步任务,不会抑制 jsdom 自身的生命周期事件。

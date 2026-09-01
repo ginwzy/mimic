@@ -176,11 +176,13 @@ test('npm tarball exposes only the current public surfaces', async (t) => {
     'dist/src/http/public.js',
     'dist/src/cli.js',
     'dist/src/executor/worker.js',
+    'dist/src/interaction/csd4ca.model.js',
     'dist/assets/profiles/chrome-mac.json',
     'dist/assets/shapes/manifest.json',
     'dist/assets/baselines/macos-chrome-v148.json',
     'dist/assets/probe.js',
     'docs/usage.md',
+    'NOTICE',
   ]) assert.ok(names.has(expected), `tarball missing ${expected}`);
   assert.equal([...names].some((name) => name.includes('/test/') || name.endsWith('.test.js')), false);
   for (const prefix of ['entry/', 'core/', 'mask/', 'patch/', 'base/', 'trace/', 'profiles/']) {

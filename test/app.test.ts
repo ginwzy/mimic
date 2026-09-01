@@ -131,6 +131,9 @@ test('Application capture drives the built-in Akamai interaction policy inside t
             bubbles: event.bubbles,
             x: point.clientX,
             y: point.clientY,
+            radiusX: point.radiusX,
+            radiusY: point.radiusY,
+            force: point.force,
             list: [
               list.constructor.name,
               Object.prototype.toString.call(list),
@@ -189,6 +192,9 @@ test('Application capture drives the built-in Akamai interaction policy inside t
     bubbles: boolean;
     x: number;
     y: number;
+    radiusX: number;
+    radiusY: number;
+    force: number;
     list: unknown[];
     point: unknown[];
     direct: unknown[];
@@ -209,6 +215,8 @@ test('Application capture drives the built-in Akamai interaction policy inside t
   assert.deepEqual([swipe.illegalConstructor, swipe.brandChecked], [true, true]);
   assert.ok(swipe.x >= 0 && swipe.x < 360);
   assert.ok(swipe.y >= 0 && swipe.y < 780);
+  assert.ok(swipe.radiusX > 0 && swipe.radiusY > 0);
+  assert.ok(swipe.force >= 0 && swipe.force <= 1);
   assert.equal(engine.active, 0);
 });
 
