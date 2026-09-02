@@ -163,13 +163,13 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
         xhr.send(body);
       };
       post('initial');
-      setTimeout(() => post(JSON.stringify({ kind: 'sequence', events })), 3100);
+      setTimeout(() => post(JSON.stringify({ kind: 'sequence', events })), 5300);
     })()`,
     profile: 'android-webview-v138',
     cookies: [],
-    deadlineMs: 4_000,
+    deadlineMs: 6_000,
     maxPosts: 2,
-    scriptTimeoutMs: 5_000,
+    scriptTimeoutMs: 7_000,
     events: 'abck',
     interactionSeed: 'pointer-cancel-seed',
   });

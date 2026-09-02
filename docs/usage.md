@@ -142,13 +142,14 @@ const result = await mimic.capture({
 });
 ```
 
-`akamai-sensor` 在首个非空请求后派发 motion burst，在第二个非空请求后派发一次 swipe。无请求进展时，
-分别在 120ms 和 450ms 触发有界 fallback。事件由 Realm 原生构造器创建，并通过 jsdom Engine 的内部
-派发路径呈现 `isTrusted: true`；touch 列表和触点分别保持 Realm `TouchList`、`Touch` 身份。以上语义
-仍属于模拟结果，不代表操作系统或真实浏览器输入。
+`akamai-sensor` 在首个非空请求后派发一次联合建模的 swipe；无请求进展时在 120ms 触发 fallback。
+随后在 2500ms 派发 tap，在 2700ms 派发 follow-up swipe。事件由 Realm 原生构造器创建，并通过 jsdom
+Engine 的内部派发路径呈现 `isTrusted: true`；touch 列表和触点分别保持 Realm `TouchList`、`Touch`
+身份。以上语义仍属于模拟结果，不代表操作系统或真实浏览器输入。
 
-motion/touch 数值由内置的 CSD4CA 匿名低秩模型生成；模型保留聚合后的时序、压力和触点面积，不包含
-参与者标识或单条原始轨迹。重新编译需要单独安装 `scripts/csd4ca-requirements.txt`，然后执行：
+swipe 的 motion/orientation/touch 数值由同一个 CSD4CA 匿名低秩样本生成；模型保留校准后的跨流时序、
+压力和触点面积，不包含参与者标识或单条原始轨迹。tap 没有对应的 CSD4CA sensor 数据，因此保持
+sensorless。重新编译需要单独安装 `scripts/csd4ca-requirements.txt`，然后执行：
 
 ```bash
 npm run generate:interaction-model -- \

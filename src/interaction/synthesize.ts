@@ -10,6 +10,13 @@ import type {
 
 type Random = () => number;
 
+interface GestureSample {
+  readonly touchDuration: number;
+  readonly sensorStartOffset: number;
+  readonly sensorDuration: number;
+  readonly values: readonly number[];
+}
+
 const CHANNEL = {
   touchX: 0,
   touchY: 1,
@@ -26,6 +33,12 @@ const CHANNEL = {
 } as const;
 
 const UP_GROUPS = CSD4CA_MODEL.groups.filter((group) => group.direction === 'up');
+const FRAME_VALUE_COUNT = CSD4CA_MODEL.frames * CSD4CA_MODEL.stride;
+const TIMING_INDEX = {
+  touchLogDuration: FRAME_VALUE_COUNT,
+  sensorStartOffset: FRAME_VALUE_COUNT + 1,
+  sensorEndOffset: FRAME_VALUE_COUNT + 2,
+} as const;
 
 function hashSeed(input: string): number {
   let value = 0x811c9dc5;
@@ -82,7 +95,10 @@ function reconstruct(group: InteractionModelGroup, next: Random, varied = true):
       standardized += coefficients[componentIndex]! * component.sigma
         * component.basis[index]! / CSD4CA_MODEL.quantization;
     }
-    values[index] = standardized * CSD4CA_MODEL.scales[index % CSD4CA_MODEL.stride]!;
+    const scale = index < FRAME_VALUE_COUNT
+      ? CSD4CA_MODEL.scales[index % CSD4CA_MODEL.stride]!
+      : CSD4CA_MODEL.timingScales[index - FRAME_VALUE_COUNT]!;
+    values[index] = standardized * scale;
   }
   return values;
 }
@@ -97,14 +113,31 @@ function isUpward(values: readonly number[]): boolean {
   return first - last >= 0.08;
 }
 
-function sample(next: Random): { readonly duration: number; readonly values: readonly number[] } {
+function decodeSample(group: InteractionModelGroup, values: readonly number[]): GestureSample | null {
+  if (!isUpward(values)) return null;
+  const bounds = group.timingBounds;
+  const touchDuration = clamp(Math.exp(values[TIMING_INDEX.touchLogDuration]!), ...bounds.touchDuration);
+  const sensorStartOffset = clamp(values[TIMING_INDEX.sensorStartOffset]!, ...bounds.sensorStartOffset);
+  const sensorEndOffset = clamp(values[TIMING_INDEX.sensorEndOffset]!, ...bounds.sensorEndOffset);
+  const sensorDuration = touchDuration + sensorEndOffset - sensorStartOffset;
+  if (
+    sensorDuration < CSD4CA_MODEL.calibration.minimumDurationMs
+    || sensorDuration > CSD4CA_MODEL.calibration.maximumDurationMs
+  ) return null;
+  return { touchDuration, sensorStartOffset, sensorDuration, values };
+}
+
+function sample(next: Random): GestureSample {
   const group = chooseGroup(next);
   let values = reconstruct(group, next);
-  if (!isUpward(values)) values = reconstruct(group, next);
-  if (!isUpward(values)) values = reconstruct(group, next, false);
-  const [meanLog, deviationLog, minimum, maximum] = group.duration;
-  const duration = clamp(Math.exp(meanLog + deviationLog * normal(next)), minimum, maximum);
-  return { duration, values };
+  let decoded = decodeSample(group, values);
+  if (decoded) return decoded;
+  values = reconstruct(group, next);
+  decoded = decodeSample(group, values);
+  if (decoded) return decoded;
+  decoded = decodeSample(group, reconstruct(group, next, false));
+  if (!decoded) throw new TypeError('CSD4CA interaction model group has an invalid mean gesture');
+  return decoded;
 }
 
 function frameTriple(values: readonly number[], frame: number, start: number): readonly [number, number, number] {
@@ -139,13 +172,15 @@ function createTouchFrame(
   });
 }
 
-function synthesizeMotion(next: Random): InteractionFrame[] {
-  const { duration, values } = sample(next);
-  const frames: InteractionFrame[] = [];
-  const motionDuration = clamp(duration, 180, 400);
-  const interval = Math.round(motionDuration / (CSD4CA_MODEL.frames - 1));
+function appendSensorFrames(
+  frames: InteractionFrame[],
+  values: readonly number[],
+  start: number,
+  duration: number,
+): void {
+  const interval = Math.max(1, Math.round(duration / (CSD4CA_MODEL.frames - 1)));
   for (let index = 0; index < CSD4CA_MODEL.frames; index += 1) {
-    const at = Math.round(motionDuration * index / (CSD4CA_MODEL.frames - 1));
+    const at = Math.round(start + duration * index / (CSD4CA_MODEL.frames - 1));
     frames.push(Object.freeze({
       kind: 'motion',
       at,
@@ -166,16 +201,20 @@ function synthesizeMotion(next: Random): InteractionFrame[] {
       gamma: round(clamp(frameValue(values, index, CHANNEL.orientationGamma), -90, 90), 1),
     } satisfies OrientationFrame));
   }
-  return frames;
 }
 
 function synthesizeSwipe(next: Random): InteractionFrame[] {
-  const { duration, values } = sample(next);
+  const { touchDuration, sensorStartOffset, sensorDuration, values } = sample(next);
   const frames: InteractionFrame[] = [];
+  const programStart = Math.min(0, sensorStartOffset);
+  const touchStart = -programStart;
+  const sensorStart = sensorStartOffset - programStart;
   for (let index = 0; index < CSD4CA_MODEL.frames; index += 1) {
-    const at = Math.round(duration * index / (CSD4CA_MODEL.frames - 1));
+    const at = Math.round(touchStart + touchDuration * index / (CSD4CA_MODEL.frames - 1));
     frames.push(createTouchFrame(values, index, touchPhase(index), at));
   }
+  appendSensorFrames(frames, values, sensorStart, sensorDuration);
+  frames.sort((left, right) => left.at - right.at);
   return frames;
 }
 
@@ -192,8 +231,6 @@ function synthesizeTap(next: Random): InteractionFrame[] {
 export function synthesizeInteraction(recipe: InteractionRecipe, seed: string, sequence: number): readonly InteractionFrame[] {
   const next = createRandom(hashSeed(`${seed}\u0000${sequence}\u0000${recipe}`));
   switch (recipe) {
-    case 'motion-burst':
-      return Object.freeze(synthesizeMotion(next));
     case 'swipe':
       return Object.freeze(synthesizeSwipe(next));
     case 'tap':

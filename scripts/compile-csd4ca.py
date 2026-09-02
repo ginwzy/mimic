@@ -8,18 +8,26 @@ import csv
 import hashlib
 import json
 import math
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import Iterator, Mapping, Sequence
 
 import numpy as np
 
 
-COMPILER_VERSION = 1
-MODEL_SCHEMA = 1
+COMPILER_VERSION = 2
+MODEL_SCHEMA = 2
 SCREEN_WIDTH = 1080
 SCREEN_HEIGHT = 2400
 QUANTIZATION = 4096
+SENSOR_TIME_SCALE = 1_000_000
+MIN_DURATION_MS = 40
+MAX_DURATION_MS = 2_000
+MAX_BOUNDARY_OFFSET_MS = 150
+MIN_CLOCK_CALIBRATION_SAMPLES = 20
+MIN_VARIANCE_RETAINED = 0.95
+MIN_CROSS_MODAL_COVARIANCE_RETAINED = 0.92
 CHANNELS = (
     "touchX", "touchY", "radiusX", "radiusY", "force",
     "accelerationX", "accelerationY", "accelerationZ",
@@ -34,6 +42,9 @@ SCALES = np.asarray((
     180, 180, 180,
     1, 1, 90, 90,
 ), dtype=np.float64)
+TIMING_CHANNELS = ("touchLogDuration", "sensorStartOffset", "sensorEndOffset")
+# A 25 ms unit keeps physical phase variation represented in the retained PCA rank.
+TIMING_SCALES = np.asarray((1, 25, 25), dtype=np.float64)
 SCENARIOS = {"Normal": "normal", "Walking": "walking", "Stressful": "stressful"}
 HANDS = {"l": "left", "r": "right"}
 FILES = {
@@ -47,6 +58,7 @@ FILES = {
 @dataclass(frozen=True)
 class SensorGroup:
     swipe_id: int
+    clock_key: tuple[str, str, str]
     scenario: str
     hand: str
     rows: tuple[tuple[float, ...], ...]
@@ -55,8 +67,11 @@ class SensorGroup:
 
 @dataclass(frozen=True)
 class SampledGroup:
+    clock_key: tuple[str, str, str]
     scenario: str
     hand: str
+    start: float
+    end: float
     duration: float
     values: np.ndarray | None
 
@@ -71,7 +86,7 @@ def arguments() -> argparse.Namespace:
         help="generated TypeScript module",
     )
     parser.add_argument("--frames", type=int, default=16)
-    parser.add_argument("--rank", type=int, default=4)
+    parser.add_argument("--rank", type=int, default=16)
     parser.add_argument("--min-group", type=int, default=20)
     parser.add_argument("--check", action="store_true", help="fail instead of updating a stale output")
     return parser.parse_args()
@@ -90,6 +105,7 @@ def grouped_rows(path: Path, value_columns: Sequence[int]) -> Iterator[SensorGro
         reader = csv.reader(source)
         next(reader)
         swipe_id: int | None = None
+        clock_key = ("", "", "")
         scenario = ""
         hand = ""
         rows: list[tuple[float, ...]] = []
@@ -97,19 +113,20 @@ def grouped_rows(path: Path, value_columns: Sequence[int]) -> Iterator[SensorGro
         for row in reader:
             current_id = int(row[6])
             if swipe_id is not None and current_id != swipe_id:
-                yield SensorGroup(swipe_id, scenario, hand, tuple(rows), not invalid)
+                yield SensorGroup(swipe_id, clock_key, scenario, hand, tuple(rows), not invalid)
                 rows = []
                 invalid = False
             if current_id != swipe_id:
                 swipe_id = current_id
                 scenario = SCENARIOS.get(row[1], row[1].lower())
                 hand = HANDS.get(row[3], row[3].lower())
+                clock_key = (row[0], scenario, row[2])
             try:
                 rows.append((float(row[7]), *(float(row[index]) for index in value_columns)))
             except ValueError:
                 invalid = True
         if swipe_id is not None:
-            yield SensorGroup(swipe_id, scenario, hand, tuple(rows), not invalid)
+            yield SensorGroup(swipe_id, clock_key, scenario, hand, tuple(rows), not invalid)
 
 
 def noncontiguous_ids(path: Path) -> set[int]:
@@ -144,19 +161,30 @@ def collapse(rows: Sequence[tuple[float, ...]]) -> np.ndarray:
     return np.asarray(output, dtype=np.float64)
 
 
-def resample(rows: Sequence[tuple[float, ...]], frames: int) -> np.ndarray | None:
+def resample(
+    rows: Sequence[tuple[float, ...]],
+    frames: int,
+    target_window: tuple[float, float] | None = None,
+) -> np.ndarray | None:
     values = collapse(rows)
     if values.shape[0] < 2 or values[-1, 0] <= values[0, 0]:
         return None
-    progress = (values[:, 0] - values[0, 0]) / (values[-1, 0] - values[0, 0])
-    targets = np.linspace(0, 1, frames)
+    start, end = target_window or (values[0, 0], values[-1, 0])
+    if end <= start:
+        return None
+    targets = np.linspace(start, end, frames)
     return np.column_stack([
-        np.interp(targets, progress, values[:, column])
+        np.interp(targets, values[:, 0], values[:, column])
         for column in range(1, values.shape[1])
     ])
 
 
-def sampled_groups(path: Path, value_columns: Sequence[int], frames: int) -> dict[int, SampledGroup]:
+def sampled_groups(
+    path: Path,
+    value_columns: Sequence[int],
+    frames: int,
+    target_windows: Mapping[int, tuple[float, float]] | None = None,
+) -> dict[int, SampledGroup]:
     # A small number of swipe IDs recur in non-adjacent CSV blocks. Defer only
     # those IDs so the common path can be resampled without retaining raw rows.
     repeated = noncontiguous_ids(path)
@@ -165,9 +193,11 @@ def sampled_groups(path: Path, value_columns: Sequence[int], frames: int) -> dic
 
     def sample(group: SensorGroup) -> SampledGroup:
         ordered = tuple(sorted(group.rows, key=lambda row: row[0]))
-        duration = ordered[-1][0] - ordered[0][0] if len(ordered) >= 2 else 0
-        values = resample(ordered, frames) if group.valid else None
-        return SampledGroup(group.scenario, group.hand, duration, values)
+        start = ordered[0][0] if ordered else 0
+        end = ordered[-1][0] if ordered else 0
+        target_window = target_windows.get(group.swipe_id) if target_windows is not None else None
+        values = resample(ordered, frames, target_window) if group.valid else None
+        return SampledGroup(group.clock_key, group.scenario, group.hand, start, end, end - start, values)
 
     for group in grouped_rows(path, value_columns):
         if group.swipe_id not in repeated:
@@ -177,10 +207,11 @@ def sampled_groups(path: Path, value_columns: Sequence[int], frames: int) -> dic
         if previous is None:
             deferred[group.swipe_id] = group
             continue
-        if previous.scenario != group.scenario or previous.hand != group.hand:
+        if previous.clock_key != group.clock_key or previous.hand != group.hand:
             raise ValueError(f"inconsistent metadata for swipe {group.swipe_id} in {path}")
         deferred[group.swipe_id] = SensorGroup(
             group.swipe_id,
+            group.clock_key,
             group.scenario,
             group.hand,
             (*previous.rows, *group.rows),
@@ -225,13 +256,50 @@ def orientation(acceleration: np.ndarray, magnetometer: np.ndarray) -> np.ndarra
     return output
 
 
+def clock_offsets(
+    touch_groups: Mapping[int, SampledGroup],
+    acceleration_groups: Mapping[int, SampledGroup],
+) -> dict[tuple[str, str, str], float]:
+    offsets_by_clock: dict[tuple[str, str, str], list[float]] = defaultdict(list)
+    offsets_by_session_user: dict[tuple[str, str], list[float]] = defaultdict(list)
+    for swipe_id, touch in touch_groups.items():
+        acceleration = acceleration_groups.get(swipe_id)
+        if (
+            acceleration is None
+            or touch.values is None
+            or acceleration.values is None
+            or touch.clock_key != acceleration.clock_key
+        ):
+            continue
+        touch_midpoint = (touch.start + touch.end) / 2
+        sensor_midpoint = (acceleration.start + acceleration.end) / 2 / SENSOR_TIME_SCALE
+        offset = sensor_midpoint - touch_midpoint
+        offsets_by_clock[touch.clock_key].append(offset)
+        session, _, user = touch.clock_key
+        offsets_by_session_user[(session, user)].append(offset)
+
+    calibrated_offsets: dict[tuple[str, str, str], float] = {}
+    for key, values in offsets_by_clock.items():
+        session, _, user = key
+        calibration_values = (
+            values
+            if len(values) >= MIN_CLOCK_CALIBRATION_SAMPLES
+            else offsets_by_session_user[(session, user)]
+        )
+        calibrated_offsets[key] = float(np.median(calibration_values))
+    return calibrated_offsets
+
+
 def vectorize(
     touch_group: SampledGroup,
     acceleration_group: SampledGroup,
     gyroscope_group: SampledGroup,
     magnetometer_group: SampledGroup,
-) -> tuple[tuple[str, str, str], float, np.ndarray] | None:
+    sensor_clock_offset: float,
+) -> tuple[tuple[str, str, str], tuple[float, float, float], np.ndarray] | None:
     if not (touch_group.scenario == acceleration_group.scenario == gyroscope_group.scenario == magnetometer_group.scenario):
+        return None
+    if not (touch_group.clock_key == acceleration_group.clock_key == gyroscope_group.clock_key == magnetometer_group.clock_key):
         return None
     touch = touch_group.values
     acceleration = acceleration_group.values
@@ -239,8 +307,20 @@ def vectorize(
     magnetometer = magnetometer_group.values
     if touch is None or acceleration is None or gyroscope is None or magnetometer is None:
         return None
-    duration = touch_group.duration
-    if duration < 40 or duration > 2_000:
+    touch_duration = touch_group.duration
+    sensor_duration = acceleration_group.duration / SENSOR_TIME_SCALE
+    sensor_start = acceleration_group.start / SENSOR_TIME_SCALE - sensor_clock_offset
+    sensor_start_offset = sensor_start - touch_group.start
+    sensor_end_offset = sensor_start_offset + sensor_duration - touch_duration
+    if not all(
+        MIN_DURATION_MS <= duration <= MAX_DURATION_MS
+        for duration in (touch_duration, sensor_duration)
+    ):
+        return None
+    if any(
+        abs(offset) > MAX_BOUNDARY_OFFSET_MS
+        for offset in (sensor_start_offset, sensor_end_offset)
+    ):
         return None
     swipe_direction = direction(touch)
     if swipe_direction != "up":
@@ -260,9 +340,10 @@ def vectorize(
     raw = np.column_stack((touch_values, linear_acceleration, acceleration, rotation, orientation_values))
     if raw.shape[1] != len(CHANNELS) or not np.isfinite(raw).all():
         return None
-    standardized = (raw / SCALES).reshape(-1)
+    timing = (math.log(touch_duration), sensor_start_offset, sensor_end_offset)
+    standardized = np.concatenate(((raw / SCALES).reshape(-1), np.asarray(timing) / TIMING_SCALES))
     key = (touch_group.scenario, touch_group.hand, swipe_direction)
-    return key, duration, standardized
+    return key, timing, standardized
 
 
 def stable_component(component: np.ndarray) -> np.ndarray:
@@ -279,7 +360,8 @@ def quantize(values: np.ndarray) -> list[int]:
 
 def compile_groups(
     samples: dict[tuple[str, str, str], list[np.ndarray]],
-    durations: dict[tuple[str, str, str], list[float]],
+    timings: dict[tuple[str, str, str], list[tuple[float, float, float]]],
+    frames: int,
     rank: int,
     minimum: int,
 ) -> list[dict[str, object]]:
@@ -294,27 +376,60 @@ def compile_groups(
         covariance = centered.T @ centered / (matrix.shape[0] - 1)
         eigenvalues, eigenvectors = np.linalg.eigh(covariance)
         order = np.argsort(eigenvalues)[::-1]
+        selected = order[:rank]
         components = []
-        for component_index in order[:rank]:
+        for component_index in selected:
             eigenvalue = max(0.0, float(eigenvalues[component_index]))
             components.append({
                 "sigma": round(math.sqrt(eigenvalue), 6),
                 "basis": quantize(stable_component(eigenvectors[:, component_index])),
             })
-        raw_durations = np.asarray(durations[key], dtype=np.float64)
-        log_durations = np.log(raw_durations)
+        frame_values = frames * len(CHANNELS)
+        touch_indices = np.asarray([
+            *(frame * len(CHANNELS) + channel for frame in range(frames) for channel in range(5)),
+            frame_values,
+        ])
+        sensor_indices = np.asarray([
+            *(frame * len(CHANNELS) + channel for frame in range(frames) for channel in range(5, len(CHANNELS))),
+            frame_values + 1,
+            frame_values + 2,
+        ])
+        cross_modal_covariance = covariance[np.ix_(touch_indices, sensor_indices)]
+        selected_eigenvalues = np.maximum(eigenvalues[selected], 0)
+        retained_cross_modal_covariance = (
+            eigenvectors[touch_indices][:, selected] * selected_eigenvalues
+        ) @ eigenvectors[sensor_indices][:, selected].T
+        cross_modal_norm = float(np.linalg.norm(cross_modal_covariance))
+        reconstruction_error = float(
+            np.linalg.norm(cross_modal_covariance - retained_cross_modal_covariance)
+        )
+        cross_modal_covariance_retained = 1 - reconstruction_error / cross_modal_norm
+        variance_retained = float(np.sum(selected_eigenvalues) / np.sum(np.maximum(eigenvalues, 0)))
+        if variance_retained < MIN_VARIANCE_RETAINED:
+            raise ValueError(f"{key} retains only {variance_retained:.6f} total variance")
+        if cross_modal_covariance_retained < MIN_CROSS_MODAL_COVARIANCE_RETAINED:
+            raise ValueError(
+                f"{key} retains only {cross_modal_covariance_retained:.6f} cross-modal covariance"
+            )
+        timing_values = np.asarray(timings[key], dtype=np.float64)
+        touch_durations = np.exp(timing_values[:, 0])
+        sensor_starts = timing_values[:, 1]
+        sensor_ends = timing_values[:, 2]
         scenario, hand, swipe_direction = key
         output.append({
             "scenario": scenario,
             "hand": hand,
             "direction": swipe_direction,
             "count": len(vectors),
-            "duration": [
-                round(float(np.mean(log_durations)), 6),
-                round(float(np.std(log_durations)), 6),
-                round(float(np.min(raw_durations)), 3),
-                round(float(np.max(raw_durations)), 3),
-            ],
+            "timingBounds": {
+                "touchDuration": [round(float(np.min(touch_durations)), 3), round(float(np.max(touch_durations)), 3)],
+                "sensorStartOffset": [round(float(np.min(sensor_starts)), 3), round(float(np.max(sensor_starts)), 3)],
+                "sensorEndOffset": [round(float(np.min(sensor_ends)), 3), round(float(np.max(sensor_ends)), 3)],
+            },
+            "quality": {
+                "varianceRetained": round(variance_retained, 6),
+                "crossModalCovarianceRetained": round(cross_modal_covariance_retained, 6),
+            },
             "mean": quantize(mean),
             "components": components,
         })
@@ -326,13 +441,18 @@ def module_text(model: dict[str, object]) -> str:
     return (
         "// Generated by scripts/compile-csd4ca.py. Do not edit by hand.\n"
         "// CSD4CA is licensed CC BY 4.0; attribution is recorded in NOTICE.\n"
-        "import { INTERACTION_CHANNELS, INTERACTION_SCALES } from './model.js';\n"
+        "import {\n"
+        "  INTERACTION_CHANNELS, INTERACTION_SCALES,\n"
+        "  INTERACTION_TIMING_CHANNELS, INTERACTION_TIMING_SCALES,\n"
+        "} from './model.js';\n"
         "import type { InteractionModel } from './model.js';\n\n"
         f"const DATA = {body} as const;\n\n"
         "export const CSD4CA_MODEL: InteractionModel = {\n"
         "  ...DATA,\n"
         "  channels: INTERACTION_CHANNELS,\n"
         "  scales: INTERACTION_SCALES,\n"
+        "  timingChannels: INTERACTION_TIMING_CHANNELS,\n"
+        "  timingScales: INTERACTION_TIMING_SCALES,\n"
         "};\n"
     )
 
@@ -347,11 +467,16 @@ def main() -> int:
         raise FileNotFoundError(f"missing CSD4CA files: {', '.join(missing)}")
 
     samples: dict[tuple[str, str, str], list[np.ndarray]] = {}
-    durations: dict[tuple[str, str, str], list[float]] = {}
+    timings: dict[tuple[str, str, str], list[tuple[float, float, float]]] = {}
     touch_groups = sampled_groups(paths["touch"], (8, 9, 10, 11, 12), options.frames)
     acceleration_groups = sampled_groups(paths["acceleration"], (9, 10, 11), options.frames)
-    gyroscope_groups = sampled_groups(paths["gyroscope"], (9, 10, 11), options.frames)
-    magnetometer_groups = sampled_groups(paths["magnetometer"], (9, 10, 11), options.frames)
+    sensor_windows = {
+        swipe_id: (group.start, group.end)
+        for swipe_id, group in acceleration_groups.items()
+    }
+    gyroscope_groups = sampled_groups(paths["gyroscope"], (9, 10, 11), options.frames, sensor_windows)
+    magnetometer_groups = sampled_groups(paths["magnetometer"], (9, 10, 11), options.frames, sensor_windows)
+    offsets = clock_offsets(touch_groups, acceleration_groups)
     accepted = 0
     rejected = 0
     for swipe_id in sorted(touch_groups):
@@ -362,22 +487,33 @@ def main() -> int:
         if acceleration is None or gyroscope is None or magnetometer is None:
             rejected += 1
             continue
-        sample = vectorize(touch, acceleration, gyroscope, magnetometer)
+        sensor_clock_offset = offsets.get(touch.clock_key)
+        if sensor_clock_offset is None:
+            rejected += 1
+            continue
+        sample = vectorize(touch, acceleration, gyroscope, magnetometer, sensor_clock_offset)
         if sample is None:
             rejected += 1
             continue
-        key, duration, vector = sample
+        key, timing, vector = sample
         samples.setdefault(key, []).append(vector)
-        durations.setdefault(key, []).append(duration)
+        timings.setdefault(key, []).append(timing)
         accepted += 1
 
-    groups = compile_groups(samples, durations, options.rank, options.min_group)
+    groups = compile_groups(samples, timings, options.frames, options.rank, options.min_group)
     model = {
         "schema": MODEL_SCHEMA,
         "compiler": COMPILER_VERSION,
         "frames": options.frames,
         "stride": len(CHANNELS),
         "quantization": QUANTIZATION,
+        "calibration": {
+            "sensorTimeScale": SENSOR_TIME_SCALE,
+            "clockCalibration": "median-window-midpoint-by-session-scenario-user",
+            "minimumDurationMs": MIN_DURATION_MS,
+            "maximumDurationMs": MAX_DURATION_MS,
+            "maxBoundaryOffsetMs": MAX_BOUNDARY_OFFSET_MS,
+        },
         "source": {
             "name": "CSD4CA",
             "doi": "10.5281/zenodo.17931118",
@@ -402,6 +538,10 @@ def main() -> int:
         "groups": len(groups),
         "bytes": len(text.encode("utf-8")),
         "changed": current != text,
+        "minimumVarianceRetained": min(group["quality"]["varianceRetained"] for group in groups),
+        "minimumCrossModalCovarianceRetained": min(
+            group["quality"]["crossModalCovarianceRetained"] for group in groups
+        ),
     }, separators=(",", ":")))
     return 0
 

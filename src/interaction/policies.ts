@@ -4,25 +4,20 @@ import type { InteractionPolicy } from './types.js';
 const NONE: InteractionPolicy = () => null;
 
 function createAkamaiSensorPolicy(): InteractionPolicy {
-  let motionDispatched = false;
   let initialSwipeDispatched = false;
   let tapDispatched = false;
   let followUpDispatched = false;
   return (elapsedMs, postCount) => {
-    if (!motionDispatched && (postCount > 0 || elapsedMs >= 120)) {
-      motionDispatched = true;
-      return 'motion-burst';
-    }
-    if (!initialSwipeDispatched && motionDispatched && (postCount > 1 || elapsedMs >= 450)) {
+    if (!initialSwipeDispatched && (postCount > 0 || elapsedMs >= 120)) {
       initialSwipeDispatched = true;
       return 'swipe';
     }
-    // The longest compiled swipe is 1968ms; keep contacts from overlapping.
+    // Calibrated sensor lead can delay touch by 150ms; keep contacts from overlapping.
     if (!tapDispatched && initialSwipeDispatched && elapsedMs >= 2_500) {
       tapDispatched = true;
       return 'tap';
     }
-    if (!followUpDispatched && tapDispatched && elapsedMs >= 2_900) {
+    if (!followUpDispatched && tapDispatched && elapsedMs >= 2_700) {
       followUpDispatched = true;
       return 'swipe';
     }

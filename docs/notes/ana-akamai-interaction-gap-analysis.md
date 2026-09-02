@@ -378,9 +378,9 @@ public adapter or Job API:
   ms. CSD4CA has no tap trajectories, so only the captured contact-start
   position, radius, and pressure marginal is reused; no swipe path is relabeled
   as a tap.
-- The policy emits motion, an upward swipe, the tap at 2500 ms, and a follow-up
-  upward swipe at 2900 ms. The spacing exceeds the compiled swipe maximum and
-  prevents overlapping contact state.
+- The policy emits a joint-sampled upward swipe, the tap at 2500 ms, and a
+  joint-sampled follow-up upward swipe at 2700 ms. The spacing exceeds the
+  calibrated swipe maximum and prevents overlapping contact state.
 - Successful tap completion projects pointer-up/out/leave, touch-end, then
   mouseover/enter/move/down/up and a PointerEvent click synchronously from the
   same contact. Main-button events expose `which=1` as Chrome does.
@@ -573,7 +573,7 @@ current cookie result therefore does not isolate Pointer as the cause; the
 confirmed Pointer effect is the two additional event-driven body boundaries.
 The production source was restored and rebuilt after this diagnostic.
 
-### 3. Motion and touch lose their source correlation
+### 3. Motion and touch source correlation (fixed)
 
 The browser capture shows sensor activity synchronized with touch. One clear
 example is:
@@ -585,22 +585,203 @@ orientation  9207 ms
 rotation     (-5.4, -13.9, 0.3)
 ```
 
-CSD4CA stores touch, acceleration, gravity, rotation, and orientation in one
-trajectory. Runtime synthesis currently samples the model separately for
-`motion-burst` and `swipe`. The recipe is also part of the PRNG seed, so the
-two streams may use different groups and PCA coefficients.
+There are three different correlations to preserve:
 
-The runtime should reconstruct one gesture sample and derive every associated
-event stream from that sample:
+1. **Source identity:** touch and sensors came from the same swipe, scenario,
+   and hand.
+2. **Latent shape:** the same PCA coefficients control the touch path and its
+   sensor response.
+3. **Physical phase:** sensor samples retain their millisecond offsets and
+   duration relative to touch start and touch end.
+
+The old path lost correlation twice: the offline compiler first erased part of
+the physical phase, then runtime synthesis separated source identity and latent
+shape. Both losses are now fixed for CSD4CA-backed swipes.
+
+#### Historical loss 1: each CSV stream was normalized on its own window
+
+The compiler already exact-joined all four CSVs by `id_swipe`, but formerly
+mapped each stream's own first and last timestamp to `0..1`. Only touch duration
+survived compilation.
+
+For source swipe `1733162713467`, the raw windows are already slightly
+different:
+
+| Stream | Rows | Duration |
+| --- | ---: | ---: |
+| touch | 27 | 128.0 ms |
+| acceleration | 29 | 125.7 ms |
+| gyroscope | 29 | 125.7 ms |
+| magnetometer | 13 | 120.0 ms |
+
+The magnetometer begins 4.4 ms after acceleration on their shared sensor clock,
+but independent normalization maps both first rows to frame 0 and both last
+rows to frame 15. Touch timestamps use a different numeric origin and unit
+from the sensor timestamps, so cross-clock subtraction also requires explicit
+calibration; zeroing each stream independently is not that calibration.
+
+Running the compiler's actual acceptance path over all 21,780 retained upward
+swipes gives:
+
+| Metric | p05 | median | p95 |
+| --- | ---: | ---: | ---: |
+| touch duration | 64.0 ms | 160.0 ms | 512.0 ms |
+| acceleration duration | 51.7 ms | 152.8 ms | 512.2 ms |
+| acceleration minus touch duration | -45.8 ms | -5.9 ms | 23.3 ms |
+| acceleration / touch duration | 0.658 | 0.970 | 1.207 |
+
+Touch and acceleration durations are strongly related (Pearson `0.979977`),
+which confirms that the ID join usually identifies the same physical window.
+The mismatch is still material: 312 accepted swipes differ by more than 100 ms,
+73 by more than 250 ms, and 17 by more than 500 ms. Independent `0..1`
+resampling hides those differences rather than modeling or rejecting them.
+
+After resampling, the old compiler preserved some joint structure: it flattened
+all `16 x 18` channels into one 288-value vector and ran one PCA per
+scenario/hand group. A coefficient therefore applies to both touch and sensor
+loadings in that component. Rank 4 is a further limit, however. In the
+`normal/right` group, the first three quantized component bases are
+`99.0-99.9%` sensor energy while the fourth is `97.6%` touch energy; other
+groups contain more mixed components. Storing channels in one vector is thus
+necessary, but does not by itself prove that the retained rank captures all
+cross-modal covariance.
+
+#### Historical loss 2: runtime reconstructed unrelated samples
+
+`RuntimeApplication` increments `interactionSequence` for every policy action
+and calls:
+
+```text
+synthesizeInteraction(recipe, interactionSeed, interactionSequence++)
+```
+
+The synthesizer hashes all three values. The old initial sequence was:
+
+```text
+sequence 0: motion-burst
+sequence 1: swipe
+sequence 2: tap
+sequence 3: follow-up swipe
+```
+
+`synthesizeMotion()` and `synthesizeSwipe()` each call `sample()` independently.
+They can select different scenario/hand groups, reconstruct with different PCA
+coefficients, and draw different durations. A deterministic probe with seed
+`correlation-probe` demonstrates the split:
+
+```text
+motion-burst / sequence 0
+  hash:         458441265
+  group:        stressful / left
+  coefficients: -0.978, 1.116, 0.893, 0.892
+
+swipe / sequence 1
+  hash:         2692576349
+  group:        normal / right
+  coefficients: -0.465, -0.664, 0.832, 0.663
+```
+
+Across 10,000 deterministic probe seeds, the two calls selected the same group
+only `28.62%` of the time. Corresponding coefficient correlations were
+`-0.0146`, `-0.0035`, `-0.0104`, and `0.0013`, effectively independent.
+
+The baseline mimic payload happened to overlap the independent streams in
+wall time: motion appeared at `49,74,100,127,154 ms`, while touch ran from
+`89..125 ms`. The nearest motion rows were 15 ms before and 11 ms after
+touchstart. In the browser archive, the three touch starts with a motion row
+within 150 ms had nearest rows 91, 28, and 26 ms afterward. Timing proximity
+alone cannot establish value correlation; the old code path proved that mimic
+used another reconstruction.
+
+#### Implemented offline repair
+
+Model schema 2 retains each stream's raw start and end before resampling. Touch
+and acceleration clocks have different origins and units, so the compiler now:
+
+1. Converts the sensor clock with its captured `1,000,000` scale.
+2. Derives a robust median window-midpoint offset per
+   `(session, scenario, user)` continuous recording key. Sparse keys fall back
+   to `(session, user)` rather than a corpus-wide offset.
+3. Interpolates gyroscope and magnetometer onto acceleration's native sensor
+   window instead of independently stretching all three streams.
+4. Rejects touch or sensor durations outside `40..2000 ms`, or samples whose
+   calibrated sensor start or end differs from the touch boundary by more than
+   `150 ms`.
+5. Appends touch log-duration plus calibrated sensor start/end offsets to the
+   same PCA vector as the 16 x 18 values.
+
+The stricter join accepts 21,162 upward swipes in the same six
+scenario/hand groups. Rank 4 retained as little as `70.2%` of measured
+cross-modal covariance, so the model now uses rank 16. Generation hard-fails
+unless every group retains at least `95%` total variance and `92%` cross-modal
+covariance; the current minima are `95.9413%` and `93.7575%` respectively.
+The generated TypeScript artifact is 502,536 bytes with SHA-256
+`9df300171590a61dd61e2e0403120d591988bf52a080db3bdfe03f181152e42d`.
+
+A 10,000-seed runtime probe of the compiled model produced these distributions:
+
+| Metric | p01 | median | p99 |
+| --- | ---: | ---: | ---: |
+| touch duration | 77 ms | 179 ms | 646 ms |
+| sensor duration | 75 ms | 172 ms | 639 ms |
+| sensor start minus touch start | -29 ms | 3 ms | 37 ms |
+| sensor end minus touch end | -46 ms | -4 ms | 40 ms |
+
+All 10,000 generated programs were time-ordered, had positive sensor duration,
+and stayed within the calibrated `+/-150 ms` boundary.
+
+#### Implemented runtime repair
+
+Each swipe now calls `sample()` once and owns this program:
 
 ```text
 sampleGesture()
--> motion frames
--> orientation frames
--> pointer frames
+-> one scenario/hand group, coefficient vector, and calibrated timeline
+-> motion and orientation frames
 -> touch frames
--> tap compatibility events
+-> pointer lifecycle projected from touch
 ```
+
+Touch, motion, and orientation therefore share the same group, PCA coefficients,
+and timing sample. Negative sensor lead shifts the whole program instead of
+truncating pre-touch samples. The old independent `motion-burst` recipe and
+policy action were removed: CSD4CA swipe motion is not evidence for ambient
+motion, and the prelude interleaved with the first swipe while consuming
+Akamai's ten-row motion buffer. Tap remains sensorless because CSD4CA contains
+no tap-linked sensor evidence. The follow-up swipe is joint-sampled even though
+this ABCK version's already-full buffer does not serialize its later motion.
+
+This did not change the public Job, adapter, or Engine API, and runtime still
+does not read the raw CSV files.
+
+#### Live ANA validation
+
+The first live build exposed why removing the prelude was necessary. Its final
+payload interleaved prelude rows at `37,56,85,99,120,142 ms` with joint-swipe
+rows at `89,103,117,132 ms`; touchstart was 76 ms. The ten-row ABCK cap then
+discarded the rest of the actual gesture sensor stream.
+
+After removing the prelude, the designated ANA run used ABCK GET flow 89 and
+POST flows 90-101. Long bodies decoded with file hash `7281765`. Touch began at
+40 ms; the single joint sensor sequence began at 55/56 ms and continued at
+`62,71,73,87,101,115,129,143,157 ms`. Values evolve as one trajectory rather
+than alternating between unrelated reconstructions. All twelve ABCK POSTs
+returned HTTP 201 and `_abck` reached `~0~`; final verification remained the
+separately classified edge HTTP 403.
+
+The final policy timing was then tightened to tap at 2500 ms and follow-up
+swipe at 2700 ms so every gesture allowed by the model bounds completes within
+the existing 5000 ms capture deadline. The final smoke used ABCK GET flow 108
+and POST flows 109-119: eleven bodies, all HTTP 201, and `_abck ~0~`. This time
+ANA verification reached the API and returned JSON 401 `NOT_THROUGH`, rather
+than an edge HTML 403. Body count and final business response remain
+challenge-dependent and are not fixed interaction contracts.
+
+Reusing the same public seed across independent samples, forcing only the same
+group, increasing frame count, or hard-coding the browser example's 28 ms lag
+would not have fixed these losses. The remaining limitation belongs to the next
+section: the preserved pose is still sampled from CSD4CA and is not conditioned
+to the current Profile or session orientation.
 
 ### 4. Device pose is not conditioned to the session
 
@@ -674,12 +855,14 @@ otherwise keeps `body`, `documentElement`, or `document` as one stable contact
 target. Current jsdom tests use the `body` fallback; this avoids a document
 target but does not claim layout-backed hit testing.
 
-### 8. Sensor cadence is a one-shot dense burst
+### 8. Sensor cadence remains globally capped by this challenge
 
-The model schedules 16 reconstructed sensor frames across one 180-400 ms
-burst, but Akamai retains only five motion and five orientation events in the
-mimic capture. Browser sensor events are sparse, clustered around gestures,
-and continue across multiple gesture cycles.
+The model schedules 16 calibrated sensor frames alongside each swipe, but this
+ABCK challenge serializes only the first ten motion/orientation samples. The
+first joint swipe therefore fills the payload buffer and the follow-up swipe's
+sensor events remain observable to the page but absent from `dme`/`doe`.
+Browser sensor events are sparse, clustered around gestures, and continue
+across multiple gesture cycles and ABCK resets.
 
 This suggests that event cadence must be designed at the session/gesture
 level, including Akamai's own sampling or throttling behavior. Increasing the
@@ -729,17 +912,16 @@ well enough to model directly.
 1. Project PointerEvent and TouchEvent from one TouchFrame.
 2. Terminate the pan with pointer cancellation and no tap-style mouse events.
 3. Keep one plausible element target for the contact lifecycle.
-
-### Priority 0
-
-1. Reconstruct touch, motion, and orientation from one model sample.
+4. Add a distinct tap path with Chrome-style compatibility mouse terminal
+   events and a follow-up swipe to flush the completed ABCK state.
+5. Reconstruct each swipe's touch, motion, and orientation from one model
+   sample with calibrated cross-stream timing and measured covariance quality.
 
 ### Priority 1
 
-1. Add repeated session gestures rather than increasing the global one-swipe
-   policy merely to chase POST count.
-2. Support taps, short drags, non-monotonic movement, and more than one
-   direction.
+1. Support short drags, non-monotonic movement, and more than one direction.
+2. Model gesture selection and spacing as a session distribution rather than a
+   fixed swipe/tap/swipe sequence.
 3. Model page scroll offsets and distinct page/client/screen coordinates.
 4. Condition baseline pose and sensor cadence on the Profile/session.
 
@@ -761,7 +943,7 @@ It should demonstrate all of the following in a decrypted capture:
    tap-style compatibility mouse; a separately modeled tap uses pointer-up
    and compatibility mouse only after touch completion.
 4. Motion/orientation values come from the same reconstructed model sample as
-   the touch trajectory.
+   the touch trajectory and retain the compiled cross-stream timing relation.
 5. More than one gesture can occur without restoring injected customer-script
    wrappers.
 6. At least one gesture uses a non-document target.
@@ -777,10 +959,10 @@ It should demonstrate all of the following in a decrypted capture:
 These gaps explain why the mimic interaction payload differs materially from
 the browser payload. They do not prove that interaction generation is the sole
 cause of ANA's final edge HTTP 403. Existing model-driven flows have reached
-`_abck ~0~` when all five bodies are posted, while ANA's final request can
-still be rejected independently at the edge. Wire identity, proxy reputation,
-request rate, static credentials, and challenge variation must remain separate
-diagnostic dimensions.
+`_abck ~0~` when the complete body sequence is posted, while ANA's final
+request can still be rejected independently at the edge. Wire identity, proxy
+reputation, request rate, static credentials, and challenge variation must
+remain separate diagnostic dimensions.
 
 ## Interaction research sources
 

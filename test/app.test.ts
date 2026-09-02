@@ -153,7 +153,7 @@ test('Application capture drives the built-in Akamai interaction policy inside t
               Object.prototype.toString.call(point),
               point instanceof Touch,
               Object.getPrototypeOf(point) === Touch.prototype,
-              point.target === document,
+              point.target === document.body,
             ],
             direct: [
               direct.changedTouches.constructor.name,
@@ -175,7 +175,11 @@ test('Application capture drives the built-in Akamai interaction policy inside t
   if (!result.ok) assert.fail(result.error.message);
   const posts = (result.value as { posts: Array<{ body: string }> }).posts;
   assert.equal(posts[0]?.body, 'initial');
-  const motion = JSON.parse(posts[1]!.body) as {
+  const interactionPosts = posts.slice(1).map((post) => JSON.parse(post.body)) as Array<{
+    ctor: string;
+  }>;
+  const motion = (interactionPosts.find((post) => post.ctor === 'DeviceMotionEvent')
+    ?? assert.fail('missing DeviceMotionEvent capture')) as {
     ctor: string;
     realm: boolean;
     trusted: boolean;
@@ -185,7 +189,8 @@ test('Application capture drives the built-in Akamai interaction policy inside t
     configurable: boolean;
     x: number;
   };
-  const swipe = JSON.parse(posts[2]!.body) as {
+  const swipe = (interactionPosts.find((post) => post.ctor === 'TouchEvent')
+    ?? assert.fail('missing TouchEvent capture')) as {
     ctor: string;
     realm: boolean;
     trusted: boolean;
