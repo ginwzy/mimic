@@ -588,7 +588,7 @@ async def initialize(
     sensor_bodies = await capture_bodies(
         SELECT_URL, html, abck_url, abck_src, cookie_header(client),
         profile=profile,
-        max_posts=8, events="abck", deadline_ms=abck_dl, script_timeout_ms=script_to,
+        max_posts=14, events="abck", deadline_ms=abck_dl, script_timeout_ms=script_to,
         interaction_seed=interaction_seed,
     )
     if not sensor_bodies:

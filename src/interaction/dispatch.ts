@@ -66,7 +66,7 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
         button: type === 'pointermove' ? -1 : 0,
         buttons: active ? 1 : 0,
       };
-      dispatch(target, createEvent(globalThis.PointerEvent, type, fields, bubbles));
+      return dispatch(target, createEvent(globalThis.PointerEvent, type, fields, bubbles)) !== false;
     };
     const closePointer = (target, type, p) => {
       emitPointer(target, type, p, false);
@@ -80,7 +80,44 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
         bubbles: true, cancelable: true,
         touches: activeTouches, targetTouches: activeTouches, changedTouches: [p],
       };
-      dispatch(target, createEvent(globalThis.TouchEvent, type, fields, true));
+      return dispatch(target, createEvent(globalThis.TouchEvent, type, fields, true)) !== false;
+    };
+    const emitMouse = (target, type, p, buttons) => {
+      const boundary = type === 'mouseenter';
+      const primaryButton = type === 'mousedown' || type === 'mouseup';
+      const bubbles = !boundary;
+      const fields = {
+        bubbles, cancelable: !boundary, composed: !boundary, view: window,
+        detail: primaryButton ? 1 : 0, screenX: p.screenX, screenY: p.screenY,
+        clientX: p.clientX, clientY: p.clientY,
+        button: 0, buttons,
+      };
+      const event = createEvent(globalThis.MouseEvent, type, fields, bubbles);
+      if (primaryButton) Object.defineProperty(event, 'which', { configurable: true, value: 1 });
+      dispatch(target, event);
+    };
+    const emitCompatibilityMouse = (activeContact) => {
+      const { target, compatibilityPoint } = activeContact;
+      emitMouse(target, 'mouseover', compatibilityPoint, 0);
+      emitMouse(target, 'mouseenter', compatibilityPoint, 0);
+      if (activeContact.pointerDownAccepted) {
+        emitMouse(target, 'mousemove', compatibilityPoint, 0);
+        emitMouse(target, 'mousedown', compatibilityPoint, 1);
+        emitMouse(target, 'mouseup', compatibilityPoint, 0);
+      }
+      const fields = {
+        bubbles: true, cancelable: true, composed: true, view: window,
+        detail: 1,
+        pointerId: POINTER_ID, pointerType: 'touch', isPrimary: false,
+        clientX: compatibilityPoint.clientX, clientY: compatibilityPoint.clientY,
+        screenX: compatibilityPoint.screenX, screenY: compatibilityPoint.screenY,
+        width: 1, height: 1, pressure: 0,
+        tangentialPressure: 0, tiltX: 0, tiltY: 0, twist: 0,
+        button: 0, buttons: 0,
+      };
+      const click = createEvent(globalThis.PointerEvent, 'click', fields, true);
+      Object.defineProperty(click, 'which', { configurable: true, value: 1 });
+      dispatch(target, click);
     };
     const emit = (frame) => {
       try {
@@ -110,8 +147,9 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
             if (frame.phase === 'start') {
               emitPointer(contact.target, 'pointerover', p, true);
               emitPointer(contact.target, 'pointerenter', p, true);
-              emitPointer(contact.target, 'pointerdown', p, true);
-              emitTouch(contact.target, frame, p);
+              contact.pointerDownAccepted = emitPointer(contact.target, 'pointerdown', p, true);
+              contact.touchStartAccepted = emitTouch(contact.target, frame, p);
+              contact.compatibilityPoint = p;
               return;
             }
             if (frame.phase === 'move') {
@@ -120,16 +158,20 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
               if (contact.pointerActive && Math.hypot(
                 p.clientX - contact.originX,
                 p.clientY - contact.originY,
-              ) >= PAN_SLOP_PX) {
+              ) > PAN_SLOP_PX) {
                 closePointer(contact.target, 'pointercancel', p);
                 contact.pointerActive = false;
               }
               return;
             }
-            if (contact.pointerActive) {
+            const completedTap = contact.pointerActive;
+            if (completedTap) {
               closePointer(contact.target, 'pointerup', p);
             }
-            emitTouch(contact.target, frame, p);
+            const touchEndAccepted = emitTouch(contact.target, frame, p);
+            if (completedTap && contact.touchStartAccepted && touchEndAccepted) {
+              emitCompatibilityMouse(contact);
+            }
             contact = null;
           }
         }

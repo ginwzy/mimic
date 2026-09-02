@@ -127,7 +127,7 @@ test('ANA/Cebu bridge forwards independent seeds to the model-backed ABCK adapte
   assert.notDeepEqual(touch, otherTouch);
 });
 
-test('ANA/Cebu swipe follows the native pointer cancel path without compatibility mouse', { timeout: 15_000 }, async () => {
+test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', { timeout: 15_000 }, async () => {
   const result = await runBridge({
     pageUrl: 'https://example.test/booking',
     pageHtml: '<!doctype html><html><body><main>booking</main></body></html>',
@@ -138,13 +138,23 @@ test('ANA/Cebu swipe follows the native pointer cancel path without compatibilit
         'pointerover', 'pointerenter', 'pointerdown', 'pointermove', 'pointercancel',
         'pointerup', 'pointerout', 'pointerleave',
         'touchstart', 'touchmove', 'touchend',
-        'mousedown', 'mousemove', 'mouseup', 'click',
+        'mouseover', 'mouseenter', 'mousedown', 'mousemove', 'mouseup', 'click',
       ];
+      const eventPoint = event => event.changedTouches && event.changedTouches[0] || event;
       for (const type of types) {
         document.addEventListener(type, event => events.push({
           type,
           trusted: event.isTrusted,
           target: event.target && event.target.tagName,
+          constructor: event.constructor.name,
+          pointerType: event.pointerType,
+          isPrimary: event.isPrimary,
+          button: event.button,
+          buttons: event.buttons,
+          detail: event.detail,
+          which: event.which,
+          clientX: eventPoint(event).clientX,
+          clientY: eventPoint(event).clientY,
         }), true);
       }
       const post = body => {
@@ -153,11 +163,11 @@ test('ANA/Cebu swipe follows the native pointer cancel path without compatibilit
         xhr.send(body);
       };
       post('initial');
-      setTimeout(() => post(JSON.stringify({ kind: 'sequence', events })), 2700);
+      setTimeout(() => post(JSON.stringify({ kind: 'sequence', events })), 3100);
     })()`,
     profile: 'android-webview-v138',
     cookies: [],
-    deadlineMs: 3_500,
+    deadlineMs: 4_000,
     maxPosts: 2,
     scriptTimeoutMs: 5_000,
     events: 'abck',
@@ -169,7 +179,20 @@ test('ANA/Cebu swipe follows the native pointer cancel path without compatibilit
   assert.equal(result.bodies[0], 'initial');
   const report = JSON.parse(result.bodies[1]!) as {
     readonly kind: string;
-    readonly events: readonly { readonly type: string; readonly trusted: boolean; readonly target?: string }[];
+    readonly events: readonly {
+      readonly type: string;
+      readonly trusted: boolean;
+      readonly target?: string;
+      readonly constructor: string;
+      readonly pointerType?: string;
+      readonly isPrimary?: boolean;
+      readonly button?: number;
+      readonly buttons?: number;
+      readonly detail?: number;
+      readonly which?: number;
+      readonly clientX?: number;
+      readonly clientY?: number;
+    }[];
   };
   assert.equal(report.kind, 'sequence');
   const types = report.events.map((event) => event.type);
@@ -179,8 +202,44 @@ test('ANA/Cebu swipe follows the native pointer cancel path without compatibilit
   assert.ok(types.indexOf('pointercancel') < types.indexOf('touchend'));
   const cancelIndex = types.indexOf('pointercancel');
   assert.deepEqual(types.slice(cancelIndex, cancelIndex + 3), ['pointercancel', 'pointerout', 'pointerleave']);
-  assert.ok(!types.includes('pointerup'));
-  assert.ok(!types.some((type) => ['mousedown', 'mousemove', 'mouseup', 'click'].includes(type)));
+  const swipeEnd = types.indexOf('touchend');
+  assert.ok(!types.slice(0, swipeEnd).includes('pointerup'));
+  assert.ok(!types.slice(0, swipeEnd).some((type) => ['mousedown', 'mousemove', 'mouseup', 'click'].includes(type)));
+
+  const tapStart = types.indexOf('pointerover', swipeEnd + 1);
+  assert.notEqual(tapStart, -1, JSON.stringify(types));
+  const followUpStart = types.indexOf('pointerover', tapStart + 1);
+  assert.notEqual(followUpStart, -1, JSON.stringify(types));
+  const tapTypes = types.slice(tapStart, followUpStart);
+  assert.deepEqual(tapTypes, [
+    'pointerover', 'pointerenter', 'pointerdown', 'touchstart',
+    'pointerup', 'pointerout', 'pointerleave', 'touchend',
+    'mouseover', 'mouseenter', 'mousemove', 'mousedown', 'mouseup', 'click',
+  ]);
+  const tapEvents = report.events.slice(tapStart, followUpStart);
+  const tapPoint = tapEvents.find((event) => event.type === 'pointerdown');
+  assert.ok(tapPoint);
+  const compatibilityEvents = tapEvents.slice(-6);
+  assert.deepEqual(compatibilityEvents.map((event) => event.constructor), [
+    'MouseEvent', 'MouseEvent', 'MouseEvent', 'MouseEvent', 'MouseEvent', 'PointerEvent',
+  ]);
+  assert.deepEqual(compatibilityEvents.map((event) => [event.button, event.buttons, event.detail]), [
+    [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 1, 1], [0, 0, 1], [0, 0, 1],
+  ]);
+  assert.deepEqual(compatibilityEvents.map((event) => event.which), [0, 0, 0, 1, 1, 1]);
+  assert.ok(compatibilityEvents.every((event) => (
+    event.clientX === tapPoint.clientX && event.clientY === tapPoint.clientY
+  )));
+  assert.deepEqual(
+    [compatibilityEvents.at(-1)?.pointerType, compatibilityEvents.at(-1)?.isPrimary],
+    ['touch', false],
+  );
+  assert.deepEqual(types.slice(followUpStart, followUpStart + 4), [
+    'pointerover', 'pointerenter', 'pointerdown', 'touchstart',
+  ]);
+  assert.ok(!types.slice(followUpStart).some((type) => (
+    ['mousedown', 'mousemove', 'mouseup', 'click'].includes(type)
+  )));
   assert.ok(report.events.every((event) => event.trusted));
   assert.ok(report.events.every((event) => event.target === 'BODY'));
 });

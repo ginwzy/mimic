@@ -1,4 +1,4 @@
-export type InteractionRecipe = 'motion-burst' | 'swipe';
+export type InteractionRecipe = 'motion-burst' | 'swipe' | 'tap';
 
 interface TimedFrame {
   readonly at: number;

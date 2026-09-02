@@ -121,6 +121,24 @@ function touchPhase(index: number): TouchFrame['phase'] {
   return 'move';
 }
 
+function createTouchFrame(
+  values: readonly number[],
+  index: number,
+  phase: TouchFrame['phase'],
+  at: number,
+): TouchFrame {
+  return Object.freeze({
+    kind: 'touch',
+    phase,
+    at,
+    x: round(clamp(frameValue(values, index, CHANNEL.touchX), 0.01, 0.99), 6),
+    y: round(clamp(frameValue(values, index, CHANNEL.touchY), 0.01, 0.99), 6),
+    radiusX: round(clamp(frameValue(values, index, CHANNEL.radiusX), 0.001, 0.15), 6),
+    radiusY: round(clamp(frameValue(values, index, CHANNEL.radiusY), 0.001, 0.15), 6),
+    force: round(clamp(frameValue(values, index, CHANNEL.force), 0, 1), 6),
+  });
+}
+
 function synthesizeMotion(next: Random): InteractionFrame[] {
   const { duration, values } = sample(next);
   const frames: InteractionFrame[] = [];
@@ -156,21 +174,29 @@ function synthesizeSwipe(next: Random): InteractionFrame[] {
   const frames: InteractionFrame[] = [];
   for (let index = 0; index < CSD4CA_MODEL.frames; index += 1) {
     const at = Math.round(duration * index / (CSD4CA_MODEL.frames - 1));
-    frames.push(Object.freeze({
-      kind: 'touch',
-      phase: touchPhase(index),
-      at,
-      x: round(clamp(frameValue(values, index, CHANNEL.touchX), 0.01, 0.99), 6),
-      y: round(clamp(frameValue(values, index, CHANNEL.touchY), 0.01, 0.99), 6),
-      radiusX: round(clamp(frameValue(values, index, CHANNEL.radiusX), 0.001, 0.15), 6),
-      radiusY: round(clamp(frameValue(values, index, CHANNEL.radiusY), 0.001, 0.15), 6),
-      force: round(clamp(frameValue(values, index, CHANNEL.force), 0, 1), 6),
-    } satisfies TouchFrame));
+    frames.push(createTouchFrame(values, index, touchPhase(index), at));
   }
   return frames;
 }
 
+function synthesizeTap(next: Random): InteractionFrame[] {
+  // CSD4CA has no taps; retain only its captured contact-start marginal.
+  const { values } = sample(next);
+  const duration = Math.round(70 + next() * 60);
+  return [
+    createTouchFrame(values, 0, 'start', 0),
+    createTouchFrame(values, 0, 'end', duration),
+  ];
+}
+
 export function synthesizeInteraction(recipe: InteractionRecipe, seed: string, sequence: number): readonly InteractionFrame[] {
   const next = createRandom(hashSeed(`${seed}\u0000${sequence}\u0000${recipe}`));
-  return Object.freeze(recipe === 'motion-burst' ? synthesizeMotion(next) : synthesizeSwipe(next));
+  switch (recipe) {
+    case 'motion-burst':
+      return Object.freeze(synthesizeMotion(next));
+    case 'swipe':
+      return Object.freeze(synthesizeSwipe(next));
+    case 'tap':
+      return Object.freeze(synthesizeTap(next));
+  }
 }

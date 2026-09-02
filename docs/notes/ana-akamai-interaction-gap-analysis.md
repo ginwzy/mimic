@@ -199,7 +199,7 @@ pointer-up; none contains the untrusted `,0` suffix. This cross-check supports
 using the deobfuscated handler semantics for the pointer-gap analysis while
 still recording that the two script bytes are not identical.
 
-### 2. The baseline mouse ordering was wrong; the tap path is still absent
+### 2. The baseline mouse ordering was wrong; tap projection is now implemented
 
 The implemented swipe no longer has the original ordering bug. The removed
 baseline paired mouse and touch at every swipe frame and emitted additional
@@ -213,8 +213,8 @@ touchend   + mouseup
 
 The current swipe crosses the pan threshold, ends its pointer stream through
 `pointercancel`, and emits no mouse or click. That is the correct terminal
-class for the current recipe. The remaining gap is narrower: mimic has no tap
-recipe and therefore no compatibility-mouse terminal path at all.
+class for the swipe recipe. The first Pointer-only implementation omitted tap
+compatibility events; the implementation and live validation follow below.
 
 #### Browser payload sequence
 
@@ -315,8 +315,8 @@ had `sourceCapabilities.firesTouchEvents=true`.
 
 A CDP short drag from `(120,120)` to `(124,124)` still completed as a tap. Its
 pointer-up used `(124,124)`, but its compatibility mouse events and click were
-anchored at `(120,120)`. A future implementation therefore cannot blindly use
-the last TouchFrame coordinate for the mouse chain.
+anchored at `(120,120)`. The implementation therefore anchors compatibility
+events to the initial contact instead of the final TouchFrame coordinate.
 
 The same device established the tap/pan boundary for this setup:
 
@@ -328,10 +328,7 @@ diagonal movement (6,6) px:   cancel path (distance 8.49 px)
 ```
 
 This supports an Euclidean threshold strictly greater than 8 CSS pixels. The
-current dispatcher uses `distance >= 8`, so it classifies the exact 8-pixel
-boundary earlier than this Chrome build. That does not affect the current
-large upward swipe, but it must be corrected before short drags are treated as
-taps.
+dispatcher now uses `distance > 8`, matching this captured boundary.
 
 Cancellation cannot be represented by one generic "mouse allowed" flag:
 
@@ -348,7 +345,7 @@ canceling a primary pointerdown suppresses compatibility mouse events but does
 not suppress boundary mouse events, and click follows its own dispatch rules.
 Touch cancellation is stronger in the observed Chrome path.
 
-#### Correct implementation boundary
+#### Implemented boundary
 
 Compatibility mouse remains a deterministic projection of one completed tap,
 not another sampled trajectory:
@@ -373,6 +370,55 @@ jsdom 29 does not expose `InputDeviceCapabilities` or the native
 `sourceCapabilities` property. That does not block this ABCK script, whose
 mouse encoder does not read the field, but it is a separate DOM-fidelity gap
 before mimic can claim a complete Chrome compatibility-mouse object shape.
+
+The interaction layer now implements that boundary without changing the
+public adapter or Job API:
+
+- Internal `tap` synthesis emits a two-frame contact lasting a seeded 70-130
+  ms. CSD4CA has no tap trajectories, so only the captured contact-start
+  position, radius, and pressure marginal is reused; no swipe path is relabeled
+  as a tap.
+- The policy emits motion, an upward swipe, the tap at 2500 ms, and a follow-up
+  upward swipe at 2900 ms. The spacing exceeds the compiled swipe maximum and
+  prevents overlapping contact state.
+- Successful tap completion projects pointer-up/out/leave, touch-end, then
+  mouseover/enter/move/down/up and a PointerEvent click synchronously from the
+  same contact. Main-button events expose `which=1` as Chrome does.
+- Pointerdown, touchstart, and touchend cancellation retain their distinct
+  Chrome 151 terminal outcomes. A pan still terminates through pointercancel
+  and never emits compatibility mouse.
+- The follow-up swipe supplies a natural pointerdown auto-post boundary that
+  carries the prior tap's mouseup and click. The adapter does not call Akamai
+  internals or manufacture a POST.
+
+The first live tap run produced ten ABCK bodies and confirmed why the follow-up
+was required: its last body contained only mousemove and mousedown. After the
+follow-up and `which` corrections, the designated ANA run generated twelve
+bodies, all returned HTTP 201, and `_abck` reached `~0~`. Concurrent tf-dev
+traffic was excluded by matching this run's exact request-body lengths; its
+ABCK POST ids were `29,30,32,34,35,36,37,38,39,40,42,44`. Long payloads decoded
+with file hash `8066499`.
+
+Body 42 contains the completed trusted compatibility sequence followed by the
+next swipe's pointerdown:
+
+```text
+mev:
+0,1,2608,244,598;
+1,3,2609,244,598,-1;
+2,4,2619,244,598,-1;
+3,2,2620,244,598,-1;
+
+pev suffix:
+2,4,2605,244,598;
+3,3,2942,261,574;
+```
+
+No mouse row has an untrusted `it0` suffix or the earlier non-primary
+`which=0` column. `te=1` and `pte=1` confirm one trusted click. Body 44 then
+adds the follow-up touchstart, while `mev` remains unchanged, confirming that
+the second swipe does not create compatibility mouse. ANA's final verify still
+returned the separately classified edge HTTP 403 after the valid `~0~` cookie.
 
 ### PointerEvent runtime feasibility
 
@@ -553,7 +599,7 @@ sampleGesture()
 -> orientation frames
 -> pointer frames
 -> touch frames
--> optional compatibility mouse frames for tap only
+-> tap compatibility events
 ```
 
 ### 4. Device pose is not conditioned to the session
@@ -572,7 +618,7 @@ The browser device is close to flat in this sample; mimic represents a much
 more tilted device. The current adapter does not condition baseline pose on
 Profile, screen orientation, or the selected gesture session.
 
-### 5. The policy emits only one gesture type
+### 5. The policy still emits a limited gesture set
 
 The browser capture contains multiple interaction forms:
 
@@ -583,15 +629,18 @@ The browser capture contains multiple interaction forms:
 - Downward or non-monotonic movement
 - Gesture continuation across Akamai accumulation resets
 
-The mimic capture contains one smooth upward swipe, approximately:
+The baseline mimic capture contains one smooth upward swipe, approximately:
 
 ```text
 (267,678) -> (297,510), about 36 ms
 ```
 
-The compiled runtime model retains only upward groups, and the built-in policy
-allows one motion burst and one swipe per capture. It cannot represent the
-observed session-level diversity or repeated interaction.
+The compiled runtime model retains only upward groups. The built-in policy now
+emits an initial upward swipe, a separately modeled tap, and a follow-up upward
+swipe that flushes the tap state through a natural ABCK event boundary. This
+covers the two terminal classes needed for mouse fidelity, but not
+downward/non-monotonic gestures, scroll-linked interaction, or the observed
+session-level diversity.
 
 ### 6. Page, viewport, and screen coordinates are collapsed
 
