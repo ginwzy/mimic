@@ -8,6 +8,7 @@ import { LegacyProfiles } from '../dist/src/legacy/profiles.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const JSON_ROOTS = ['package.json', 'package-lock.json', 'profiles', 'resources', 'schemas'];
 const SOURCE_FILES = [
+  'profiles/generate.mjs',
   'scripts/build.js',
   'scripts/check-data.js',
   'scripts/generate-shapes.js',
@@ -19,6 +20,7 @@ function filesUnder(relativePath, extension) {
   const stat = fs.statSync(absolute);
   if (!stat.isDirectory()) return path.extname(relativePath) === extension ? [relativePath] : [];
   return fs.readdirSync(absolute, { withFileTypes: true })
+    .filter((entry) => entry.name !== '_fp-env')
     .flatMap((entry) => filesUnder(path.join(relativePath, entry.name), extension));
 }
 

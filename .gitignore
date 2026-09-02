@@ -45,3 +45,6 @@ build/
 tmp/
 scratchpad/
 .tokensave
+
+# Local raw fingerprint cache
+profiles/_fp-env/

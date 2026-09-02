@@ -33,7 +33,15 @@ chmodSync(path.join(output, 'src/cli.js'), 0o755);
 
 const assets = path.join(output, 'assets');
 mkdirSync(assets, { recursive: true });
-cpSync(path.join(root, 'profiles'), path.join(assets, 'profiles'), { recursive: true });
+const profiles = path.join(root, 'profiles');
+cpSync(profiles, path.join(assets, 'profiles'), {
+  recursive: true,
+  filter: (source) => {
+    const relative = path.relative(profiles, source);
+    const [entry] = relative.split(path.sep);
+    return entry !== 'generate.mjs' && entry !== '_fp-env';
+  },
+});
 cpSync(path.join(root, 'resources/shapes'), path.join(assets, 'shapes'), { recursive: true });
 cpSync(path.join(root, 'resources/baselines'), path.join(assets, 'baselines'), { recursive: true });
 copyFileSync(path.join(root, 'resources/probe.js'), path.join(assets, 'probe.js'));

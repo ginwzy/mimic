@@ -185,6 +185,7 @@ test('npm tarball exposes only the current public surfaces', async (t) => {
     'NOTICE',
   ]) assert.ok(names.has(expected), `tarball missing ${expected}`);
   assert.equal([...names].some((name) => name.includes('/test/') || name.endsWith('.test.js')), false);
+  assert.equal([...names].some((name) => name.includes('/_fp-env/') || name.endsWith('/generate.mjs')), false);
   for (const prefix of ['entry/', 'core/', 'mask/', 'patch/', 'base/', 'trace/', 'profiles/']) {
     assert.equal([...names].some((name) => name.startsWith(prefix)), false, `tarball contains ${prefix}`);
   }

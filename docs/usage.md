@@ -57,6 +57,30 @@ try {
 
 `profilesRoot`、`shapesRoot`、`probePath` 可覆盖包内数据路径,主要用于自定义数据集与开发测试。
 
+### 直接使用 fp-env
+
+`profiles/generate.mjs` 下载的原始 `z__env` 文件会写入 `profiles/_fp-env/<platform>_<version>/`。该目录是
+本地 raw cache,默认被 Git 和 npm 构建排除。使用仓库 Profile root 时,mimic 会自动索引这些文件：
+
+```bash
+node profiles/generate.mjs --startAfterId 1589411 --limit 100
+npm run build
+node dist/src/cli.js list profiles --profiles ./profiles
+```
+
+生成的 ID 采用 `<platform>-<host>/<model>-v<version>-<recordId>`。例如：
+
+```js
+const mimic = createMimic({
+  profilesRoot: './profiles',
+  profile: 'android-chrome/23049pcd8g-v148-1589412',
+});
+```
+
+raw 数据在主线程按需规范化成内存 Profile/Page/Shape。原始采集字段标记为 `captured`;缺失但可由 Chromium
+合同确定的 `navigator.vendor`、`cookieEnabled` 标记为 `derived`;当前无法可靠映射的 Audio、Canvas 和字体
+数据保持 `unsupported`。未知版本的 Shape 从 Feature 表生成并标记为 `derived`,不会冒充真机结构采集。
+
 ### run
 
 ```js

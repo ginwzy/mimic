@@ -419,14 +419,19 @@ function normalizeScreen(data: Data, derived: string[]): ScreenData {
   const height = number(data, 'height', 'screen.height');
   const orientation = isData(data.orientation) ? data.orientation : undefined;
   if (!orientation) derived.push('screen.orientation');
-  derived.push('screen.availLeft', 'screen.availTop');
+  let availLeft = 0;
+  let availTop = 0;
+  if (typeof data.availLeft === 'number') availLeft = number(data, 'availLeft', 'screen.availLeft');
+  else derived.push('screen.availLeft');
+  if (typeof data.availTop === 'number') availTop = number(data, 'availTop', 'screen.availTop');
+  else derived.push('screen.availTop');
   return {
     width,
     height,
     availWidth: number(data, 'availWidth', 'screen.availWidth'),
     availHeight: number(data, 'availHeight', 'screen.availHeight'),
-    availLeft: 0,
-    availTop: 0,
+    availLeft,
+    availTop,
     colorDepth: number(data, 'colorDepth', 'screen.colorDepth'),
     pixelDepth: number(data, 'pixelDepth', 'screen.pixelDepth'),
     orientation: orientation
@@ -538,7 +543,7 @@ function compatibleShape(shape: Shape, target: Target): Shape {
 export function importLegacyData(
   id: string,
   input: unknown,
-  options: { source?: Source; shape: Shape },
+  options: { source?: Source; shape: Shape; derived?: readonly string[] },
 ): ImportedProfile {
   const data = legacyData(input);
   if (!isData(data.navigator) || !isData(data.screen)) {
@@ -558,7 +563,7 @@ export function importLegacyData(
   delete navigatorRaw.connection;
   const windowData = data.window ? clone(data.window) : undefined;
   if (windowData) delete windowData.chrome;
-  const derived: string[] = [];
+  const derived = [...(options.derived ?? [])];
   const navigator = normalizeNavigator(navigatorRaw, target, derived);
   const screen = normalizeScreen(data.screen, derived);
   const window = normalizeWindow(windowData);

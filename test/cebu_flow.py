@@ -6,11 +6,13 @@ import json
 import random
 import re
 import secrets
+import subprocess
 import sys
 import tempfile
 from collections import Counter
 from contextvars import ContextVar
 from datetime import timedelta
+from functools import cache
 from pathlib import Path
 from time import time
 from typing import Any
@@ -49,9 +51,9 @@ SEARCH_URL = "https://soar.cebupacificair.com/ceb-omnix-proxy-v3/availability"
 BRIDGE = Path(__file__).with_name("cebu_capture.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROFILES_DIR = REPO_ROOT / "profiles"
+MIMIC_CLI = REPO_ROOT / "dist" / "src" / "cli.js"
 # Default pool: all android-chrome device profiles (sensor side). Not tied to TLS pin.
 DEFAULT_PROFILE = "android-chrome/2201116sg-v145-10025"
-ANDROID_CHROME_DIR = PROFILES_DIR / "android-chrome"
 
 # Wire TLS/UA pin (rnet egress only). Independent of mimic profile selection.
 CHROME_MAJOR = 145
@@ -67,30 +69,35 @@ ACCEPT_LANG = "en-GB,en-US;q=0.9,en;q=0.8,pl;q=0.7"
 RNET_EMULATION = Emulation.Chrome145
 
 
-def list_android_chrome_profiles() -> list[str]:
-    """Ids like android-chrome/<stem> for every profiles/android-chrome/*.json."""
-    if not ANDROID_CHROME_DIR.is_dir():
-        return []
-    return sorted(
-        f"android-chrome/{p.stem}"
-        for p in ANDROID_CHROME_DIR.glob("*.json")
-        if p.is_file()
+@cache
+def list_android_chrome_profiles() -> tuple[str, ...]:
+    """Ask mimic for canonical and raw fp-env Android Chrome profile ids."""
+    if not MIMIC_CLI.is_file():
+        raise FileNotFoundError(f"mimic CLI not built: {MIMIC_CLI}; run npm run build")
+    completed = subprocess.run(
+        ["node", str(MIMIC_CLI), "list", "profiles", "--profiles", str(PROFILES_DIR)],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
     )
+    profiles = json.loads(completed.stdout)
+    if not isinstance(profiles, list) or not all(isinstance(item, str) for item in profiles):
+        raise TypeError("mimic profile list must be a string array")
+    return tuple(profile for profile in profiles if profile.startswith("android-chrome/"))
 
 
 def resolve_profile(explicit: str | None) -> str:
     """Pick mimic profile for one flow. explicit pins; else random from android-chrome pool."""
-    if explicit:
-        path = PROFILES_DIR / f"{explicit}.json"
-        if not path.is_file():
-            raise FileNotFoundError(f"profile not found: {explicit} ({path})")
-        return explicit
     pool = list_android_chrome_profiles()
+    if explicit:
+        if explicit not in pool:
+            raise FileNotFoundError(f"profile not found: {explicit}")
+        return explicit
     if not pool:
-        log(f"no android-chrome profiles under {ANDROID_CHROME_DIR}; using {DEFAULT_PROFILE}")
+        log(f"no android-chrome profiles under {PROFILES_DIR}; using {DEFAULT_PROFILE}")
         return DEFAULT_PROFILE
-    chosen = random.choice(pool)
-    return chosen
+    return random.choice(pool)
 
 
 DOC_ACCEPT = (
@@ -301,6 +308,7 @@ async def capture_bodies(
             "scriptSource": script_source,
             "cookies": [c.strip() for c in cookies.split(";") if "=" in c],
             "profile": profile,
+            "profilesRoot": str(PROFILES_DIR),
             "deadlineMs": deadline_ms,
             "maxPosts": max_posts,
             "scriptTimeoutMs": script_timeout_ms,
@@ -948,7 +956,7 @@ async def main() -> int:
         metavar="ID",
         help=(
             "pin mimic profile id (e.g. android-chrome/2201116sg-v145-10025); "
-            "default: random per worker from profiles/android-chrome/*.json "
+            "default: random per worker from canonical and raw fp-env Android Chrome profiles "
             "(sensor only; wire TLS stays Chrome145)"
         ),
     )

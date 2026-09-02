@@ -2,8 +2,10 @@ import { createMimic } from '../dist/src/public.js';
 import { digest, seal } from '../dist/src/core/seal.js';
 import { readFile } from 'node:fs/promises';
 import { writeSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const RESULT_PREFIX = '__CEBU_CAPTURE_RESULT__';
+const PROFILES_ROOT = fileURLToPath(new URL('../profiles/', import.meta.url));
 
 function writeResult(value) {
   writeSync(process.stdout.fd, `${RESULT_PREFIX}${JSON.stringify(value)}`);
@@ -205,6 +207,9 @@ async function main() {
   const scriptUrl = requireString(input, 'scriptUrl');
   const scriptSource = requireString(input, 'scriptSource');
   const profile = requireString(input, 'profile');
+  const profilesRoot = input.profilesRoot === undefined
+    ? PROFILES_ROOT
+    : requireString(input, 'profilesRoot');
   const cookies = Array.isArray(input.cookies) && input.cookies.every((item) => typeof item === 'string')
     ? input.cookies
     : [];
@@ -227,6 +232,7 @@ async function main() {
   const code = events === 'abck' ? scriptSource : wrapBmsProbe(scriptSource);
   const mimic = createMimic({
     profile,
+    profilesRoot,
     page,
     size: 1,
     timeoutMs: scriptTimeoutMs + deadlineMs + 5_000,

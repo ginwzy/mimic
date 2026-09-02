@@ -6,6 +6,7 @@ export { Catalog } from './catalog/index.js';
 export { CatalogFiles } from './catalog/files.js';
 export { LegacyProfiles, importLegacyData, legacyTarget } from './legacy/profiles.js';
 export type { ImportedProfile, LedgerEntry, MigrationReport } from './legacy/profiles.js';
+export { FpEnvProfiles, normalizeFpEnv } from './legacy/fp-env.js';
 export { collectIdentity, createIdentityCollector } from './collect/browser.js';
 export type { IdentityCapture } from './collect/browser.js';
 export { migrateCollect } from './collect/contract.js';

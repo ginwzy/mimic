@@ -13,6 +13,7 @@ export { digest, seal } from './core/seal.js';
 export { JsdomEngine } from './engine/jsdom.js';
 export { QueueFullError, WorkerExecutor } from './executor/pool.js';
 export { LegacyProfiles, importLegacyData, legacyTarget } from './legacy/profiles.js';
+export { FpEnvProfiles, normalizeFpEnv } from './legacy/fp-env.js';
 export { createNodeApplication } from './node/app.js';
 export { ProfileFiles } from './collect/profiles.js';
 export { CollectStore } from './collect/store.js';
