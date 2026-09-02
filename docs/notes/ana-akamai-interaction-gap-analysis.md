@@ -199,19 +199,11 @@ pointer-up; none contains the untrusted `,0` suffix. This cross-check supports
 using the deobfuscated handler semantics for the pointer-gap analysis while
 still recording that the two script bytes are not identical.
 
-### 2. Mouse compatibility ordering is wrong
+### 2. The baseline mouse ordering was wrong; the tap path is still absent
 
-The browser capture includes this coherent post-pointer sequence:
-
-```text
-pointerup  11131 ms  (197,1115)
-mouse      11134 ms  (197,1115)
-mouse      11135 ms  (197,1115)
-mouse      11158 ms  (197,1115)
-mouse      11210 ms  (197,1115)
-```
-
-The baseline mimic synthesis paired mouse and touch at every swipe frame:
+The implemented swipe no longer has the original ordering bug. The removed
+baseline paired mouse and touch at every swipe frame and emitted additional
+pressed mouse moves after mouse-up:
 
 ```text
 touchstart + mousedown
@@ -219,32 +211,168 @@ touchmove  + mousemove
 touchend   + mouseup
 ```
 
-This is not the compatibility event order produced by a mobile browser. More
-importantly, the recipe is a swipe: once the browser recognizes a pan,
-the pointer stream is canceled and a tap-style compatibility mouse sequence
-should not be produced at all. The baseline trailing mouse moves also retained
-`buttons=1` after mouse-up. None of the generated mouse events appear in the
-decrypted mimic payload.
+The current swipe crosses the pan threshold, ends its pointer stream through
+`pointercancel`, and emits no mouse or click. That is the correct terminal
+class for the current recipe. The remaining gap is narrower: mimic has no tap
+recipe and therefore no compatibility-mouse terminal path at all.
 
-For a future tap recipe, local Chromium produced this terminal ordering at one
-timestamp:
+#### Browser payload sequence
+
+The original analysis mislabeled the event at `11158 ms` as touch-end. The
+deobfuscated listener table and the decoded rows show that touch code 2 is
+touch-start, while mouse code 4 is mouse-up. The corrected tap-like sequence
+is:
 
 ```text
-pointerup -> lostpointercapture -> pointerout / pointerleave -> touchend
--> mouseover / mouseenter / mousemove / mousedown / mouseup -> click
+pointerdown  11032 ms  (197,1115)
+touchstart   11058 ms  (197,1115)
+pointerup    11131 ms  (197,1115)
+mousemove    11134 ms  (197,1115)
+mousedown    11135 ms  (197,1115)
+mouseup      11158 ms  (197,1115)
+click        11210 ms  (197,1115)
 ```
 
-The Akamai mouse event codes around the browser tap agree with this chain:
+Touch-end is not visible in this ABCK payload. Its encoder reads the first
+entry from `event.touches`; a normal touch-end has an empty `touches` list, so
+the handler drops that row instead of falling back to `changedTouches`. The
+payload therefore cannot establish the exact touch-end timestamp. The native
+Chrome probe below places touch-end after pointer release/out and before the
+compatibility mouse chain.
+
+The later mouse buffer contains exactly these four trusted rows:
+
+```text
+0,1,11134,197,1115
+1,3,11135,197,1115,-1
+2,4,11158,197,1115,-1
+3,2,11210,197,1115,-1
+```
+
+The current ABCK mouse mapping is:
 
 ```text
 code 1: mousemove
+code 2: click
 code 3: mousedown
 code 4: mouseup
-code 2: click
 ```
 
-The implemented swipe adapter removes those paired mouse events. Compatibility
-mouse belongs to a separate tap terminal path.
+For mousemove, the encoder stores index, code, relative time, X, and Y. For
+the other three events it also stores a hash of the target's `name` or `id`;
+`-1` means neither attribute was available. A non-primary `which` value is
+appended when present, and an untrusted mouse event receives an `it0` suffix.
+For this challenge, `mevl` is 32 plus the sum of the first five numeric fields
+of every row. This gives `24930` after mousemove/mousedown and `49933` after
+all four rows, exactly matching flows 479 and 484.
+
+The 54 code-2 rows in an earlier mouse buffer are a separate phenomenon. They
+have coordinates `(-1,-1)`, varying target hashes, and the untrusted `it0`
+suffix; `nte` reaches 54 while `te` and `pte` remain zero. They are
+page-generated clicks, not physical compatibility events, and must not be
+copied into the interaction model.
+
+`mousedown` has a payload-boundary side effect. Its handler calls the mouse
+encoder with code 3 and immediately invokes the biometric auto-post path.
+Consequently, flow 479 contains only mousemove and mousedown. Mouseup and
+click execute afterward and first appear in the later cumulative body. A
+correct implementation should dispatch the terminal events synchronously and
+allow this script-side auto-post to split the bodies; it should not schedule
+independent MouseFrames merely to reproduce the observed wall-clock gaps.
+
+#### Android Chrome 151 ground truth
+
+The connected Xiaomi M2012K11AC running Chrome `151.0.7922.173` was probed in
+a mobile viewport (`392x754` CSS pixels, DPR 2.75). Both CDP touch input and a
+system-level `adb input tap` produced trusted events in this order:
+
+```text
+pointerover / pointerenter -> pointerdown -> touchstart
+-> gotpointercapture -> pointerup -> lostpointercapture
+-> pointerout / pointerleave -> touchend
+-> mouseover / mouseenter -> mousemove -> mousedown -> mouseup -> click
+```
+
+All terminal events shared the input release `event.timeStamp`; listener wall
+time advanced as handlers ran. This is another reason not to model the mouse
+chain as separately timed trajectory frames. On the ANA page, ABCK's
+synchronous mousedown auto-post and other handlers account for much of the
+larger decoded time gap.
+
+The terminal field shapes were:
+
+| Event | Constructor | `button` | `buttons` | `detail` | `firesTouchEvents` |
+| --- | --- | ---: | ---: | ---: | --- |
+| `mouseover` / `mouseenter` / `mousemove` | `MouseEvent` | 0 | 0 | 0 | true |
+| `mousedown` | `MouseEvent` | 0 | 1 | 1 | true |
+| `mouseup` | `MouseEvent` | 0 | 0 | 1 | true |
+| `click` | `PointerEvent` | 0 | 0 | 1 | true |
+
+The click retained `pointerId=2` and `pointerType="touch"`; Chrome reported
+`isPrimary=false` for that click. Pointer events did not expose a non-null
+`sourceCapabilities`; Touch events, every compatibility mouse event, and click
+had `sourceCapabilities.firesTouchEvents=true`.
+
+A CDP short drag from `(120,120)` to `(124,124)` still completed as a tap. Its
+pointer-up used `(124,124)`, but its compatibility mouse events and click were
+anchored at `(120,120)`. A future implementation therefore cannot blindly use
+the last TouchFrame coordinate for the mouse chain.
+
+The same device established the tap/pan boundary for this setup:
+
+```text
+single-axis movement 5..8 px: pointerup + touchend + full mouse/click chain
+single-axis movement >= 9 px: touchmove + pointercancel + no mouse/click
+diagonal movement (5,5) px:   tap path (distance 7.07 px)
+diagonal movement (6,6) px:   cancel path (distance 8.49 px)
+```
+
+This supports an Euclidean threshold strictly greater than 8 CSS pixels. The
+current dispatcher uses `distance >= 8`, so it classifies the exact 8-pixel
+boundary earlier than this Chrome build. That does not affect the current
+large upward swipe, but it must be corrected before short drags are treated as
+taps.
+
+Cancellation cannot be represented by one generic "mouse allowed" flag:
+
+| Canceled event | Observed terminal result |
+| --- | --- |
+| none | full mouse chain and click |
+| primary `pointerdown` | mouseover/mouseenter and click remain; mousemove/down/up are suppressed |
+| `touchstart` | no compatibility mouse and no click |
+| `touchend` | no compatibility mouse and no click |
+| pan / pointer cancellation | no compatibility mouse and no click |
+
+The pointerdown result matches Pointer Events' `PREVENT MOUSE EVENT` rule:
+canceling a primary pointerdown suppresses compatibility mouse events but does
+not suppress boundary mouse events, and click follows its own dispatch rules.
+Touch cancellation is stronger in the observed Chrome path.
+
+#### Correct implementation boundary
+
+Compatibility mouse remains a deterministic projection of one completed tap,
+not another sampled trajectory:
+
+1. Add a separately modeled tap; do not reinterpret a CSD4CA upward swipe as
+   a tap.
+2. Keep the target, initial coordinates, release coordinates, cancellation
+   state, and pointerdown dispatch result in the active contact state.
+3. Use a `> 8` CSS-pixel Euclidean pan decision for this captured Chrome 151
+   boundary, subject to validation on other target Profiles.
+4. On a successful tap, complete pointer-up/out/leave and touch-end first,
+   then synchronously dispatch mouseover/enter/move/down/up and click.
+5. Respect the distinct pointerdown, touchstart, and touchend cancellation
+   outcomes above rather than treating all `preventDefault()` calls alike.
+6. Use MouseEvent for the mouse sequence and PointerEvent for the Chrome-style
+   click, preserving the stable target, button state, detail, and touch source
+   capability.
+7. Do not add MouseFrame back to `InteractionFrame`, do not emit compatibility
+   mouse during a pan, and do not manufacture timers to force ABCK body count.
+
+jsdom 29 does not expose `InputDeviceCapabilities` or the native
+`sourceCapabilities` property. That does not block this ABCK script, whose
+mouse encoder does not read the field, but it is a separate DOM-fidelity gap
+before mimic can claim a complete Chrome compatibility-mouse object shape.
 
 ### PointerEvent runtime feasibility
 
@@ -518,7 +646,7 @@ generated bodies.
 This is broader than event synthesis, but it limits any attempt to reproduce
 the browser's repeated event/request lifecycle.
 
-## Unresolved event-state fields
+## Event-state fields
 
 Several decoded fields change in the browser but remain zero in mimic:
 
@@ -530,11 +658,20 @@ pnte: 0 -> 27
 pte:  0 -> 1
 ```
 
-Their semantics are not established by the available field analyzer. They
-may be downstream counters or lifecycle state produced by mouse, pointer, and
-touch handling. They must not be hard-coded merely to match this capture.
-First reproduce the native-shaped event lifecycle and then check whether these
-fields emerge naturally.
+The deobfuscated trust handler establishes most of this counter family:
+
+```text
+te / nte / mte:    total events with isTrusted true / false / absent
+pte / pnte / pmte: matching current-window counters, reset after post handling
+```
+
+These counters cover events passed through that shared trust handler, not
+every row written to `mev`, `pev`, or `tev`. In this capture, the 54 scripted
+untrusted clicks account for `nte=54`; the later trusted compatibility click
+increments `te` and the current-window `pte` from zero to one. Their values
+should emerge from the event lifecycle and must not be hard-coded. `tab` and
+the exact reset policy around the remaining counters are still not established
+well enough to model directly.
 
 ## Implementation priority
 
@@ -596,7 +733,7 @@ still be rejected independently at the edge. Wire identity, proxy reputation,
 request rate, static credentials, and challenge variation must remain separate
 diagnostic dimensions.
 
-## Pointer research sources
+## Interaction research sources
 
 - [W3C Pointer Events](https://w3c.github.io/pointerevents/): pointer lifecycle,
   cancellation for direct manipulation, implicit capture, field semantics,
@@ -605,6 +742,14 @@ diagnostic dimensions.
   interface and button-state reference.
 - Local Chromium 150.0.7871.124 CDP input probe: trusted tap and swipe event
   order, contact geometry, pressure, implicit capture, and pan cancellation.
+- Connected Xiaomi M2012K11AC with Android Chrome 151.0.7922.173: mobile
+  viewport CDP taps, short drags and cancellation probes, plus a system-level
+  `adb input tap` confirmation of constructor, ordering, source-capability,
+  and button-state behavior.
 - ANA Android browser payloads under
   `~/Desktop/akamai-www.ana.co.jp-20260901-084619/results/`: Akamai `pev`,
   `tev`, and `mev` encoding and target-session timing.
+- Deobfuscated challenge under
+  `~/Desktop/mimic-akamai-www.ana.co.jp-20260901-093239/abck.deobfuscated.js`:
+  listener registration, event-code mapping, trust counters, checksums, and
+  mouse-down auto-post behavior.
