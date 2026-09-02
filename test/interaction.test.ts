@@ -33,12 +33,13 @@ test('interaction synthesis is model-backed, seeded, bounded and time ordered', 
   for (const frame of first) {
     assert.ok(frame.at >= previousAt);
     previousAt = frame.at;
-    if (frame.kind === 'touch' || frame.kind === 'mouse') {
+    if (frame.kind === 'touch') {
       assert.ok(frame.x >= 0 && frame.x <= 1);
       assert.ok(frame.y >= 0 && frame.y <= 1);
     }
   }
   const touches = first.filter((frame) => frame.kind === 'touch');
+  assert.equal(first.length, CSD4CA_MODEL.frames);
   assert.equal(touches.length, CSD4CA_MODEL.frames);
   assert.deepEqual([touches[0]?.phase, touches.at(-1)?.phase], ['start', 'end']);
   assert.ok(touches[0]!.y - touches.at(-1)!.y >= 0.08);

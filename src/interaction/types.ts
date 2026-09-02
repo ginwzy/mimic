@@ -29,13 +29,6 @@ export interface TouchFrame extends TimedFrame {
   readonly force: number;
 }
 
-export interface MouseFrame extends TimedFrame {
-  readonly kind: 'mouse';
-  readonly phase: 'down' | 'move' | 'up';
-  readonly x: number;
-  readonly y: number;
-}
-
-export type InteractionFrame = MotionFrame | OrientationFrame | TouchFrame | MouseFrame;
+export type InteractionFrame = MotionFrame | OrientationFrame | TouchFrame;
 
 export type InteractionPolicy = (elapsedMs: number, postCount: number) => InteractionRecipe | null;

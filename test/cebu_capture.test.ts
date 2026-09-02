@@ -63,12 +63,26 @@ test('ANA/Cebu bridge forwards independent seeds to the model-backed ABCK adapte
           force: point.force,
         }));
       }, { once: true });
+      document.addEventListener('pointerdown', event => post(JSON.stringify({
+        kind: 'pointer',
+        trusted: event.isTrusted,
+        pointerInstance: event instanceof PointerEvent,
+        mouseInstance: event instanceof MouseEvent,
+        pointerType: event.pointerType,
+        isPrimary: event.isPrimary,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        width: event.width,
+        height: event.height,
+        pressure: event.pressure,
+        buttons: event.buttons,
+      })), { once: true });
       post('initial');
     })()`,
     profile: 'android-webview-v138',
     cookies: [],
     deadlineMs: 2_000,
-    maxPosts: 3,
+    maxPosts: 4,
     scriptTimeoutMs: 5_000,
     events: 'abck',
   };
@@ -84,17 +98,89 @@ test('ANA/Cebu bridge forwards independent seeds to the model-backed ABCK adapte
   assert.equal(result.bodies[0], 'initial');
   const reports = result.bodies.slice(1).map((body) => JSON.parse(body) as Record<string, unknown>);
   const motion = reports.find((report) => report.kind === 'motion');
+  const pointer = reports.find((report) => report.kind === 'pointer');
   const touch = reports.find((report) => report.kind === 'touch');
-  assert.equal(motion?.trusted, true);
-  assert.equal(typeof (motion?.acceleration as { x?: unknown } | undefined)?.x, 'number');
-  assert.deepEqual([touch?.trusted, touch?.touchInstance], [true, true]);
-  assert.ok((touch?.radiusX as number) > 0);
-  assert.ok((touch?.radiusY as number) > 0);
-  assert.ok((touch?.force as number) >= 0 && (touch?.force as number) <= 1);
+  assert.ok(motion);
+  assert.ok(pointer);
+  assert.ok(touch);
+  assert.equal(motion.trusted, true);
+  assert.equal(typeof (motion.acceleration as { x?: unknown } | undefined)?.x, 'number');
+  assert.deepEqual(
+    [pointer.trusted, pointer.pointerInstance, pointer.mouseInstance, pointer.pointerType, pointer.isPrimary],
+    [true, true, true, 'touch', true],
+  );
+  assert.equal(pointer.buttons, 1);
+  assert.deepEqual([touch.trusted, touch.touchInstance], [true, true]);
+  assert.ok((touch.radiusX as number) > 0);
+  assert.ok((touch.radiusY as number) > 0);
+  assert.ok((touch.force as number) >= 0 && (touch.force as number) <= 1);
+  assert.deepEqual([pointer.clientX, pointer.clientY], [touch.clientX, touch.clientY]);
+  assert.equal(pointer.width, (touch.radiusX as number) * 2);
+  assert.equal(pointer.height, (touch.radiusY as number) * 2);
+  assert.ok(Math.abs((pointer.pressure as number) - (touch.force as number)) < 1e-6);
+  assert.ok(reports.indexOf(pointer) < reports.indexOf(touch));
   assert.ok(otherResult.bodies);
   const otherTouch = otherResult.bodies
     .slice(1)
     .map((body) => JSON.parse(body) as Record<string, unknown>)
     .find((report) => report.kind === 'touch');
   assert.notDeepEqual(touch, otherTouch);
+});
+
+test('ANA/Cebu swipe follows the native pointer cancel path without compatibility mouse', { timeout: 15_000 }, async () => {
+  const result = await runBridge({
+    pageUrl: 'https://example.test/booking',
+    pageHtml: '<!doctype html><html><body><main>booking</main></body></html>',
+    scriptUrl: 'https://example.test/akamai.js',
+    scriptSource: `(() => {
+      const events = [];
+      const types = [
+        'pointerover', 'pointerenter', 'pointerdown', 'pointermove', 'pointercancel',
+        'pointerup', 'pointerout', 'pointerleave',
+        'touchstart', 'touchmove', 'touchend',
+        'mousedown', 'mousemove', 'mouseup', 'click',
+      ];
+      for (const type of types) {
+        document.addEventListener(type, event => events.push({
+          type,
+          trusted: event.isTrusted,
+          target: event.target && event.target.tagName,
+        }), true);
+      }
+      const post = body => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/sensor');
+        xhr.send(body);
+      };
+      post('initial');
+      setTimeout(() => post(JSON.stringify({ kind: 'sequence', events })), 2700);
+    })()`,
+    profile: 'android-webview-v138',
+    cookies: [],
+    deadlineMs: 3_500,
+    maxPosts: 2,
+    scriptTimeoutMs: 5_000,
+    events: 'abck',
+    interactionSeed: 'pointer-cancel-seed',
+  });
+
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  assert.ok(result.bodies);
+  assert.equal(result.bodies[0], 'initial');
+  const report = JSON.parse(result.bodies[1]!) as {
+    readonly kind: string;
+    readonly events: readonly { readonly type: string; readonly trusted: boolean; readonly target?: string }[];
+  };
+  assert.equal(report.kind, 'sequence');
+  const types = report.events.map((event) => event.type);
+  assert.deepEqual(types.slice(0, 4), ['pointerover', 'pointerenter', 'pointerdown', 'touchstart']);
+  assert.ok(types.indexOf('pointermove') < types.indexOf('pointercancel'));
+  assert.ok(types.indexOf('touchmove') < types.indexOf('pointercancel'));
+  assert.ok(types.indexOf('pointercancel') < types.indexOf('touchend'));
+  const cancelIndex = types.indexOf('pointercancel');
+  assert.deepEqual(types.slice(cancelIndex, cancelIndex + 3), ['pointercancel', 'pointerout', 'pointerleave']);
+  assert.ok(!types.includes('pointerup'));
+  assert.ok(!types.some((type) => ['mousedown', 'mousemove', 'mouseup', 'click'].includes(type)));
+  assert.ok(report.events.every((event) => event.trusted));
+  assert.ok(report.events.every((event) => event.target === 'BODY'));
 });

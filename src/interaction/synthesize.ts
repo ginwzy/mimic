@@ -4,7 +4,6 @@ import type {
   InteractionFrame,
   InteractionRecipe,
   MotionFrame,
-  MouseFrame,
   OrientationFrame,
   TouchFrame,
 } from './types.js';
@@ -46,10 +45,6 @@ function createRandom(seed: number): Random {
     value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
     return ((value ^ (value >>> 14)) >>> 0) / 0x1_0000_0000;
   };
-}
-
-function randomBetween(next: Random, minimum: number, maximum: number): number {
-  return minimum + (maximum - minimum) * next();
 }
 
 function normal(next: Random): number {
@@ -120,10 +115,10 @@ function frameTriple(values: readonly number[], frame: number, start: number): r
   ];
 }
 
-function framePhases(index: number): readonly [TouchFrame['phase'], MouseFrame['phase']] {
-  if (index === 0) return ['start', 'down'];
-  if (index === CSD4CA_MODEL.frames - 1) return ['end', 'up'];
-  return ['move', 'move'];
+function touchPhase(index: number): TouchFrame['phase'] {
+  if (index === 0) return 'start';
+  if (index === CSD4CA_MODEL.frames - 1) return 'end';
+  return 'move';
 }
 
 function synthesizeMotion(next: Random): InteractionFrame[] {
@@ -159,34 +154,18 @@ function synthesizeMotion(next: Random): InteractionFrame[] {
 function synthesizeSwipe(next: Random): InteractionFrame[] {
   const { duration, values } = sample(next);
   const frames: InteractionFrame[] = [];
-  let lastX = 0;
-  let lastY = 0;
   for (let index = 0; index < CSD4CA_MODEL.frames; index += 1) {
-    const [phase, mousePhase] = framePhases(index);
     const at = Math.round(duration * index / (CSD4CA_MODEL.frames - 1));
-    lastX = round(clamp(frameValue(values, index, CHANNEL.touchX), 0.01, 0.99), 6);
-    lastY = round(clamp(frameValue(values, index, CHANNEL.touchY), 0.01, 0.99), 6);
     frames.push(Object.freeze({
       kind: 'touch',
-      phase,
+      phase: touchPhase(index),
       at,
-      x: lastX,
-      y: lastY,
+      x: round(clamp(frameValue(values, index, CHANNEL.touchX), 0.01, 0.99), 6),
+      y: round(clamp(frameValue(values, index, CHANNEL.touchY), 0.01, 0.99), 6),
       radiusX: round(clamp(frameValue(values, index, CHANNEL.radiusX), 0.001, 0.15), 6),
       radiusY: round(clamp(frameValue(values, index, CHANNEL.radiusY), 0.001, 0.15), 6),
       force: round(clamp(frameValue(values, index, CHANNEL.force), 0, 1), 6),
     } satisfies TouchFrame));
-    frames.push(Object.freeze({ kind: 'mouse', phase: mousePhase, at, x: lastX, y: lastY } satisfies MouseFrame));
-  }
-  const endedAt = Math.round(duration);
-  for (let index = 1; index <= 12; index += 1) {
-    frames.push(Object.freeze({
-      kind: 'mouse',
-      phase: 'move',
-      at: endedAt + index * 10,
-      x: round(clamp(lastX + randomBetween(next, -0.008, 0.008), 0.01, 0.99), 6),
-      y: round(clamp(lastY + randomBetween(next, -0.006, 0.006), 0.01, 0.99), 6),
-    } satisfies MouseFrame));
   }
   return frames;
 }

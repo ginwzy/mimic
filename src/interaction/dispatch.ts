@@ -3,10 +3,13 @@ import type { InteractionFrame } from './types.js';
 export function createInteractionSource(frames: readonly InteractionFrame[]): string {
   const json = JSON.stringify(frames);
   return `((frames) => {
+    const PAN_SLOP_PX = 8;
+    const POINTER_ID = 2;
     const dispatch = typeof __mimicDispatchTrustedEvent === 'function'
       ? __mimicDispatchTrustedEvent
       : (target, event) => target.dispatchEvent(event);
-    const point = (frame) => {
+    let contact = null;
+    const coordinates = (frame) => {
       const width = Math.max(1, Number(screen.width) || Number(innerWidth) || 1);
       const height = Math.max(1, Number(screen.height) || Number(innerHeight) || 1);
       const x = Math.max(0, Math.min(width - 1, Math.round(frame.x * (width - 1))));
@@ -15,13 +18,25 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
       const radiusY = Number(frame.radiusY);
       const force = Number(frame.force);
       const touchForce = Number.isFinite(force) ? Math.max(0, Math.min(1, force)) : 0.5;
-      const fields = {
-        identifier: 1, target: document,
+      return {
         clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y,
         radiusX: Number.isFinite(radiusX) ? Math.max(0, radiusX * width) : 1,
         radiusY: Number.isFinite(radiusY) ? Math.max(0, radiusY * height) : 1,
-        rotationAngle: 0,
         force: frame.phase === 'end' ? 0 : touchForce,
+      };
+    };
+    const resolveTarget = (coords) => {
+      try {
+        const target = document.elementFromPoint?.(coords.clientX, coords.clientY);
+        if (target) return target;
+      } catch {}
+      return document.body || document.documentElement || document;
+    };
+    const point = (frame, target) => {
+      const fields = {
+        identifier: 1, target,
+        ...coordinates(frame),
+        rotationAngle: 0,
       };
       try { return new globalThis.Touch(fields); }
       catch { return fields; }
@@ -37,7 +52,36 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
       try { return new Constructor(type, fields); }
       catch { return fallbackEvent(type, fields, bubbles); }
     };
-    const mouseTypes = { down: 'mousedown', move: 'mousemove', up: 'mouseup' };
+    const emitPointer = (target, type, p, active) => {
+      const boundary = type === 'pointerenter' || type === 'pointerleave';
+      const bubbles = !boundary;
+      const fields = {
+        bubbles, cancelable: !boundary, composed: !boundary, view: window,
+        pointerId: POINTER_ID, pointerType: 'touch', isPrimary: true,
+        clientX: p.clientX, clientY: p.clientY, screenX: p.screenX, screenY: p.screenY,
+        width: active ? Math.max(1, p.radiusX * 2) : 1,
+        height: active ? Math.max(1, p.radiusY * 2) : 1,
+        pressure: active ? p.force : 0,
+        tangentialPressure: 0, tiltX: 0, tiltY: 0, twist: 0,
+        button: type === 'pointermove' ? -1 : 0,
+        buttons: active ? 1 : 0,
+      };
+      dispatch(target, createEvent(globalThis.PointerEvent, type, fields, bubbles));
+    };
+    const closePointer = (target, type, p) => {
+      emitPointer(target, type, p, false);
+      emitPointer(target, 'pointerout', p, false);
+      emitPointer(target, 'pointerleave', p, false);
+    };
+    const emitTouch = (target, frame, p) => {
+      const type = 'touch' + frame.phase;
+      const activeTouches = frame.phase === 'end' ? [] : [p];
+      const fields = {
+        bubbles: true, cancelable: true,
+        touches: activeTouches, targetTouches: activeTouches, changedTouches: [p],
+      };
+      dispatch(target, createEvent(globalThis.TouchEvent, type, fields, true));
+    };
     const emit = (frame) => {
       try {
         switch (frame.kind) {
@@ -57,22 +101,36 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
             return;
           }
           case 'touch': {
-            const p = point(frame);
-            const type = 'touch' + frame.phase;
-            const active = frame.phase === 'end' ? [] : [p];
-            const fields = { bubbles: true, cancelable: true, touches: active, targetTouches: active, changedTouches: [p] };
-            dispatch(document, createEvent(globalThis.TouchEvent, type, fields, true));
-            return;
-          }
-          case 'mouse': {
-            const p = point(frame);
-            const fields = {
-              bubbles: true, cancelable: true, view: window,
-              clientX: p.clientX, clientY: p.clientY, screenX: p.screenX, screenY: p.screenY,
-              button: 0,
-              buttons: frame.phase === 'up' ? 0 : 1,
-            };
-            dispatch(document, createEvent(globalThis.MouseEvent, mouseTypes[frame.phase], fields, true));
+            const coords = coordinates(frame);
+            if (frame.phase === 'start' || contact === null) {
+              const target = resolveTarget(coords);
+              contact = { target, originX: coords.clientX, originY: coords.clientY, pointerActive: true };
+            }
+            const p = point(frame, contact.target);
+            if (frame.phase === 'start') {
+              emitPointer(contact.target, 'pointerover', p, true);
+              emitPointer(contact.target, 'pointerenter', p, true);
+              emitPointer(contact.target, 'pointerdown', p, true);
+              emitTouch(contact.target, frame, p);
+              return;
+            }
+            if (frame.phase === 'move') {
+              if (contact.pointerActive) emitPointer(contact.target, 'pointermove', p, true);
+              emitTouch(contact.target, frame, p);
+              if (contact.pointerActive && Math.hypot(
+                p.clientX - contact.originX,
+                p.clientY - contact.originY,
+              ) >= PAN_SLOP_PX) {
+                closePointer(contact.target, 'pointercancel', p);
+                contact.pointerActive = false;
+              }
+              return;
+            }
+            if (contact.pointerActive) {
+              closePointer(contact.target, 'pointerup', p);
+            }
+            emitTouch(contact.target, frame, p);
+            contact = null;
           }
         }
       } catch {}
