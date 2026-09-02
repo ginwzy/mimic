@@ -4,13 +4,17 @@ import { JSDOM } from 'jsdom';
 import { CSD4CA_MODEL } from '../src/interaction/csd4ca.model.js';
 import { createInteractionSource } from '../src/interaction/dispatch.js';
 import { createInteractionPolicy } from '../src/interaction/policies.js';
-import { synthesizeInteraction } from '../src/interaction/synthesize.js';
+import { createInteractionSession, synthesizeInteraction } from '../src/interaction/synthesize.js';
+
+function synthesize(recipe: 'swipe' | 'tap', seed: string, sequence: number) {
+  return synthesizeInteraction(recipe, createInteractionSession(seed), sequence, 0);
+}
 
 test('CSD4CA interaction model is anonymous, compact and structurally complete', () => {
-  assert.equal(CSD4CA_MODEL.schema, 2);
-  assert.equal(CSD4CA_MODEL.compiler, 2);
+  assert.equal(CSD4CA_MODEL.schema, 3);
+  assert.equal(CSD4CA_MODEL.compiler, 3);
   assert.equal(CSD4CA_MODEL.frames, 16);
-  assert.equal(CSD4CA_MODEL.stride, 18);
+  assert.equal(CSD4CA_MODEL.stride, 13);
   assert.deepEqual(CSD4CA_MODEL.timingChannels, [
     'touchLogDuration', 'sensorStartOffset', 'sensorEndOffset',
   ]);
@@ -19,13 +23,23 @@ test('CSD4CA interaction model is anonymous, compact and structurally complete',
   assert.equal(CSD4CA_MODEL.source.doi, '10.5281/zenodo.17931118');
   assert.equal(CSD4CA_MODEL.groups.length, 6);
   assert.equal(CSD4CA_MODEL.groups.reduce((sum, group) => sum + group.count, 0), 21_162);
+  assert.equal(CSD4CA_MODEL.groups.reduce((sum, group) => sum + group.sessions.length, 0), 288);
+  assert.equal(CSD4CA_MODEL.groups.reduce((sum, group) => (
+    sum + group.sessions.reduce((groupSum, session) => groupSum + session.transitions.count, 0)
+  ), 0), 20_838);
   for (const group of CSD4CA_MODEL.groups) {
     assert.equal(group.direction, 'up');
     assert.equal(
       group.mean.length,
       CSD4CA_MODEL.frames * CSD4CA_MODEL.stride + CSD4CA_MODEL.timingChannels.length,
     );
-    assert.equal(group.components.length, 16);
+    assert.equal(group.components.length, 31);
+    assert.ok(group.sessions.every((session) => (
+      session.gestureCount >= CSD4CA_MODEL.calibration.minimumSessionPoseGestures
+      && session.gravity.length === 3
+      && session.gravity.every(Number.isFinite)
+      && Buffer.from(session.transitions.data, 'base64').byteLength === session.transitions.count * 10
+    )));
     assert.ok(group.components.every((component) => component.basis.length === group.mean.length));
     assert.ok(group.quality.varianceRetained >= 0.95);
     assert.ok(group.quality.crossModalCovarianceRetained >= 0.92);
@@ -33,10 +47,10 @@ test('CSD4CA interaction model is anonymous, compact and structurally complete',
 });
 
 test('interaction synthesis is model-backed, seeded, bounded and time ordered', () => {
-  const first = synthesizeInteraction('swipe', 'seed-a', 0);
-  const repeated = synthesizeInteraction('swipe', 'seed-a', 0);
-  const changed = synthesizeInteraction('swipe', 'seed-b', 0);
-  const tap = synthesizeInteraction('tap', 'seed-a', 0);
+  const first = synthesize('swipe', 'seed-a', 0);
+  const repeated = synthesize('swipe', 'seed-a', 0);
+  const changed = synthesize('swipe', 'seed-b', 0);
+  const tap = synthesize('tap', 'seed-a', 0);
 
   assert.deepEqual(repeated, first);
   assert.notDeepEqual(changed, first);
@@ -84,7 +98,7 @@ test('joint swipe synthesis retains calibrated sensor timing spread', () => {
   const startOffsets: number[] = [];
   const endOffsets: number[] = [];
   for (let index = 0; index < 1_000; index += 1) {
-    const frames = synthesizeInteraction('swipe', `timing-spread-${index}`, 0);
+    const frames = synthesize('swipe', `timing-spread-${index}`, 0);
     const touches = frames.filter((frame) => frame.kind === 'touch');
     const motions = frames.filter((frame) => frame.kind === 'motion');
     startOffsets.push(motions[0]!.at - touches[0]!.at);
@@ -97,6 +111,65 @@ test('joint swipe synthesis retains calibrated sensor timing spread', () => {
   assert.ok(Math.max(...startOffsets) >= 30);
   assert.ok(Math.min(...endOffsets) <= -30);
   assert.ok(Math.max(...endOffsets) >= 30);
+});
+
+test('interaction session preserves relative orientation and source pose continuity', () => {
+  const gravityDeltas: number[] = [];
+  const headingDeltas: number[] = [];
+  for (let index = 0; index < 1_000; index += 1) {
+    const session = createInteractionSession(`pose-session-${index}`);
+    const initial = synthesizeInteraction('swipe', session, 0, 120);
+    const followUp = synthesizeInteraction('swipe', session, 2, 2_700);
+    const initialMotion = initial.filter((frame) => frame.kind === 'motion');
+    const followUpMotion = followUp.filter((frame) => frame.kind === 'motion');
+    const initialOrientation = initial.filter((frame) => frame.kind === 'orientation');
+    const followUpOrientation = followUp.filter((frame) => frame.kind === 'orientation');
+
+    assert.equal(initialOrientation[0]!.alpha, 0);
+    for (const [motion, orientation] of initialMotion.map((frame, frameIndex) => (
+      [frame, initialOrientation[frameIndex]!] as const
+    ))) {
+      const [x, y, z] = motion.gravity;
+      assert.equal(orientation.beta, Number((Math.atan2(y, z) * 180 / Math.PI).toFixed(1)));
+      assert.equal(orientation.gamma, Number((Math.atan2(-x, Math.hypot(y, z)) * 180 / Math.PI).toFixed(1)));
+    }
+
+    const median = (values: readonly number[]) => {
+      const sorted = [...values].sort((left, right) => left - right);
+      return (sorted[7]! + sorted[8]!) / 2;
+    };
+    const baseline = (frames: typeof initialMotion) => [0, 1, 2].map((axis) => (
+      median(frames.map((frame) => frame.gravity[axis]!))
+    ));
+    const initialGravity = baseline(initialMotion);
+    const followUpGravity = baseline(followUpMotion);
+    gravityDeltas.push(Math.hypot(...initialGravity.map((value, axis) => value - followUpGravity[axis]!)));
+
+    const circularMean = (frames: typeof initialOrientation) => Math.atan2(
+      frames.reduce((sum, frame) => sum + Math.sin(frame.alpha * Math.PI / 180), 0),
+      frames.reduce((sum, frame) => sum + Math.cos(frame.alpha * Math.PI / 180), 0),
+    ) * 180 / Math.PI;
+    const headingDelta = circularMean(followUpOrientation) - circularMean(initialOrientation);
+    headingDeltas.push(Math.abs((headingDelta + 540) % 360 - 180));
+  }
+
+  gravityDeltas.sort((left, right) => left - right);
+  headingDeltas.sort((left, right) => left - right);
+  assert.ok(gravityDeltas[499]! < 0.8);
+  assert.ok(gravityDeltas[989]! < 5);
+  assert.ok(headingDeltas[499]! < 3);
+});
+
+test('interaction session conditions pose transitions on gesture spacing', () => {
+  const shortSession = createInteractionSession('pose-spacing');
+  const longSession = createInteractionSession('pose-spacing');
+  const shortInitial = synthesizeInteraction('swipe', shortSession, 0, 120);
+  const longInitial = synthesizeInteraction('swipe', longSession, 0, 120);
+  assert.deepEqual(shortInitial, longInitial);
+
+  const shortFollowUp = synthesizeInteraction('swipe', shortSession, 2, 520);
+  const longFollowUp = synthesizeInteraction('swipe', longSession, 2, 2_700);
+  assert.notDeepEqual(shortFollowUp, longFollowUp);
 });
 
 test('Akamai interaction policy separates joint swipe, tap and follow-up swipe', () => {
@@ -161,7 +234,7 @@ async function observeTap(cancelType?: string): Promise<readonly ObservedEvent[]
       });
     }, { capture: true, passive: false });
   }
-  const frames = synthesizeInteraction('tap', `cancel-${cancelType ?? 'none'}`, 0);
+  const frames = synthesize('tap', `cancel-${cancelType ?? 'none'}`, 0);
   dom.window.eval(createInteractionSource(frames));
   const end = frames.at(-1)?.at ?? 0;
   await new Promise((resolve) => setTimeout(resolve, end + 30));

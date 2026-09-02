@@ -4,7 +4,7 @@ import type { Data, ErrorInfo, Job, Plan, Result } from '../core/types.js';
 import type { Drivers, Engine, Runtime } from '../engine/types.js';
 import { createInteractionSource } from '../interaction/dispatch.js';
 import { createInteractionPolicy } from '../interaction/policies.js';
-import { synthesizeInteraction } from '../interaction/synthesize.js';
+import { createInteractionSession, synthesizeInteraction } from '../interaction/synthesize.js';
 import type { Feature, Op, PlanBind } from '../shape/types.js';
 import type { CaptureOptions, RuntimeOptions, TaskRequest } from './types.js';
 
@@ -230,6 +230,7 @@ export class RuntimeApplication {
         const adapter = job.interaction?.adapter ?? 'none';
         const policy = createInteractionPolicy(adapter);
         const interactionSeed = `${plan.id}\u0000${adapter}\u0000${job.interaction?.seed ?? ''}`;
+        const interactionSession = createInteractionSession(interactionSeed);
         let interactionSequence = 0;
         while (Date.now() - started < this.capture.deadlineMs
           && current.posts.filter((post) => post.len > 0).length < this.capture.maxPosts) {
@@ -237,7 +238,7 @@ export class RuntimeApplication {
           const postCount = current.posts.filter((post) => post.len > 0).length;
           const recipe = policy(elapsed, postCount);
           if (recipe !== null) {
-            const frames = synthesizeInteraction(recipe, interactionSeed, interactionSequence++);
+            const frames = synthesizeInteraction(recipe, interactionSession, interactionSequence++, elapsed);
             const dispatchResult = runtime.run(
               createInteractionSource(frames),
               { ...(job.timeout === undefined ? {} : { timeout: job.timeout }), trustedEvents: true },

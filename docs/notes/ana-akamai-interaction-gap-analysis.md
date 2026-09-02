@@ -695,8 +695,9 @@ used another reconstruction.
 
 #### Implemented offline repair
 
-Model schema 2 retains each stream's raw start and end before resampling. Touch
-and acceleration clocks have different origins and units, so the compiler now:
+Model schema 2 introduced calibrated physical timing; the session-pose upgrade
+retains it in schema 3. Touch and acceleration clocks have different origins
+and units, so the compiler:
 
 1. Converts the sensor clock with its captured `1,000,000` scale.
 2. Derives a robust median window-midpoint offset per
@@ -708,23 +709,20 @@ and acceleration clocks have different origins and units, so the compiler now:
    calibrated sensor start or end differs from the touch boundary by more than
    `150 ms`.
 5. Appends touch log-duration plus calibrated sensor start/end offsets to the
-   same PCA vector as the 16 x 18 values.
+   same PCA vector as the dynamic gesture channels.
 
 The stricter join accepts 21,162 upward swipes in the same six
-scenario/hand groups. Rank 4 retained as little as `70.2%` of measured
-cross-modal covariance, so the model now uses rank 16. Generation hard-fails
-unless every group retains at least `95%` total variance and `92%` cross-modal
-covariance; the current minima are `95.9413%` and `93.7575%` respectively.
-The generated TypeScript artifact is 502,536 bytes with SHA-256
-`9df300171590a61dd61e2e0403120d591988bf52a080db3bdfe03f181152e42d`.
+scenario/hand groups. Generation hard-fails unless every group retains at least
+`95%` total variance and `92%` cross-modal covariance. Schema 3's current rank
+and quality values are recorded in the session-pose section below.
 
 A 10,000-seed runtime probe of the compiled model produced these distributions:
 
 | Metric | p01 | median | p99 |
 | --- | ---: | ---: | ---: |
-| touch duration | 77 ms | 179 ms | 646 ms |
-| sensor duration | 75 ms | 172 ms | 639 ms |
-| sensor start minus touch start | -29 ms | 3 ms | 37 ms |
+| touch duration | 47 ms | 178 ms | 756 ms |
+| sensor duration | 46 ms | 173 ms | 741 ms |
+| sensor start minus touch start | -29 ms | 3 ms | 35 ms |
 | sensor end minus touch end | -46 ms | -4 ms | 40 ms |
 
 All 10,000 generated programs were time-ordered, had positive sensor duration,
@@ -779,25 +777,223 @@ challenge-dependent and are not fixed interaction contracts.
 
 Reusing the same public seed across independent samples, forcing only the same
 group, increasing frame count, or hard-coding the browser example's 28 ms lag
-would not have fixed these losses. The remaining limitation belongs to the next
-section: the preserved pose is still sampled from CSD4CA and is not conditioned
-to the current Profile or session orientation.
+would not have fixed these losses. The next section records the separate
+session-pose discontinuity and its fix.
 
 ### 4. Device pose is not conditioned to the session
 
-Representative values differ substantially:
+Status: fixed in compiler/model schema 3 and the capture-scoped interaction
+session.
+
+The browser's ANA values stayed approximately:
 
 ```text
-Browser gravity:     approximately (0.2, 0.1, 9.8)
-Browser orientation: approximately (359.9, 0.3, -1.0)
-
-mimic gravity:       approximately (-0.07, 4.41, 8.42)
-mimic orientation:   approximately (91.6, 0.4, 27.7)
+gravity:     (0.2, 0.1, 9.8)
+orientation: alpha=360 degrees, beta=0.2 degrees, gamma=-1 degree
 ```
 
-The browser device is close to flat in this sample; mimic represents a much
-more tilted device. The current adapter does not condition baseline pose on
-Profile, screen orientation, or the selected gesture session.
+The old mimic example was approximately `(-0.07, 4.41, 8.42)`. That vector is
+a plausible tilted phone, but the remaining problem is not whether one vector
+is individually plausible. It is whether all sensor events in one generated
+page session use one coherent physical pose and the correct Web API coordinate
+contract.
+
+#### Old loss points
+
+The compiler and runtime previously lost that contract at four layers:
+
+1. `vectorize()` treated the median accelerometer vector of each swipe as that
+   gesture's gravity baseline. The next swipe computes a new baseline from a
+   different source recording.
+2. PCA groups were only `scenario x hand x direction`. The compiler already
+   used `(session, scenario, user)` as the clock-calibration key, but discarded
+   that recording-session identity before producing the model.
+3. Every runtime `sample()` independently chose a weighted group and latent
+   coefficients. Initial and follow-up swipes therefore did not share a pose,
+   scenario, hand, or session reference. Their probability of selecting the
+   same exact current group is only `28.53%`.
+4. The capture loop called the synthesizer with no session state. More
+   importantly, the Profile does not
+   contain a gravity vector, heading reference, quaternion, or initial
+   `DeviceOrientationEvent` reading that could supply the missing pose.
+
+`Profile.screen.orientation` is not a substitute. It records display rotation,
+not physical tilt or heading. The Device Orientation specification defines the
+sensor coordinate frame against the device's standard orientation and states
+that rotating the screen does not rotate that frame relative to the device.
+
+#### Coordinate-contract correction
+
+Session conditioning could not stabilize the old orientation values as-is,
+because two compiler mappings were inconsistent with Chrome and the Web API:
+
+- The compiler derived `alpha` from the magnetometer, which is an Earth-heading
+  signal, then dispatched `DeviceOrientationEvent` with `absolute:false`.
+  Relative orientation is accelerometer/gyroscope based and uses an arbitrary
+  session reference. On the connected Xiaomi M2012K11AC running Chrome
+  `151.0.7922.173`, a fresh secure page emitted trusted relative events with
+  `absolute:false` and `alpha=0/360`, while preserving its real tilt in beta and
+  gamma. This is also the likely meaning of ANA's long-lived `alpha~360`, not
+  evidence that the phone happened to face magnetic heading zero.
+- `orientation()` emitted its calculated pitch as beta and roll as
+  gamma. The specified Z-X'-Y'' convention requires beta around the device x
+  axis and gamma around y. On the same device, measured gravity
+  `(3.1, 0.6, 9.3)` predicts `beta=atan2(0.6,9.3)=3.69 degrees` and
+  `gamma=atan2(-3.1,hypot(0.6,9.3))=-18.39 degrees`; Chrome reported about
+  `3.5/-18.6`. The compiler would output those two values in the opposite
+  fields.
+
+A 1,000-seed generated probe quantified the old defect. Beta and
+gamma each had about `28 degrees` median error against the value implied by the
+same frame's `accelerationIncludingGravity`. Comparing current gamma to the
+expected beta reduced median error to `0.49 degrees`; comparing current beta to
+expected gamma reduced it to `0.22 degrees`. The residual is PCA reconstruction
+error, not evidence for the existing field order.
+
+`DeviceMotionEvent.rotationRate` must remain separate from this correction.
+Despite the shared alpha/beta/gamma names, the current specification maps its
+three getters to x/y/z axis rates respectively, so the compiler's direct CSD4CA
+gyro x/y/z order is not the beta/gamma bug above.
+
+Schema 3 fixes both mappings. It stores only heading change relative to each
+gesture baseline, initializes the capture's heading reference from the first
+orientation frame, and emits `alpha=0/360` at that reference while retaining
+`absolute:false`. It no longer stores beta/gamma as independently compressed
+PCA channels. Runtime derives them from the final gravity vector using the
+Chrome/W3C x/y-axis formulas, so orientation and
+`accelerationIncludingGravity` cannot disagree through low-rank reconstruction.
+The gyro x/y/z mapping to `rotationRate.alpha/beta/gamma` remains unchanged.
+
+#### Measured old discontinuity
+
+The old generated distribution was broad but individually plausible:
+
+```text
+20,000 generated gesture starts
+gravity tilt from screen normal: median 32.6 degrees, p01/p99 7.9/59.2
+gravity magnitude:               median 9.52 m/s2, p01/p99 9.04/10.13
+```
+
+Independent initial/follow-up swipes were not session-plausible:
+
+```text
+10,000 generated session pairs        median pair delta    p99
+gravity baseline                      2.55 m/s2             8.15
+relative-orientation alpha            88.2 degrees          178.1
+current beta field                     5.7 degrees           24.5
+current gamma field                   11.5 degrees           47.5
+```
+
+CSD4CA contains the hierarchy needed to model this rather than inventing a
+constant. Its 50 participants performed two sessions under three scenarios.
+The final 21,162 accepted upward swipes cover 293 candidate
+`(session, scenario, user)` recording keys, with a median 71 accepted swipes per
+key. Within those source recordings, adjacent accepted swipe baselines were
+substantially more stable:
+
+```text
+source adjacent accepted swipes       median pair delta    p99
+gravity baseline                      0.459 m/s2            2.96
+magnetic heading                      1.30 degrees          71.0
+physical beta / gamma tilt            1.28 / 1.08 degrees   20.8 / 18.8
+```
+
+The long heading tail means a session cannot be represented by one rigid Euler
+offset. It includes both real handling changes and magnetometer disturbances;
+schema 3 preserves that empirical tail instead of clipping it to the quiet ANA
+example or adding Euler angles across the `359/0` wrap.
+
+#### Implemented hierarchy
+
+The schema-3 compiler and runtime now split pose from gesture dynamics:
+
+1. For every accepted gesture, the compiler extracts a median gravity baseline
+   and circular heading baseline. PCA receives only dynamic acceleration and
+   heading residuals relative to those baselines. The same reconstructed
+   acceleration drives both linear acceleration and
+   `accelerationIncludingGravity`, with session gravity added only to the
+   latter.
+2. Each `(session, scenario, user)` recording with at least 20 accepted
+   gestures becomes one anonymous pose template. Five lower-evidence
+   recordings are excluded as runtime templates, leaving 288. Participant,
+   session, and recording identifiers are not written to the artifact.
+3. A template keeps its own source-adjacent pose transitions rather than using
+   a group-wide drift pool. The artifact retains 20,838 transitions as compact
+   signed-int16 records containing elapsed gap, gravity delta, and circular
+   heading delta.
+4. Runtime chooses one template from the seeded `scenario x hand x direction`
+   group when the capture begins. Initial and follow-up swipes use independent
+   gesture PCA coefficients but share that template, group, relative heading
+   reference, and evolving gravity state. The sensorless tap does not advance
+   pose.
+5. The capture loop passes each action's existing elapsed time to the internal
+   synthesizer. A later swipe selects transitions from the same anonymous
+   session whose source gap is within 25% of the generated gesture gap (with a
+   250 ms minimum window); if none exists, it uses the nearest source gap.
+   This prevents sub-second adjustments and long re-grips from being mixed
+   without regard to timing.
+
+The public adapter, Job schema, immutable Plan, and Engine ABI are unchanged.
+Creating the session and evolving it remain private capture-runtime behavior;
+the same seed reproduces the selected anonymous session, transitions, and
+gesture residuals.
+
+Removing duplicated absolute-pose channels raised the dynamic model's effective
+rank requirement. Rank 31 is the smallest tested rank that keeps the existing
+quality floor: the weakest group retains `95.0394%` total variance and
+`96.6739%` cross-modal covariance. The artifact contains 16 x 13 dynamic values
+plus three timing values per gesture and is 1,048,253 bytes (SHA-256
+`27a2b166cb013d513825e6a65e25733f09b791138d6aaa856657f4e63543023e`).
+
+At the policy's 2580 ms initial-to-follow-up gap, 10,000 seeded runtime pairs
+now measure:
+
+```text
+schema-3 generated session pairs      median pair delta    p99
+gravity baseline                      0.684 m/s2            3.89
+relative-orientation alpha             1.99 degrees          109.3
+physical beta / gamma tilt             2.05 / 1.80 degrees   18.7 / 13.5
+```
+
+The heading tail is not a new independent-population jump. Sampling the encoded
+same-session source transitions through the same 2580 ms gap filter gives
+median/p99 heading `2.0/121.5 degrees` and gravity `0.689/4.06 m/s2`; generated
+values track that source-conditioned distribution. This is intentionally not a
+zero-drift model optimized for the quiet browser example.
+
+The final ANA smoke used ABCK GET flow 253 and POST flows 254-264. All eleven
+POSTs returned HTTP 201 and `_abck` reached `~0~`; verify ended separately at an
+edge HTTP 403. Body 260 decoded with file hash `1472628`. Its first rows were:
+
+```text
+dme accelerationIncludingGravity: (-0.99, 7.17, 4.44)
+doe: alpha=0.00, beta=58.20, gamma=6.70
+```
+
+That gravity predicts beta `58.22 degrees` and gamma `6.68 degrees`, within
+`0.02 degrees` of the serialized values, and alpha starts at the relative
+session reference. Akamai's ten-row motion buffer fills during the first swipe,
+so this payload does not expose the follow-up pose; cross-gesture continuity is
+covered by full event-stream tests and the source-distribution probe, not
+claimed from absent second-swipe `dme`/`doe` rows.
+
+Profile-conditioned hardware behavior is a separate later layer. CSD4CA was
+captured on one Pixel 6a, while ANA/Cebu can select Profiles for other devices.
+The current corpus cannot support truthful per-device sensor noise, calibration,
+or cadence selection. That requires captures from multiple known devices and a
+model-family selector; copying Pixel 6a distributions into arbitrary Profile
+metadata would only relabel the same evidence.
+
+The following alternatives remain intentionally excluded:
+
+- rotating sensor values by `screen.orientation.angle`;
+- forcing the ANA example `(0.2,0.1,9.8)` for every capture;
+- selecting the same scenario/hand group while still mixing all recording
+  sessions inside that group's absolute-pose PCA;
+- reusing all PCA coefficients across gestures, which would also duplicate the
+  touch and motion trajectory;
+- subtracting or adding independent Euler baselines after reconstruction;
+- adding uncaptured pose values to Profile documents and labeling them derived.
 
 ### 5. The policy still emits a limited gesture set
 
@@ -916,6 +1112,8 @@ well enough to model directly.
    events and a follow-up swipe to flush the completed ABCK state.
 5. Reconstruct each swipe's touch, motion, and orientation from one model
    sample with calibrated cross-stream timing and measured covariance quality.
+6. Model relative orientation and one anonymous, gap-conditioned CSD4CA pose
+   session across all gestures in a capture.
 
 ### Priority 1
 
@@ -923,7 +1121,8 @@ well enough to model directly.
 2. Model gesture selection and spacing as a session distribution rather than a
    fixed swipe/tap/swipe sequence.
 3. Model page scroll offsets and distinct page/client/screen coordinates.
-4. Condition baseline pose and sensor cadence on the Profile/session.
+4. Condition sensor hardware/noise and cadence on Profile only after obtaining
+   evidence from more than the current single CSD4CA device.
 
 ### Priority 2
 
@@ -944,14 +1143,21 @@ It should demonstrate all of the following in a decrypted capture:
    and compatibility mouse only after touch completion.
 4. Motion/orientation values come from the same reconstructed model sample as
    the touch trajectory and retain the compiled cross-stream timing relation.
-5. More than one gesture can occur without restoring injected customer-script
+5. Relative `deviceorientation` uses one session heading reference,
+   `absolute:false`, and beta/gamma values consistent with the same frames'
+   gravity vectors; rotation-rate axis semantics remain independently tested.
+6. Initial and follow-up gesture pose deltas follow source within-recording,
+   gap-conditioned CSD4CA distributions rather than independent population
+   draws or zero-drift constants, while preserving one scenario and hand for
+   the capture.
+7. More than one gesture can occur without restoring injected customer-script
    wrappers.
-6. At least one gesture uses a non-document target.
-7. Page coordinates can differ from client coordinates when the page is
+8. At least one gesture uses a non-document target.
+9. Page coordinates can differ from client coordinates when the page is
    scrolled.
-8. A repeated fixed seed reproduces the complete multi-stream event program.
-9. Different seeds vary the program without violating event order.
-10. ABCK body count, `_abck ~0~`, and the final business response are reported
+10. A repeated fixed seed reproduces the complete multi-stream event program.
+11. Different seeds vary the program without violating event order.
+12. ABCK body count, `_abck ~0~`, and the final business response are reported
     separately.
 
 ## Non-conclusion
@@ -971,12 +1177,19 @@ remain separate diagnostic dimensions.
   and compatibility mouse mapping.
 - [MDN Pointer events](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events):
   interface and button-state reference.
+- [W3C Device Orientation and Motion](https://www.w3.org/TR/orientation-event/):
+  device coordinate frame, relative versus absolute reference systems,
+  Z-X'-Y'' orientation angles, and independent rotation-rate axis semantics.
+- [CSD4CA dataset](https://doi.org/10.5281/zenodo.17931118): participant,
+  recording-session, scenario, hand, and synchronized sensor provenance used
+  for the anonymous session-pose analysis.
 - Local Chromium 150.0.7871.124 CDP input probe: trusted tap and swipe event
   order, contact geometry, pressure, implicit capture, and pan cancellation.
 - Connected Xiaomi M2012K11AC with Android Chrome 151.0.7922.173: mobile
   viewport CDP taps, short drags and cancellation probes, plus a system-level
   `adb input tap` confirmation of constructor, ordering, source-capability,
-  and button-state behavior.
+  and button-state behavior; a separate secure-page sensor probe established
+  relative alpha, beta/gamma, gravity, and `absolute:false` semantics.
 - ANA Android browser payloads under
   `~/Desktop/akamai-www.ana.co.jp-20260901-084619/results/`: Akamai `pev`,
   `tev`, and `mev` encoding and target-session timing.

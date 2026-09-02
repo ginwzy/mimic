@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import json
@@ -16,8 +17,8 @@ from typing import Iterator, Mapping, Sequence
 import numpy as np
 
 
-COMPILER_VERSION = 2
-MODEL_SCHEMA = 2
+COMPILER_VERSION = 3
+MODEL_SCHEMA = 3
 SCREEN_WIDTH = 1080
 SCREEN_HEIGHT = 2400
 QUANTIZATION = 4096
@@ -25,26 +26,29 @@ SENSOR_TIME_SCALE = 1_000_000
 MIN_DURATION_MS = 40
 MAX_DURATION_MS = 2_000
 MAX_BOUNDARY_OFFSET_MS = 150
+# Sparse recording keys fall back to a broader session/user clock only below this evidence floor.
 MIN_CLOCK_CALIBRATION_SAMPLES = 20
+# A pose center below this evidence floor is too sensitive to individual gestures.
+MIN_SESSION_POSE_GESTURES = 20
 MIN_VARIANCE_RETAINED = 0.95
 MIN_CROSS_MODAL_COVARIANCE_RETAINED = 0.92
 CHANNELS = (
     "touchX", "touchY", "radiusX", "radiusY", "force",
     "accelerationX", "accelerationY", "accelerationZ",
-    "gravityX", "gravityY", "gravityZ",
     "rotationAlpha", "rotationBeta", "rotationGamma",
-    "orientationSinAlpha", "orientationCosAlpha", "orientationBeta", "orientationGamma",
+    "orientationSinAlpha", "orientationCosAlpha",
 )
 SCALES = np.asarray((
     1, 1, 0.1, 0.1, 1,
     10, 10, 10,
-    10, 10, 10,
     180, 180, 180,
-    1, 1, 90, 90,
+    1, 1,
 ), dtype=np.float64)
 TIMING_CHANNELS = ("touchLogDuration", "sensorStartOffset", "sensorEndOffset")
 # A 25 ms unit keeps physical phase variation represented in the retained PCA rank.
 TIMING_SCALES = np.asarray((1, 25, 25), dtype=np.float64)
+# Ten-millisecond gaps, milligravity deltas, and tenth-degree heading deltas fit signed int16.
+TRANSITION_QUANTIZATION = np.asarray((0.1, 1000, 1000, 1000, 10), dtype=np.float64)
 SCENARIOS = {"Normal": "normal", "Walking": "walking", "Stressful": "stressful"}
 HANDS = {"l": "left", "r": "right"}
 FILES = {
@@ -76,6 +80,26 @@ class SampledGroup:
     values: np.ndarray | None
 
 
+@dataclass(frozen=True)
+class GestureSample:
+    swipe_id: int
+    clock_key: tuple[str, str, str]
+    key: tuple[str, str, str]
+    timing: tuple[float, float, float]
+    touch: np.ndarray
+    gravity: np.ndarray
+    linear_acceleration: np.ndarray
+    rotation: np.ndarray
+    heading: np.ndarray
+    heading_center: float
+
+
+@dataclass(frozen=True)
+class SessionPose:
+    gravity: np.ndarray
+    gesture_count: int
+
+
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path, help="directory containing the four CSD4CA CSV files")
@@ -86,7 +110,7 @@ def arguments() -> argparse.Namespace:
         help="generated TypeScript module",
     )
     parser.add_argument("--frames", type=int, default=16)
-    parser.add_argument("--rank", type=int, default=16)
+    parser.add_argument("--rank", type=int, default=31)
     parser.add_argument("--min-group", type=int, default=20)
     parser.add_argument("--check", action="store_true", help="fail instead of updating a stale output")
     return parser.parse_args()
@@ -233,13 +257,12 @@ def direction(touch: np.ndarray) -> str | None:
     return "down" if delta_y > 0 else "up"
 
 
-def orientation(acceleration: np.ndarray, magnetometer: np.ndarray) -> np.ndarray:
-    output = np.zeros((acceleration.shape[0], 4), dtype=np.float64)
+def headings(acceleration: np.ndarray, magnetometer: np.ndarray) -> np.ndarray:
+    output = np.zeros(acceleration.shape[0], dtype=np.float64)
     for index, (gravity, magnetic) in enumerate(zip(acceleration, magnetometer, strict=True)):
         gx, gy, gz = gravity
         norm = math.sqrt(gx * gx + gy * gy + gz * gz)
         if norm == 0:
-            output[index] = (0, 1, 0, 0)
             continue
         gx, gy, gz = gx / norm, gy / norm, gz / norm
         roll = math.atan2(gy, gz)
@@ -251,8 +274,7 @@ def orientation(acceleration: np.ndarray, magnetometer: np.ndarray) -> np.ndarra
             + my * math.cos(roll)
             - mz * math.sin(roll) * math.cos(pitch)
         )
-        alpha = math.atan2(-horizontal_y, horizontal_x)
-        output[index] = (math.sin(alpha), math.cos(alpha), math.degrees(pitch), math.degrees(roll))
+        output[index] = math.atan2(-horizontal_y, horizontal_x)
     return output
 
 
@@ -290,13 +312,14 @@ def clock_offsets(
     return calibrated_offsets
 
 
-def vectorize(
+def prepare_gesture(
+    swipe_id: int,
     touch_group: SampledGroup,
     acceleration_group: SampledGroup,
     gyroscope_group: SampledGroup,
     magnetometer_group: SampledGroup,
     sensor_clock_offset: float,
-) -> tuple[tuple[str, str, str], tuple[float, float, float], np.ndarray] | None:
+) -> GestureSample | None:
     if not (touch_group.scenario == acceleration_group.scenario == gyroscope_group.scenario == magnetometer_group.scenario):
         return None
     if not (touch_group.clock_key == acceleration_group.clock_key == gyroscope_group.clock_key == magnetometer_group.clock_key):
@@ -336,14 +359,116 @@ def vectorize(
     gravity = np.median(acceleration, axis=0)
     linear_acceleration = acceleration - gravity
     rotation = np.degrees(gyroscope)
-    orientation_values = orientation(acceleration, magnetometer)
-    raw = np.column_stack((touch_values, linear_acceleration, acceleration, rotation, orientation_values))
-    if raw.shape[1] != len(CHANNELS) or not np.isfinite(raw).all():
+    heading = headings(acceleration, magnetometer)
+    if not all(np.isfinite(values).all() for values in (touch_values, acceleration, rotation, heading)):
         return None
     timing = (math.log(touch_duration), sensor_start_offset, sensor_end_offset)
-    standardized = np.concatenate(((raw / SCALES).reshape(-1), np.asarray(timing) / TIMING_SCALES))
     key = (touch_group.scenario, touch_group.hand, swipe_direction)
-    return key, timing, standardized
+    return GestureSample(
+        swipe_id,
+        touch_group.clock_key,
+        key,
+        timing,
+        touch_values,
+        gravity,
+        linear_acceleration,
+        rotation,
+        heading,
+        circular_mean(heading),
+    )
+
+
+def circular_mean(values: np.ndarray) -> float:
+    return math.atan2(float(np.mean(np.sin(values))), float(np.mean(np.cos(values))))
+
+
+def session_key(gesture: GestureSample) -> tuple[str, str, str, str]:
+    return (*gesture.clock_key, gesture.key[1])
+
+
+def session_poses(gestures: Sequence[GestureSample]) -> dict[tuple[str, str, str, str], SessionPose]:
+    by_recording: dict[tuple[str, str, str, str], list[GestureSample]] = defaultdict(list)
+    for gesture in gestures:
+        by_recording[session_key(gesture)].append(gesture)
+    return {
+        key: SessionPose(
+            np.median(np.stack([gesture.gravity for gesture in values]), axis=0),
+            len(values),
+        )
+        for key, values in by_recording.items()
+    }
+
+
+def vectorize(gesture: GestureSample) -> np.ndarray:
+    relative_heading = gesture.heading - gesture.heading_center
+    orientation_values = np.column_stack((np.sin(relative_heading), np.cos(relative_heading)))
+    raw = np.column_stack((
+        gesture.touch,
+        gesture.linear_acceleration,
+        gesture.rotation,
+        orientation_values,
+    ))
+    if raw.shape[1] != len(CHANNELS) or not np.isfinite(raw).all():
+        raise ValueError("invalid prepared CSD4CA gesture")
+    return np.concatenate(((raw / SCALES).reshape(-1), np.asarray(gesture.timing) / TIMING_SCALES))
+
+
+def angle_delta(left: float, right: float) -> float:
+    return (left - right + math.pi) % (2 * math.pi) - math.pi
+
+
+def pose_transitions(
+    gestures: Sequence[GestureSample],
+) -> dict[tuple[str, str, str, str], list[list[float]]]:
+    by_recording: dict[tuple[str, str, str, str], list[GestureSample]] = defaultdict(list)
+    for gesture in gestures:
+        by_recording[session_key(gesture)].append(gesture)
+    output: dict[tuple[str, str, str, str], list[list[float]]] = defaultdict(list)
+    for key, values in by_recording.items():
+        ordered = sorted(values, key=lambda gesture: gesture.swipe_id)
+        for previous, current in zip(ordered, ordered[1:]):
+            gravity_delta = current.gravity - previous.gravity
+            output[key].append([
+                round(float(current.swipe_id - previous.swipe_id)),
+                *(round(float(value), 3) for value in gravity_delta),
+                round(math.degrees(angle_delta(current.heading_center, previous.heading_center)), 1),
+            ])
+    return output
+
+
+def encode_transitions(values: Sequence[Sequence[float]]) -> dict[str, object]:
+    source = np.asarray(values, dtype=np.float64)
+    if source.ndim != 2 or source.shape[1] != len(TRANSITION_QUANTIZATION):
+        raise ValueError("pose transitions must contain gap, gravity xyz, and heading delta")
+    quantized = np.rint(source * TRANSITION_QUANTIZATION).astype(np.int64)
+    if np.any(quantized < -32768) or np.any(quantized > 32767):
+        raise ValueError("pose transition exceeds int16 quantization range")
+    data = quantized.astype("<i2").tobytes()
+    return {"count": len(values), "data": base64.b64encode(data).decode("ascii")}
+
+
+def pose_templates(
+    gestures: Sequence[GestureSample],
+    poses: Mapping[tuple[str, str, str, str], SessionPose],
+    transitions: Mapping[tuple[str, str, str, str], list[list[float]]],
+) -> dict[tuple[str, str, str], list[dict[str, object]]]:
+    groups: dict[tuple[str, str, str], dict[tuple[str, str, str, str], SessionPose]] = defaultdict(dict)
+    for gesture in gestures:
+        key = session_key(gesture)
+        groups[gesture.key][key] = poses[key]
+    output: dict[tuple[str, str, str], list[dict[str, object]]] = {}
+    for group, values in groups.items():
+        anonymous = [
+            {
+                "gestureCount": pose.gesture_count,
+                "gravity": [round(float(value), 6) for value in pose.gravity],
+                "transitions": encode_transitions(transitions[key]),
+            }
+            for key, pose in values.items()
+            if pose.gesture_count >= MIN_SESSION_POSE_GESTURES and transitions.get(key)
+        ]
+        output[group] = sorted(anonymous, key=lambda pose: (*pose["gravity"], pose["gestureCount"]))
+    return output
 
 
 def stable_component(component: np.ndarray) -> np.ndarray:
@@ -361,6 +486,7 @@ def quantize(values: np.ndarray) -> list[int]:
 def compile_groups(
     samples: dict[tuple[str, str, str], list[np.ndarray]],
     timings: dict[tuple[str, str, str], list[tuple[float, float, float]]],
+    sessions: Mapping[tuple[str, str, str], list[dict[str, object]]],
     frames: int,
     rank: int,
     minimum: int,
@@ -421,6 +547,7 @@ def compile_groups(
             "hand": hand,
             "direction": swipe_direction,
             "count": len(vectors),
+            "sessions": sessions[key],
             "timingBounds": {
                 "touchDuration": [round(float(np.min(touch_durations)), 3), round(float(np.max(touch_durations)), 3)],
                 "sensorStartOffset": [round(float(np.min(sensor_starts)), 3), round(float(np.max(sensor_starts)), 3)],
@@ -444,6 +571,7 @@ def module_text(model: dict[str, object]) -> str:
         "import {\n"
         "  INTERACTION_CHANNELS, INTERACTION_SCALES,\n"
         "  INTERACTION_TIMING_CHANNELS, INTERACTION_TIMING_SCALES,\n"
+        "  INTERACTION_TRANSITION_QUANTIZATION,\n"
         "} from './model.js';\n"
         "import type { InteractionModel } from './model.js';\n\n"
         f"const DATA = {body} as const;\n\n"
@@ -453,6 +581,7 @@ def module_text(model: dict[str, object]) -> str:
         "  scales: INTERACTION_SCALES,\n"
         "  timingChannels: INTERACTION_TIMING_CHANNELS,\n"
         "  timingScales: INTERACTION_TIMING_SCALES,\n"
+        "  transitionQuantization: INTERACTION_TRANSITION_QUANTIZATION,\n"
         "};\n"
     )
 
@@ -466,8 +595,7 @@ def main() -> int:
     if missing:
         raise FileNotFoundError(f"missing CSD4CA files: {', '.join(missing)}")
 
-    samples: dict[tuple[str, str, str], list[np.ndarray]] = {}
-    timings: dict[tuple[str, str, str], list[tuple[float, float, float]]] = {}
+    gestures: list[GestureSample] = []
     touch_groups = sampled_groups(paths["touch"], (8, 9, 10, 11, 12), options.frames)
     acceleration_groups = sampled_groups(paths["acceleration"], (9, 10, 11), options.frames)
     sensor_windows = {
@@ -491,16 +619,22 @@ def main() -> int:
         if sensor_clock_offset is None:
             rejected += 1
             continue
-        sample = vectorize(touch, acceleration, gyroscope, magnetometer, sensor_clock_offset)
-        if sample is None:
+        gesture = prepare_gesture(swipe_id, touch, acceleration, gyroscope, magnetometer, sensor_clock_offset)
+        if gesture is None:
             rejected += 1
             continue
-        key, timing, vector = sample
-        samples.setdefault(key, []).append(vector)
-        timings.setdefault(key, []).append(timing)
+        gestures.append(gesture)
         accepted += 1
 
-    groups = compile_groups(samples, timings, options.frames, options.rank, options.min_group)
+    poses = session_poses(gestures)
+    samples: dict[tuple[str, str, str], list[np.ndarray]] = {}
+    timings: dict[tuple[str, str, str], list[tuple[float, float, float]]] = {}
+    for gesture in gestures:
+        samples.setdefault(gesture.key, []).append(vectorize(gesture))
+        timings.setdefault(gesture.key, []).append(gesture.timing)
+    transitions = pose_transitions(gestures)
+    sessions = pose_templates(gestures, poses, transitions)
+    groups = compile_groups(samples, timings, sessions, options.frames, options.rank, options.min_group)
     model = {
         "schema": MODEL_SCHEMA,
         "compiler": COMPILER_VERSION,
@@ -510,6 +644,8 @@ def main() -> int:
         "calibration": {
             "sensorTimeScale": SENSOR_TIME_SCALE,
             "clockCalibration": "median-window-midpoint-by-session-scenario-user",
+            "poseNormalization": "gesture-baseline-residuals-with-session-gravity-heading-transitions",
+            "minimumSessionPoseGestures": MIN_SESSION_POSE_GESTURES,
             "minimumDurationMs": MIN_DURATION_MS,
             "maximumDurationMs": MAX_DURATION_MS,
             "maxBoundaryOffsetMs": MAX_BOUNDARY_OFFSET_MS,
@@ -536,6 +672,12 @@ def main() -> int:
         "accepted": accepted,
         "rejected": rejected,
         "groups": len(groups),
+        "sessions": sum(len(group["sessions"]) for group in groups),
+        "transitions": sum(
+            session["transitions"]["count"]
+            for group in groups
+            for session in group["sessions"]
+        ),
         "bytes": len(text.encode("utf-8")),
         "changed": current != text,
         "minimumVarianceRetained": min(group["quality"]["varianceRetained"] for group in groups),
