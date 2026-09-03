@@ -217,12 +217,18 @@ npm run flow -- ana none
 npm run flow -- ana reqable
 npm run flow -- cebu lumi
 npm run flow -- ana mitm
+npm run flow -- ana lumi --total 20 --concurrency 4
 ```
 
 Reqable、Lumi 和 mitm 配置分别作为 `flow/run.ts` 中 `runAna()`、`runCebu()` 的局部字面量。每次运行
 从 `./profiles` 下可用的 Android Chrome profiles 中随机选择一个 profile。两个 supplier 不共享全局
 配置，也不读取环境变量。CLI 将 flow 日志写入 stderr，stdout 只输出不含 cookies 和响应 body 的
 JSON 摘要。使用 `npm run flow -- --help` 查看参数。
+
+批量模式通过 `--total` 设置总运行次数、`--concurrency` 设置最大并发数。每个任务独立创建 flow
+和代理 session；stderr 使用任务编号前缀输出实时 flow 日志，并在每个任务结束时输出累计成功数、
+失败数和成功率。stdout 最后只输出批次统计 JSON。ANA verify 和 Cebu search 的 `2xx`、`401` 都
+计为成功；单个任务异常计为失败，不会中断同批其他任务。
 
 也可以从代码直接调用：
 
@@ -278,6 +284,7 @@ const result = await runAnaFlow({
 ANA/Cebu 的 wire profile 固定为 Chrome 145/Android；`profile` 只控制 mimic 中的 JS/DOM/interaction
 环境。两者是独立配置。网络、profile 或 capture 失败会拒绝 Promise；最终 API 的 HTTP 状态保留在
 `verify`/`search` 结果中。结果包含完整 cookie 仅用于调用方调试和后续请求,不应直接写入日志。
+ANA 执行 verify 前会先用当前会话生成的 cookies 提交固定的 `flight-search` 表单导航请求。
 
 ## CLI
 

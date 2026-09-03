@@ -210,7 +210,11 @@ class CebuRequestClient implements CebuRequest {
       cookies: ['_abck', 'bm_s'],
       headerOrder: SEARCH_HEADER_ORDER,
     });
-    return { status: response.status, body: response.body, success: response.status === 401 };
+    return {
+      status: response.status,
+      body: response.body,
+      success: response.status === 401 || (response.status >= 200 && response.status < 300),
+    };
   }
 
   cookies(url: string = CEBU_SITE): string {

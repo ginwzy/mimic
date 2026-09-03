@@ -28,6 +28,8 @@ export type { AnaFlowOptions, AnaFlowResult } from './suppliers/ana/flow.js';
 export {
   ANA_DEFAULT_CREDENTIALS,
   ANA_DEFAULT_VERIFY_BODY,
+  ANA_FLIGHT_SEARCH_BODY,
+  ANA_FLIGHT_SEARCH_URL,
   ANA_SELECT_URL,
   ANA_SITE,
   ANA_VERIFY_URL,

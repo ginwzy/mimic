@@ -8,6 +8,7 @@ import {
 
 export const ANA_SITE = 'https://www.ana.co.jp';
 export const ANA_SELECT_URL = 'https://aswbe.ana.co.jp/webapps/reservation/common/system-error';
+export const ANA_FLIGHT_SEARCH_URL = 'https://aswbe.ana.co.jp/webapps/reservation/flight-search?CONNECTION_KIND=JPN&LANG=ja';
 export const ANA_VERIFY_URL = 'https://space.ana.co.jp/aswbe-search/api/v1/roundtrip-owd';
 
 const ASWBE_ORIGIN = 'https://aswbe.ana.co.jp';
@@ -23,6 +24,13 @@ const BROWSER_HEADERS = {
   'sec-ch-ua-platform': '"Android"',
 } as const;
 
+const FLIGHT_SEARCH_HEADER_ORDER = [
+  'host', 'content-length', 'cache-control', 'sec-ch-ua', 'sec-ch-ua-mobile',
+  'sec-ch-ua-platform', 'upgrade-insecure-requests', 'content-type', 'user-agent',
+  'origin', 'accept', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-user',
+  'sec-fetch-dest', 'referer', 'accept-encoding', 'accept-language', 'cookie', 'priority',
+] as const;
+
 const VERIFY_HEADER_ORDER = [
   'host', 'content-length', 'user-agent', 'accept', 'accept-encoding', 'content-type',
   'sec-ch-ua-platform', 'authorization', 'sys_id', 'client_id', 'client_secret',
@@ -31,6 +39,7 @@ const VERIFY_HEADER_ORDER = [
 ] as const;
 
 export const ANA_DEFAULT_VERIFY_BODY = '{"itineraries":[{"originLocationCode":"TYO","destinationLocationCode":"HNL","departureDate":"2026-09-27"}],"travelers":{"ADT":1,"B15":0,"CHD":0,"INF":0},"fare":{"isMixedCabin":false,"cabinClass":"eco","fareOptionType":"0"},"searchPreferences":{"getAirCalendarOnly":false,"getLatestOperation":true}}';
+export const ANA_FLIGHT_SEARCH_BODY = 'search=true&trip=roundtrip&origin=HND&destination=NRT&cabinClass=eco&fareOption=21&departureDate=2026-09-03&returnDate=2026-09-04&ADT=1&B15=0&CHD=0&INF=0&promotionCode=&flexibleDates=false';
 
 export interface AnaCredentials {
   authorization: string;
@@ -74,6 +83,7 @@ export interface AnaRequest {
   getScript(url: string): Promise<string>;
   postAbck(url: string, body: string): Promise<void>;
   postBms(url: string, body: string): Promise<void>;
+  postFlightSearch(): Promise<void>;
   verify(body?: string): Promise<AnaVerifyResult>;
   cookies(url?: string): string;
   close(): Promise<void>;
@@ -182,6 +192,29 @@ class AnaRequestClient implements AnaRequest {
     requireStatus(response, 'BMS POST');
   }
 
+  async postFlightSearch(): Promise<void> {
+    const response = await this.post(ANA_FLIGHT_SEARCH_URL, ANA_FLIGHT_SEARCH_BODY, {
+      'cache-control': 'max-age=0',
+      'sec-ch-ua': '"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
+      'sec-ch-ua-mobile': '?1',
+      'sec-ch-ua-platform': '"Android"',
+      'upgrade-insecure-requests': '1',
+      'content-type': 'application/x-www-form-urlencoded',
+      'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36',
+      origin: ANA_SITE,
+      accept: DOC_ACCEPT,
+      'sec-fetch-site': 'same-site',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-user': '?1',
+      'sec-fetch-dest': 'document',
+      referer: `${ANA_SITE}/`,
+      'accept-encoding': 'gzip, deflate, br, zstd',
+      'accept-language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+      priority: 'u=0, i',
+    }, 'flight-search POST', { headerOrder: FLIGHT_SEARCH_HEADER_ORDER });
+    requireStatus(response, 'flight-search POST');
+  }
+
   async verify(body = ANA_DEFAULT_VERIFY_BODY): Promise<AnaVerifyResult> {
     const cookieNames = this.client.cookieHeader(ANA_VERIFY_URL).split('; ').flatMap((cookie) => {
       const index = cookie.indexOf('=');
@@ -210,7 +243,7 @@ class AnaRequestClient implements AnaRequest {
       status: response.status,
       body: response.body,
       class: classification,
-      success: classification === 'ok_2xx',
+      success: classification === 'ok_2xx' || response.status === 401,
     };
   }
 

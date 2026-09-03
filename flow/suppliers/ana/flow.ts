@@ -51,7 +51,7 @@ function cookieNames(cookieHeader: string): string[] {
 function selectBodies(bodies: readonly string[], postCount: number | undefined): string[] {
   if (postCount !== undefined) return bodies.slice(0, Math.max(0, postCount));
   if (bodies.length <= 2) return [...bodies];
-  return [...bodies.slice(0, 2), ...bodies.slice(-1)];
+  return [...bodies.slice(0, 2), ...bodies.slice(-3)];
 }
 
 async function resolveProfile(explicit: string | undefined, profilesRoot: string | undefined): Promise<string> {
@@ -127,6 +127,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       bmsPosted = true;
     }
 
+    if (options.verify === true) await request.postFlightSearch();
     const cookies = request.cookies();
     const abckTilde0 = cookieValue(cookies, '_abck')?.includes('~0~') ?? false;
     const verify = options.verify === true ? await request.verify(options.verifyBody) : undefined;
@@ -145,4 +146,4 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
   }
 }
 
-export { ANA_SELECT_URL, ANA_VERIFY_URL } from './request.js';
+export { ANA_FLIGHT_SEARCH_URL, ANA_SELECT_URL, ANA_VERIFY_URL } from './request.js';
