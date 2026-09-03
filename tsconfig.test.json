@@ -4,6 +4,6 @@
     "outDir": "build/test",
     "declaration": false
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "include": ["src/**/*.ts", "flow/**/*.ts", "test/**/*.ts"],
   "exclude": ["build/**"]
 }

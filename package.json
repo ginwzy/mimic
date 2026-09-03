@@ -21,6 +21,11 @@
       "import": "./dist/src/http/public.js",
       "default": "./dist/src/http/public.js"
     },
+    "./flow": {
+      "types": "./dist/flow/public.d.ts",
+      "import": "./dist/flow/public.js",
+      "default": "./dist/flow/public.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -36,6 +41,7 @@
   ],
   "scripts": {
     "mimic": "node dist/src/cli.js",
+    "flow": "npm run build --silent && node dist/flow/run.js",
     "diff": "node dist/src/cli.js diff",
     "build": "node scripts/build.js production",
     "build:test": "node scripts/build.js test",
@@ -63,6 +69,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@zionsssx/freq-js": "0.1.4",
     "ajv": "8.20.0",
     "jsdom": "29.1.1"
   },

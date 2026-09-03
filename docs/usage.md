@@ -15,6 +15,7 @@
 | 对比真机结构基线 | - | `diff` | - |
 | 从真机生成 Capture/Profile/Shape | - | `collect` | 独立采集服务 |
 | 提供执行服务 | `mimic/http` | `serve` | - |
+| 执行 supplier 请求流程 | `mimic/flow` | - | - |
 
 `capture` 与 `collect` 是不同任务：前者在模拟 Runtime 中运行脚本并记录出站请求体;后者让真实浏览器
 访问采集页,保存不可变的设备身份与结构证据。
@@ -203,6 +204,80 @@ if (result.ok) {
 
 任务自身的解析、编译、安装、运行和编码失败通常以 `ok: false` 返回。错误的 SDK 调用方式、无法
 structured-clone 的输入、队列满或 client 已关闭会拒绝 Promise,应另外用 `try/catch` 处理。
+
+## Flow
+
+`mimic/flow` 在 Node 主线程组合 `@zionsssx/freq-js` 请求和进程内 mimic capture。ANA/Cebu 各自维护
+请求协议和执行顺序,不会把真实网络带入 Plan 或 worker。
+
+仓库内可用统一入口快速运行完整 flow。ANA 默认执行 verify，Cebu 默认执行 search：
+
+```bash
+npm run flow -- ana none
+npm run flow -- ana reqable
+npm run flow -- cebu lumi
+npm run flow -- ana mitm
+```
+
+Reqable、Lumi 和 mitm 配置分别作为 `flow/run.ts` 中 `runAna()`、`runCebu()` 的局部字面量。每次运行
+从 `./profiles` 下可用的 Android Chrome profiles 中随机选择一个 profile。两个 supplier 不共享全局
+配置，也不读取环境变量。CLI 将 flow 日志写入 stderr，stdout 只输出不含 cookies 和响应 body 的
+JSON 摘要。使用 `npm run flow -- --help` 查看参数。
+
+也可以从代码直接调用：
+
+```js
+import { runAnaFlow } from 'mimic/flow';
+
+const result = await runAnaFlow({
+  proxy: 'http://127.0.0.1:9001',
+  verify: true,
+});
+
+console.log(result.verify?.status);
+```
+
+Lumi 认证由调用方传入,helper 会为每次 flow 生成独立 sticky session：
+
+```js
+import { createLumiProxy, runCebuFlow } from 'mimic/flow';
+
+const lumi = createLumiProxy({
+  customerZone: 'lum-customer-example-zone-gen',
+  password: 'password',
+  country: 'gb',
+});
+
+const result = await runCebuFlow({
+  proxy: lumi.url,
+  search: true,
+});
+```
+
+需要由本地 mitm 转发到 Lumi 时,同时传入 helper 生成的 `proxyHeaders`：
+
+```js
+import { createLumiRelayProxy, runAnaFlow } from 'mimic/flow';
+
+const relay = createLumiRelayProxy({
+  proxyUrl: 'http://127.0.0.1:24800',
+  customerZone: 'lum-customer-example-zone-gen',
+  password: 'password',
+  country: 'gb',
+  clientHelloId: 'hellocustom_ios_random',
+  http2ProfileId: 'mobile_android',
+});
+
+const result = await runAnaFlow({
+  proxy: relay.url,
+  proxyHeaders: relay.proxyHeaders,
+  verify: true,
+});
+```
+
+ANA/Cebu 的 wire profile 固定为 Chrome 145/Android；`profile` 只控制 mimic 中的 JS/DOM/interaction
+环境。两者是独立配置。网络、profile 或 capture 失败会拒绝 Promise；最终 API 的 HTTP 状态保留在
+`verify`/`search` 结果中。结果包含完整 cookie 仅用于调用方调试和后续请求,不应直接写入日志。
 
 ## CLI
 

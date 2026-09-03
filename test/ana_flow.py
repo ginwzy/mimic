@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import base64
 import json
 import random
 import re
@@ -42,8 +43,12 @@ VERIFY_URL = "https://space.ana.co.jp/aswbe-search/api/v1/roundtrip-owd"
 # use LOCAL_PROXY (Clash etc.) for a non-whitelist path when not on Lumi.
 LOCAL_PROXY = "http://127.0.0.1:7890"
 REQABLE_PROXY = "http://10.5.2.163:9001"
-MITM_PROXY = "http://95.179.202.136:24800"
-PROXY_HEADERS = {"X-ClientHello-Id": "hellochrome_150"}
+MITM_PROXY = "http://127.0.0.1:24800"
+PROXY_HEADERS = {
+    "X-ClientHello-Id": "hellochrome_152",
+    # "X-Http2Profile-Id": "mobile_android",
+}
+HIGH_LATENCY_PROXY_MODES = ("lumi", "mitm")
 
 LUMI_PROXY_HOST = "brd.superproxy.io"
 LUMI_PROXY_PORT = 22225
@@ -230,25 +235,47 @@ def aswbe_api_headers(*, extra: dict | None = None) -> dict:
 
 # --- proxy / client ---
 
-def get_lumi_proxy(
+def get_lumi_identity(
     *,
     country: str = LUMI_COUNTRY,
     session_id: str | None = None,
-) -> Proxy:
-    """Bright Data residential: fixed country + sticky session for this Client."""
+) -> tuple[str, str]:
     # Alphanumeric only — Bright Data rejects session values with '-' / '*'.
     sid = session_id or secrets.token_hex(8)
     user = (
         f"{LUMI_CUSTOMER_ZONE}-country-{country}"
         f"-session-{sid}-route_err-block"
     )
+    return sid, user
+
+
+def get_lumi_proxy(
+    *,
+    country: str = LUMI_COUNTRY,
+    session_id: str | None = None,
+) -> Proxy:
+    """Bright Data residential: fixed country + sticky session for this Client."""
+    sid, user = get_lumi_identity(country=country, session_id=session_id)
     url = f"http://{LUMI_PROXY_HOST}:{LUMI_PROXY_PORT}/"
     log(f"lumi proxy country={country} session={sid} url={url}")
     return Proxy.all(url, username=user, password=LUMI_PASSWORD)
 
 
-def get_mitm_proxy() -> Proxy:
-    return Proxy.all(MITM_PROXY, custom_http_headers=PROXY_HEADERS)
+def get_mitm_proxy(*, country: str = LUMI_COUNTRY) -> Proxy:
+    sid, user = get_lumi_identity(country=country)
+    relay_url = (
+        f"http://servercountry-{country}.{LUMI_PROXY_HOST}:{LUMI_PROXY_PORT}/"
+    )
+    authorization = base64.b64encode(
+        f"{user}:{LUMI_PASSWORD}".encode("ascii")
+    ).decode("ascii")
+    headers = {
+        **PROXY_HEADERS,
+        "X-Relay-ProxyAddr": relay_url,
+        "X-Relay-ProxyAuthorization": f"Basic {authorization}",
+    }
+    log(f"mitm lumi relay country={country} session={sid} url={relay_url}")
+    return Proxy.all(MITM_PROXY, custom_http_headers=headers)
 
 
 def resolve_proxy(mode: str, *, lumi_country: str = LUMI_COUNTRY) -> Proxy | None:
@@ -259,14 +286,14 @@ def resolve_proxy(mode: str, *, lumi_country: str = LUMI_COUNTRY) -> Proxy | Non
     if mode == "lumi":
         return get_lumi_proxy(country=lumi_country)
     if mode == "mitm":
-        return get_mitm_proxy()
+        return get_mitm_proxy(country=lumi_country)
     if mode == "reqable":
         return Proxy.all(REQABLE_PROXY)
     raise ValueError(f"unknown proxy mode: {mode}")
 
 
 def make_client(proxy: Proxy | None = None, *, proxy_mode: str = "local") -> Client:
-    http_timeout = 60 if proxy_mode == "lumi" else 30
+    http_timeout = 60 if proxy_mode in HIGH_LATENCY_PROXY_MODES else 30
     kwargs: dict[str, Any] = {
         "emulation": EmulationOption(
             emulation=Emulation.Chrome145,
@@ -545,7 +572,7 @@ def select_abck_bodies(
 
 def capture_deadlines(proxy_mode: str) -> tuple[int, int, int]:
     """(abck_deadline_ms, bms_deadline_ms, script_timeout_ms) by egress RTT."""
-    if proxy_mode == "lumi":
+    if proxy_mode in HIGH_LATENCY_PROXY_MODES:
         return 8000, 7000, 16_000
     return 5000, 5000, 12_000
 
@@ -602,7 +629,7 @@ async def initialize(
         content_type="text/plain;charset=UTF-8", accept=DOC_ACCEPT,
     )
     post_url = abck_url.split("?", 1)[0]
-    gap = 0.25 if proxy_mode == "lumi" else 0.15
+    gap = 0.25 if proxy_mode in HIGH_LATENCY_PROXY_MODES else 0.15
     for i, body in enumerate(to_post, 1):
         await asyncio.sleep(gap)
         st, _ = await http_post(
@@ -887,7 +914,7 @@ async def main() -> int:
     )
     p.add_argument(
         "--lumi-country", default=LUMI_COUNTRY,
-        help=f"Bright Data -country-XX (default {LUMI_COUNTRY}); only with --proxy lumi",
+        help=f"Bright Data -country-XX (default {LUMI_COUNTRY}); with --proxy lumi/mitm",
     )
     p.add_argument(
         "--profile", default=None, metavar="ID",
