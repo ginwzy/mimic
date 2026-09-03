@@ -174,26 +174,30 @@ test('interaction session conditions pose transitions on gesture spacing', () =>
 
 test('Akamai interaction policy separates joint swipe, tap and follow-up swipe', () => {
   const requestDriven = createInteractionPolicy('akamai-sensor');
-  assert.equal(requestDriven(0, 0), null);
-  assert.equal(requestDriven(10, 1), 'swipe');
-  assert.equal(requestDriven(20, 1), null);
-  assert.equal(requestDriven(30, 2), null);
-  assert.equal(requestDriven(2_000, 20), null);
-  assert.equal(requestDriven(2_499, 20), null);
-  assert.equal(requestDriven(2_500, 20), 'tap');
-  assert.equal(requestDriven(2_700, 20), 'swipe');
-  assert.equal(requestDriven(3_200, 20), null);
+  assert.equal(requestDriven.isExhausted(), false);
+  assert.equal(requestDriven.next(0, 0), null);
+  assert.equal(requestDriven.next(10, 1), 'swipe');
+  assert.equal(requestDriven.next(20, 1), null);
+  assert.equal(requestDriven.next(30, 2), null);
+  assert.equal(requestDriven.next(2_000, 20), null);
+  assert.equal(requestDriven.next(2_499, 20), null);
+  assert.equal(requestDriven.next(2_500, 20), 'tap');
+  assert.equal(requestDriven.isExhausted(), false);
+  assert.equal(requestDriven.next(2_700, 20), 'swipe');
+  assert.equal(requestDriven.isExhausted(), true);
+  assert.equal(requestDriven.next(3_200, 20), null);
 
-  const fallback = createInteractionPolicy('akamai-sensor');
-  assert.equal(fallback(119, 0), null);
-  assert.equal(fallback(120, 0), 'swipe');
-  assert.equal(fallback(449, 0), null);
-  assert.equal(fallback(450, 0), null);
-  assert.equal(fallback(2_000, 20), null);
-  assert.equal(fallback(2_499, 20), null);
-  assert.equal(fallback(2_500, 20), 'tap');
-  assert.equal(fallback(2_700, 20), 'swipe');
-  assert.equal(fallback(3_200, 20), null);
+  const timerDriven = createInteractionPolicy('akamai-sensor');
+  assert.equal(timerDriven.next(119, 0), null);
+  assert.equal(timerDriven.next(120, 0), 'swipe');
+  assert.equal(timerDriven.next(449, 0), null);
+  assert.equal(timerDriven.next(450, 0), null);
+  assert.equal(timerDriven.next(2_000, 20), null);
+  assert.equal(timerDriven.next(2_499, 20), null);
+  assert.equal(timerDriven.next(2_500, 20), 'tap');
+  assert.equal(timerDriven.next(2_700, 20), 'swipe');
+  assert.equal(timerDriven.isExhausted(), true);
+  assert.equal(timerDriven.next(3_200, 20), null);
 });
 
 interface ObservedInputFields {

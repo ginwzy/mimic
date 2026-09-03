@@ -51,6 +51,9 @@ const LIFECYCLE = `(() => {
 })()`;
 
 const WINDOW_PLACEHOLDER = '[unserializable: [object Window]]';
+// Do not treat post silence as completion until the full interaction window has elapsed.
+const MIN_INTERACTION_CAPTURE_MS = 5_000;
+const INTERACTION_QUIET_MS = 500;
 
 function positive(value: number | undefined, fallback: number, name: string): number {
   if (value === undefined) return fallback;
@@ -146,6 +149,10 @@ function net(report: Data): NetReport {
   };
 }
 
+function nonEmptyPostCount(report: NetReport): number {
+  return report.posts.filter((post) => post.len > 0).length;
+}
+
 const delay = (milliseconds: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 /** Execute-only host. Workers must import this, not `app/index.ts`. */
@@ -233,11 +240,13 @@ export class RuntimeApplication {
         const interactionSession = createInteractionSession(interactionSeed);
         let interactionSequence = 0;
         let pageOffsetYRatio = 0;
+        let postCount = nonEmptyPostCount(current);
+        let lastPostObservedAt = 0;
+        let latestInteractionEndAt = 0;
         while (Date.now() - started < this.capture.deadlineMs
-          && current.posts.filter((post) => post.len > 0).length < this.capture.maxPosts) {
+          && postCount < this.capture.maxPosts) {
           const elapsed = Date.now() - started;
-          const postCount = current.posts.filter((post) => post.len > 0).length;
-          const recipe = policy(elapsed, postCount);
+          const recipe = policy.next(elapsed, postCount);
           if (recipe !== null) {
             const frames = synthesizeInteraction(recipe, interactionSession, interactionSequence++, elapsed);
             const dispatchResult = runtime.run(
@@ -252,6 +261,10 @@ export class RuntimeApplication {
                 plan: plan.id,
               });
             }
+            latestInteractionEndAt = Math.max(
+              latestInteractionEndAt,
+              Date.now() - started + frames.at(-1)!.at,
+            );
             if (recipe === 'swipe') {
               // Recipes never overlap, so the next one can inherit this upward
               // swipe's full displacement.
@@ -263,6 +276,20 @@ export class RuntimeApplication {
           }
           await delay(this.capture.pollMs);
           current = net(runtime.report());
+          const observedAt = Date.now() - started;
+          const observedPostCount = nonEmptyPostCount(current);
+          if (observedPostCount !== postCount) {
+            postCount = observedPostCount;
+            lastPostObservedAt = observedAt;
+          }
+          const settleAfter = Math.max(
+            latestInteractionEndAt,
+            lastPostObservedAt,
+            MIN_INTERACTION_CAPTURE_MS,
+          ) + INTERACTION_QUIET_MS;
+          if (adapter !== 'none'
+            && policy.isExhausted()
+            && observedAt >= settleAfter) break;
         }
         report = runtime.report();
         value = {
