@@ -1019,25 +1019,38 @@ covers the two terminal classes needed for mouse fidelity, but not
 downward/non-monotonic gestures, scroll-linked interaction, or the observed
 session-level diversity.
 
-### 6. Page, viewport, and screen coordinates are collapsed
+### 6. Page/client coordinates are separated; screen coordinates remain collapsed
+
+Status: scoped ABCK fix complete. Realm scroll state, screen origin, and
+layout-backed target changes remain open.
 
 The browser screen height is 873 CSS pixels, while decoded touch Y values
 include `918`, `1115`, `1166`, `1382`, and `1640`. This strongly indicates
 page coordinates or a scroll offset rather than viewport-only coordinates.
 
-Current mimic dispatch sets:
+Mimic now maps contact coordinates against the layout viewport
+and carries completed upward-swipe displacement across the remaining gestures
+in the same capture:
 
 ```text
-pageX = clientX = screenX
-pageY = clientY = screenY
+0 <= clientX < innerWidth
+0 <= clientY < innerHeight
+pageX = clientX
+pageY = clientY + capturePageOffsetY
 ```
 
-It also does not update page scroll state. This prevents browser-shaped values
-for:
+Touch, PointerEvent, and compatibility MouseEvent receive the same page
+coordinates. The Pointer/Mouse projection uses the private trusted dispatch
+bridge because jsdom otherwise returns `clientX/clientY` from its `pageX/pageY`
+getters regardless of scroll.
 
-- `scrollX` and `scrollY`
-- Page/client coordinate conversion
-- Touches on content below the initial viewport
+This is deliberately narrower than general scroll emulation. Screen coordinates
+still equal client coordinates pending direct browser evidence for the viewport's
+screen origin, and the interaction offset does not update Realm page scroll or
+layout. The remaining gaps are therefore:
+
+- Realm `scrollX` and `scrollY`
+- Distinct screen/client coordinates
 - Target changes caused by scrolling
 
 ### 7. The baseline targeted `document`
@@ -1114,13 +1127,16 @@ well enough to model directly.
    sample with calibrated cross-stream timing and measured covariance quality.
 6. Model relative orientation and one anonymous, gap-conditioned CSD4CA pose
    session across all gestures in a capture.
+7. Keep contacts within viewport bounds and carry prior upward-swipe
+   displacement across Touch, PointerEvent, and MouseEvent page coordinates.
 
 ### Priority 1
 
 1. Support short drags, non-monotonic movement, and more than one direction.
 2. Model gesture selection and spacing as a session distribution rather than a
    fixed swipe/tap/swipe sequence.
-3. Model page scroll offsets and distinct page/client/screen coordinates.
+3. Capture direct screen/client/page coordinate evidence before modeling screen
+   origin or exposing interaction offsets through Realm scroll state.
 4. Condition sensor hardware/noise and cadence on Profile only after obtaining
    evidence from more than the current single CSD4CA device.
 

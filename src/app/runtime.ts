@@ -232,6 +232,7 @@ export class RuntimeApplication {
         const interactionSeed = `${plan.id}\u0000${adapter}\u0000${job.interaction?.seed ?? ''}`;
         const interactionSession = createInteractionSession(interactionSeed);
         let interactionSequence = 0;
+        let pageOffsetYRatio = 0;
         while (Date.now() - started < this.capture.deadlineMs
           && current.posts.filter((post) => post.len > 0).length < this.capture.maxPosts) {
           const elapsed = Date.now() - started;
@@ -240,7 +241,7 @@ export class RuntimeApplication {
           if (recipe !== null) {
             const frames = synthesizeInteraction(recipe, interactionSession, interactionSequence++, elapsed);
             const dispatchResult = runtime.run(
-              createInteractionSource(frames),
+              createInteractionSource(frames, pageOffsetYRatio),
               { ...(job.timeout === undefined ? {} : { timeout: job.timeout }), trustedEvents: true },
             );
             if (!dispatchResult.ok) {
@@ -250,6 +251,14 @@ export class RuntimeApplication {
                 message: `Interaction dispatch failed:${dispatchResult.error}`,
                 plan: plan.id,
               });
+            }
+            if (recipe === 'swipe') {
+              // Recipes never overlap, so the next one can inherit this upward
+              // swipe's full displacement.
+              const touchFrames = frames.filter((frame) => frame.kind === 'touch');
+              const firstTouch = touchFrames[0]!;
+              const lastTouch = touchFrames.at(-1)!;
+              pageOffsetYRatio += Math.max(0, firstTouch.y - lastTouch.y);
             }
           }
           await delay(this.capture.pollMs);

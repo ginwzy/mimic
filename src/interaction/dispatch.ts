@@ -1,8 +1,11 @@
 import type { InteractionFrame } from './types.js';
 
-export function createInteractionSource(frames: readonly InteractionFrame[]): string {
+export function createInteractionSource(
+  frames: readonly InteractionFrame[],
+  pageOffsetYRatio = 0,
+): string {
   const json = JSON.stringify(frames);
-  return `((frames) => {
+  return `((frames, pageOffsetYRatio) => {
     const PAN_SLOP_PX = 8;
     const POINTER_ID = 2;
     const dispatch = typeof __mimicDispatchTrustedEvent === 'function'
@@ -10,16 +13,17 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
       : (target, event) => target.dispatchEvent(event);
     let contact = null;
     const coordinates = (frame) => {
-      const width = Math.max(1, Number(screen.width) || Number(innerWidth) || 1);
-      const height = Math.max(1, Number(screen.height) || Number(innerHeight) || 1);
+      const width = Math.max(1, Number(innerWidth) || Number(screen.width) || 1);
+      const height = Math.max(1, Number(innerHeight) || Number(screen.height) || 1);
       const x = Math.max(0, Math.min(width - 1, Math.round(frame.x * (width - 1))));
       const y = Math.max(0, Math.min(height - 1, Math.round(frame.y * (height - 1))));
+      const pageOffsetYPx = Math.max(0, Math.round(pageOffsetYRatio * (height - 1)));
       const radiusX = Number(frame.radiusX);
       const radiusY = Number(frame.radiusY);
       const force = Number(frame.force);
       const touchForce = Number.isFinite(force) ? Math.max(0, Math.min(1, force)) : 0.5;
       return {
-        clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y,
+        clientX: x, clientY: y, pageX: x, pageY: y + pageOffsetYPx, screenX: x, screenY: y,
         radiusX: Number.isFinite(radiusX) ? Math.max(0, radiusX * width) : 1,
         radiusY: Number.isFinite(radiusY) ? Math.max(0, radiusY * height) : 1,
         force: frame.phase === 'end' ? 0 : touchForce,
@@ -66,7 +70,7 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
         button: type === 'pointermove' ? -1 : 0,
         buttons: active ? 1 : 0,
       };
-      return dispatch(target, createEvent(globalThis.PointerEvent, type, fields, bubbles)) !== false;
+      return dispatch(target, createEvent(globalThis.PointerEvent, type, fields, bubbles), p) !== false;
     };
     const closePointer = (target, type, p) => {
       emitPointer(target, type, p, false);
@@ -94,7 +98,7 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
       };
       const event = createEvent(globalThis.MouseEvent, type, fields, bubbles);
       if (primaryButton) Object.defineProperty(event, 'which', { configurable: true, value: 1 });
-      dispatch(target, event);
+      dispatch(target, event, p);
     };
     const emitCompatibilityMouse = (activeContact) => {
       const { target, compatibilityPoint } = activeContact;
@@ -117,7 +121,7 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
       };
       const click = createEvent(globalThis.PointerEvent, 'click', fields, true);
       Object.defineProperty(click, 'which', { configurable: true, value: 1 });
-      dispatch(target, click);
+      dispatch(target, click, compatibilityPoint);
     };
     const emit = (frame) => {
       try {
@@ -179,5 +183,5 @@ export function createInteractionSource(frames: readonly InteractionFrame[]): st
     };
     for (const frame of frames) window.setTimeout(() => emit(frame), frame.at);
     return frames.length;
-  })(${json})`;
+  })(${json}, ${JSON.stringify(pageOffsetYRatio)})`;
 }

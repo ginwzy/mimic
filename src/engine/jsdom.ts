@@ -266,7 +266,11 @@ class JsdomRuntime implements Runtime {
     });
   }
 
-  private readonly dispatchTrustedEvent = (target: unknown, event: unknown): unknown => {
+  private readonly dispatchTrustedEvent = (
+    target: unknown,
+    event: unknown,
+    pageCoordinates?: unknown,
+  ): unknown => {
     const targetImpl = jsdomImplementation(target, 'event target');
     const eventImpl = jsdomImplementation(event, 'event');
     const dispatch = targetImpl._dispatch;
@@ -275,6 +279,20 @@ class JsdomRuntime implements Runtime {
       || eventImpl._initializedFlag !== true
       || eventImpl.eventPhase !== 0) {
       throw new TypeError('Trusted event cannot be dispatched');
+    }
+    if (pageCoordinates !== undefined) {
+      if (pageCoordinates === null || typeof pageCoordinates !== 'object') {
+        throw new TypeError('Trusted event coordinates are invalid');
+      }
+      const { pageX, pageY } = pageCoordinates as { pageX?: unknown; pageY?: unknown };
+      if (typeof pageX !== 'number' || !Number.isFinite(pageX)
+        || typeof pageY !== 'number' || !Number.isFinite(pageY)) {
+        throw new TypeError('Trusted event page coordinates are invalid');
+      }
+      Object.defineProperties(eventImpl, {
+        pageX: { configurable: true, value: pageX },
+        pageY: { configurable: true, value: pageY },
+      });
     }
     eventImpl.isTrusted = true;
     return Reflect.apply(dispatch, targetImpl, [eventImpl]);

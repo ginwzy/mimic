@@ -6,8 +6,6 @@ import type { CebuCredentials, CebuSearchResult } from './request.js';
 
 const DEFAULT_PROFILE = 'android-chrome/2201116sg-v145-10025';
 
-export type CebuAbckPolicy = 'all' | 'edges';
-
 export interface CebuFlowOptions {
   proxy?: string;
   proxyHeaders?: HeadersInit;
@@ -15,7 +13,6 @@ export interface CebuFlowOptions {
   profilesRoot?: string;
   interactionSeed?: string;
   postCount?: number;
-  abckPolicy?: CebuAbckPolicy;
   search?: boolean;
   searchBody?: string;
   credentials?: CebuCredentials;
@@ -54,11 +51,9 @@ function cookieNames(cookieHeader: string): string[] {
 function selectBodies(
   bodies: readonly string[],
   postCount: number | undefined,
-  policy: CebuAbckPolicy,
 ): string[] {
   if (postCount !== undefined) return [...bodies.slice(0, Math.max(0, postCount))];
-  if (policy === 'all' || bodies.length <= 2) return [...bodies];
-  return [bodies[0] as string, bodies[1] as string, bodies[bodies.length - 1] as string];
+  return [...bodies];
 }
 
 async function resolveProfile(explicit: string | undefined, profilesRoot: string | undefined): Promise<string> {
@@ -106,7 +101,7 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
     });
     if (abckCapture.bodies.length === 0) throw new Error('no _abck bodies captured');
 
-    const bodiesToPost = selectBodies(abckCapture.bodies, options.postCount, options.abckPolicy ?? 'all');
+    const bodiesToPost = selectBodies(abckCapture.bodies, options.postCount);
     log(`ABCK captured=${abckCapture.bodies.length} posting=${bodiesToPost.length}`);
     for (const [index, body] of bodiesToPost.entries()) {
       await delay(250);

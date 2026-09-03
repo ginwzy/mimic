@@ -155,6 +155,8 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
           which: event.which,
           clientX: eventPoint(event).clientX,
           clientY: eventPoint(event).clientY,
+          pageX: eventPoint(event).pageX,
+          pageY: eventPoint(event).pageY,
         }), true);
       }
       const post = body => {
@@ -163,7 +165,11 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
         xhr.send(body);
       };
       post('initial');
-      setTimeout(() => post(JSON.stringify({ kind: 'sequence', events })), 5300);
+      setTimeout(() => post(JSON.stringify({
+        kind: 'sequence',
+        viewport: { width: innerWidth, height: innerHeight },
+        events,
+      })), 5300);
     })()`,
     profile: 'android-webview-v138',
     cookies: [],
@@ -179,6 +185,7 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
   assert.equal(result.bodies[0], 'initial');
   const report = JSON.parse(result.bodies[1]!) as {
     readonly kind: string;
+    readonly viewport: { readonly width: number; readonly height: number };
     readonly events: readonly {
       readonly type: string;
       readonly trusted: boolean;
@@ -192,6 +199,8 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
       readonly which?: number;
       readonly clientX?: number;
       readonly clientY?: number;
+      readonly pageX?: number;
+      readonly pageY?: number;
     }[];
   };
   assert.equal(report.kind, 'sequence');
@@ -205,6 +214,10 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
   const swipeEnd = types.indexOf('touchend');
   assert.ok(!types.slice(0, swipeEnd).includes('pointerup'));
   assert.ok(!types.slice(0, swipeEnd).some((type) => ['mousedown', 'mousemove', 'mouseup', 'click'].includes(type)));
+  const firstSwipeEvents = report.events.slice(0, swipeEnd + 1);
+  assert.ok(firstSwipeEvents.every((event) => (
+    event.pageX === event.clientX && event.pageY === event.clientY
+  )));
 
   const tapStart = types.indexOf('pointerover', swipeEnd + 1);
   assert.notEqual(tapStart, -1, JSON.stringify(types));
@@ -219,6 +232,10 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
   const tapEvents = report.events.slice(tapStart, followUpStart);
   const tapPoint = tapEvents.find((event) => event.type === 'pointerdown');
   assert.ok(tapPoint);
+  assert.equal(tapPoint.pageX, tapPoint.clientX);
+  const pageOffsetYPx = tapPoint.pageY! - tapPoint.clientY!;
+  assert.ok(pageOffsetYPx > 0);
+  assert.ok(tapEvents.every((event) => event.pageY! - event.clientY! === pageOffsetYPx));
   const compatibilityEvents = tapEvents.slice(-6);
   assert.deepEqual(compatibilityEvents.map((event) => event.constructor), [
     'MouseEvent', 'MouseEvent', 'MouseEvent', 'MouseEvent', 'MouseEvent', 'PointerEvent',
@@ -229,6 +246,7 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
   assert.deepEqual(compatibilityEvents.map((event) => event.which), [0, 0, 0, 1, 1, 1]);
   assert.ok(compatibilityEvents.every((event) => (
     event.clientX === tapPoint.clientX && event.clientY === tapPoint.clientY
+    && event.pageX === tapPoint.pageX && event.pageY === tapPoint.pageY
   )));
   assert.deepEqual(
     [compatibilityEvents.at(-1)?.pointerType, compatibilityEvents.at(-1)?.isPrimary],
@@ -237,9 +255,15 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
   assert.deepEqual(types.slice(followUpStart, followUpStart + 4), [
     'pointerover', 'pointerenter', 'pointerdown', 'touchstart',
   ]);
+  const followUpPoint = report.events[followUpStart]!;
+  assert.equal(followUpPoint.pageY! - followUpPoint.clientY!, pageOffsetYPx);
   assert.ok(!types.slice(followUpStart).some((type) => (
     ['mousedown', 'mousemove', 'mouseup', 'click'].includes(type)
   )));
   assert.ok(report.events.every((event) => event.trusted));
   assert.ok(report.events.every((event) => event.target === 'BODY'));
+  assert.ok(report.events.every((event) => (
+    event.clientX! >= 0 && event.clientX! < report.viewport.width
+    && event.clientY! >= 0 && event.clientY! < report.viewport.height
+  )));
 });
