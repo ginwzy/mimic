@@ -11,8 +11,9 @@ import {
   parseShape,
   seal,
 } from '../src/index.js';
-import { traceDriver, traceFeature } from '../src/features/trace.js';
-import { traceShape } from '../src/features/trace.shape.js';
+import { traceDriver } from '../src/features/trace.driver.js';
+import { traceFeature } from '../src/features/trace.compile.js';
+import { shape as composeShape } from '../src/features/shape.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 
@@ -25,7 +26,7 @@ async function open(enabled: boolean) {
     ops: [],
     support: { structure: imported.shape.support.structure || imported.shape.level },
   }));
-  const shape = traceShape(base);
+  const shape = composeShape(base, ['trace']);
   const { hash: _profileHash, ...profileBody } = imported.profile;
   const profile = parseProfile(seal({ ...profileBody, shape: { id: shape.id, hash: shape.hash } }));
   const engine = new JsdomEngine();

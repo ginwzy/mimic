@@ -2,12 +2,14 @@ import { createHash } from 'node:crypto';
 import { MimicError } from '../core/error.js';
 import { deepFreeze, jsonCopy } from '../core/json.js';
 import { parseJob, parsePage, parseProfile, parseShape } from '../core/parse.js';
-import type { JsonValue, Plan, Shape, ShapeRef, Support, SupportMap, Target } from '../core/types.js';
+import type { JsonValue, Plan, Shape, ShapeRef, SupportMap, Target } from '../core/types.js';
 import type { BlockRule, CompileInput, DraftOp, Feature, Key, Op, PlanBind, Ref } from '../shape/types.js';
 import { checkContribution, checkManifest, checkSupport } from '../shape/check.js';
 import { canonical } from '../core/canonical.js';
 import { STAGE, validateGraph } from './graph.js';
 import { trustPlan } from './trusted.js';
+import { assertCapabilities, capabilityReport, meetsLegacySupport, projectSupport, type CapabilityReport } from '../core/capabilities.js';
+import { describeCapabilities } from './capabilities.js';
 
 type SequencedOp = Op & { sequence: number };
 
@@ -126,15 +128,12 @@ function blockedBy(rule: BlockRule, operation: DraftOp): boolean {
   return rule.part === undefined || (operation.op === 'fn' && operation.part === rule.part);
 }
 
-const SUPPORT_RANK: Record<Support, number> = {
-  unsupported: 0,
-  'shape-only': 1,
-  emulated: 2,
-  derived: 3,
-  captured: 4,
-};
+export interface Compilation {
+  readonly plan: Plan<Op, PlanBind>;
+  readonly capabilities: CapabilityReport;
+}
 
-function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
+function compileUnsafe(input: CompileInput): Compilation {
   if (input.synthetic !== undefined && typeof input.synthetic !== 'boolean') throw new TypeError('synthetic 必须是 boolean');
   if (!Array.isArray(input.drivers) || input.drivers.some((id) => typeof id !== 'string' || !id)) {
     throw new TypeError('drivers 必须是非空字符串数组');
@@ -167,6 +166,7 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
     rev: feature.rev ?? '1',
     ...(feature.requires === undefined ? {} : { requires: deepFreeze([...feature.requires]) }),
     build: feature.build,
+    ...(feature.describe === undefined ? {} : { describe: feature.describe }),
   })) as Feature[];
   const page = input.page === undefined ? undefined : parsePage(input.page);
   const job = parseJob(input.job);
@@ -228,7 +228,7 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
 
   for (const [name, minimum] of Object.entries(required)) {
     const actual = support[name] || 'unsupported';
-    if (SUPPORT_RANK[actual] < SUPPORT_RANK[minimum]) {
+    if (!meetsLegacySupport(actual, minimum)) {
       throw new MimicError({
         phase: 'compile', code: 'LOW_SUPPORT', message: `Support 不足:${name}`,
         details: { name, required: minimum, actual },
@@ -241,6 +241,7 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
     : deepFreeze(operations
       .sort((left, right) => STAGE[left.op] - STAGE[right.op] || left.sequence - right.sequence)
       .map(({ sequence: _sequence, ...operation }) => operation));
+  const capabilities = describeCapabilities({ profile, shape, ...(page ? { page } : {}), job }, features, support);
   const body = {
     schema: 2 as const,
     ...(synthetic ? { synthetic: true as const } : {}),
@@ -258,14 +259,20 @@ function compileUnsafe(input: CompileInput): Plan<Op, PlanBind> {
     features: Object.freeze(features.map((feature) => feature.id)),
     operations: cleanOperations,
     binds: deepFreeze(binds),
-    support: deepFreeze({ ...support }),
+    support: deepFreeze(projectSupport(capabilities)),
   } satisfies Omit<Plan<Op, PlanBind>, 'id'>;
   const json = canonical(body as unknown as JsonValue);
   const id = createHash('sha256').update(json).digest('hex');
-  return trustPlan(Object.freeze({ ...body, id }));
+  const report = capabilityReport(id, capabilities);
+  if (input.requireCapabilities !== undefined) assertCapabilities(report, input.requireCapabilities);
+  return Object.freeze({ plan: trustPlan(Object.freeze({ ...body, id })), capabilities: report });
 }
 
 export function compile(input: CompileInput): Plan<Op, PlanBind> {
+  return compileWithCapabilities(input).plan;
+}
+
+export function compileWithCapabilities(input: CompileInput): Compilation {
   try {
     return compileUnsafe(input);
   } catch (cause) {

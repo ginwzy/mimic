@@ -1,4 +1,5 @@
 import type { Bind, Data, Job, JsonValue, Page, Profile, ShapeRef, SupportMap } from '../core/types.js';
+import type { CapabilityClaims, CapabilityRequirements } from '../core/capabilities.js';
 
 export type Ref = { path: string } | { node: string };
 export type Key = string | { symbol: string };
@@ -66,6 +67,7 @@ export interface Feature {
   rev?: string;
   requires?: readonly string[];
   build(context: BuildContext): Contribution;
+  describe?(context: BuildContext, support: Readonly<SupportMap>): CapabilityClaims;
 }
 
 export interface CatalogPort {
@@ -98,4 +100,5 @@ export interface CompileInput {
   engine: EngineManifest;
   drivers: readonly string[];
   require?: SupportMap;
+  requireCapabilities?: CapabilityRequirements;
 }

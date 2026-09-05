@@ -1,7 +1,7 @@
 import { MimicError } from '../core/error.js';
-import { canonical } from '../core/canonical.js';
 import type { ErrorCode, JsonValue } from '../core/types.js';
-import type { DraftOp, Key, Op, PlanBind, Ref } from '../shape/types.js';
+import type { DraftOp, Op, PlanBind, Ref } from '../shape/types.js';
+import { operationWrites } from '../shape/writes.js';
 
 export const STAGE: Readonly<Record<Op['op'], number>> = Object.freeze({
   alloc: 0,
@@ -33,53 +33,6 @@ function fail(options: GraphOptions, code: ErrorCode, message: string, details?:
     message,
     ...(details === undefined ? {} : { details }),
   });
-}
-
-const refValue = (ref: Ref): JsonValue => (
-  'path' in ref ? ['path', ref.path] : ['node', ref.node]
-);
-
-const keyValue = (key: Key): JsonValue => (
-  typeof key === 'string' ? ['string', key] : ['symbol', key.symbol]
-);
-
-const write = (value: JsonValue): string => canonical(value);
-
-function propertyWrite(target: Ref, key: Key): string {
-  return write(['property', refValue(target), keyValue(key)]);
-}
-
-function callableWrite(target: Ref, key: Key, part: 'value' | 'get' | 'set'): string {
-  return write(['callable', refValue(target), [keyValue(key), part]]);
-}
-
-function directProperty(ref: Ref): { owner: Ref; key: string } | undefined {
-  if (!('path' in ref) || ref.path === 'window') return undefined;
-  const split = ref.path.lastIndexOf('.');
-  if (split < 'window'.length) return undefined;
-  return { owner: { path: ref.path.slice(0, split) }, key: ref.path.slice(split + 1) };
-}
-
-function writesOf(operation: DraftOp): string[] {
-  if (operation.op === 'alloc') return [write(['alloc', ['node', operation.id]])];
-  if (operation.op === 'fn') {
-    if (operation.key !== undefined) {
-      return [callableWrite(operation.target, operation.key, operation.part!)];
-    }
-    const writes = [write(['fn', refValue(operation.target)])];
-    const property = directProperty(operation.target);
-    if (property) writes.push(callableWrite(property.owner, property.key, 'value'));
-    return writes;
-  }
-  if (operation.op === 'prop' || operation.op === 'drop') {
-    return [
-      propertyWrite(operation.target, operation.key),
-      callableWrite(operation.target, operation.key, 'value'),
-      callableWrite(operation.target, operation.key, 'get'),
-      callableWrite(operation.target, operation.key, 'set'),
-    ];
-  }
-  return [write([operation.op, refValue(operation.target)])];
 }
 
 function refsOf(operation: DraftOp): Ref[] {
@@ -124,7 +77,7 @@ export function validateGraph(
   const writes = new Map<string, string>();
   const allocated = new Map<string, Extract<DraftOp, { op: 'alloc' }>>();
   for (const operation of operations) {
-    for (const item of writesOf(operation)) {
+    for (const item of operationWrites(operation)) {
       const owner = writes.get(item);
       if (owner !== undefined) {
         fail(options, 'WRITE_CONFLICT', `Shape 写入冲突:${item}`, {

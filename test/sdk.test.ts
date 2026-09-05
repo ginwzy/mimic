@@ -7,6 +7,30 @@ import { createMimic } from '../src/sdk.js';
 const profilesRoot = path.resolve('profiles');
 const probePath = path.resolve('resources/probe.js');
 
+test('SDK planning and listing do not create workers, and close is safe before execution', async () => {
+  const mimic = createMimic({ profilesRoot, probePath, size: 1 });
+  try {
+    assert.ok((await mimic.list('profiles')).includes('chrome-mac'));
+    const job = { kind: 'run' as const, code: '42' };
+    const plan = await mimic.plan(job);
+    assert.deepEqual(mimic.executor.workerLifecycle, { created: 0, terminated: 0, live: 0 });
+    const result = await mimic.run(job);
+    assert.equal(result.ok && result.value, 42);
+    assert.equal(result.plan, plan.id);
+    assert.deepEqual(mimic.executor.workerLifecycle, { created: 1, terminated: 0, live: 1 });
+  } finally {
+    await mimic.close();
+  }
+  assert.deepEqual(mimic.executor.workerLifecycle, { created: 1, terminated: 1, live: 0 });
+
+  const unused = createMimic({ size: 1 });
+  await unused.close();
+  await unused.close();
+  assert.deepEqual(unused.executor.workerLifecycle, { created: 0, terminated: 0, live: 0 });
+  await assert.rejects(unused.run({ kind: 'run', code: '1' }), /destroyed/);
+  assert.throws(() => createMimic({ capture: { deadlineMs: 0 } }), /positive integer/);
+});
+
 test('SDK and in-process Application preserve identical Job/Result semantics', async () => {
   const app = createNodeApplication({ profilesRoot, probePath });
   const mimic = createMimic({

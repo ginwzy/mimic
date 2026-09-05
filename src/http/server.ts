@@ -1,5 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
-import { createNodeApplication } from '../node/app.js';
+import { createNodePlanner } from '../node/planner.js';
 import type { TaskRequest } from '../app/index.js';
 import { QueueFullError, WorkerExecutor, type ExecutorOptions } from '../executor/pool.js';
 
@@ -126,26 +126,24 @@ export function startServer(options: ServerOptions): ServerHandle {
     port = 3000,
     host = '127.0.0.1',
     maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
-    planner,
+    planner: injectedPlanner,
     ...executorOptions
   } = options;
   if (typeof host !== 'string' || !host.trim()) throw new TypeError('host must be a non-empty string');
   integer(port, 'port', 0, 65_535);
   integer(maxBodyBytes, 'maxBodyBytes', 1, Number.MAX_SAFE_INTEGER);
 
-  const application = planner ?? createNodeApplication({
+  const planner = injectedPlanner ?? createNodePlanner({
     ...(executorOptions.profilesRoot === undefined ? {} : { profilesRoot: executorOptions.profilesRoot }),
     ...(executorOptions.shapesRoot === undefined ? {} : { shapesRoot: executorOptions.shapesRoot }),
-    ...(executorOptions.probePath === undefined ? {} : { probePath: executorOptions.probePath }),
-    ...(executorOptions.capture === undefined ? {} : { capture: executorOptions.capture }),
   });
-  const executor = new WorkerExecutor({ ...executorOptions, planner: application });
+  const executor = new WorkerExecutor({ ...executorOptions, planner });
 
   const server = http.createServer((request, response) => {
     void (async () => {
       const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
       if (request.method === 'GET' && pathname === '/profiles') {
-        send(response, 200, await application.list('profiles'));
+        send(response, 200, await planner.list('profiles'));
         return;
       }
 

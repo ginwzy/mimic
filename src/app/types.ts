@@ -1,6 +1,6 @@
-import type { Job, Page, Profile, Shape, SupportMap } from '../core/types.js';
+import type { Job, Page, Plan, Profile, Shape, SupportMap } from '../core/types.js';
 import type { Drivers, Engine } from '../engine/types.js';
-import type { Feature } from '../shape/types.js';
+import type { EngineManifest, Feature, Op, PlanBind } from '../shape/types.js';
 
 export interface ProfileRecord {
   profile: Profile;
@@ -35,12 +35,24 @@ export type ListKind = 'profiles' | 'shapes' | 'features' | 'drivers';
 
 export interface RuntimeOptions {
   engine: Engine;
-  features: readonly Feature[];
   drivers: Drivers;
   probe: string;
   capture?: CaptureOptions;
 }
 
 export interface ApplicationOptions extends RuntimeOptions {
+  features: readonly Feature[];
   profiles: ProfilesPort;
+}
+
+export interface PlannerOptions {
+  profiles: ProfilesPort;
+  features: readonly Feature[];
+  drivers: readonly string[];
+  engine: EngineManifest;
+}
+
+export interface PlannerPort {
+  plan(request: TaskRequest): Promise<Plan<Op, PlanBind>>;
+  list(kind: ListKind): Promise<readonly string[]>;
 }

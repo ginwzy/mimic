@@ -4,7 +4,8 @@ import test from 'node:test';
 import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, seal,
 } from '../src/index.js';
-import { drivers, features } from '../src/features/index.js';
+import { drivers } from '../src/features/drivers.js';
+import { features } from '../src/features/compile.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'), path.resolve('resources/shapes'));
 

@@ -1,8 +1,9 @@
 import type { ListKind, TaskRequest } from './app/index.js';
-import { parseJob } from './core/parse.js';
+import { parseJob } from './core/job.js';
+import { parseCaptureResult, type CaptureResult } from './core/capture.js';
 import type { Job, Page, Plan, Result, Shape, SupportMap } from './core/types.js';
 import { WorkerExecutor, type ExecutorOptions } from './executor/pool.js';
-import { createNodeApplication } from './node/app.js';
+import { createNodePlanner } from './node/planner.js';
 import type { Op, PlanBind } from './shape/types.js';
 
 export interface MimicOptions extends Omit<ExecutorOptions, 'planner'> {
@@ -21,7 +22,7 @@ function kind(input: unknown, expected: Job['kind']): Job {
 
 export class Mimic {
   readonly executor: WorkerExecutor;
-  private readonly app: ReturnType<typeof createNodeApplication>;
+  private readonly planner: ReturnType<typeof createNodePlanner>;
   private readonly context: Omit<TaskRequest, 'job'>;
 
   constructor(options: MimicOptions = {}) {
@@ -32,21 +33,19 @@ export class Mimic {
       ...(options.require === undefined ? {} : { require: structuredClone(options.require) }),
       ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }),
     };
-    this.app = createNodeApplication({
+    this.planner = createNodePlanner({
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       ...(options.shapesRoot === undefined ? {} : { shapesRoot: options.shapesRoot }),
-      ...(options.probePath === undefined ? {} : { probePath: options.probePath }),
-      ...(options.capture === undefined ? {} : { capture: options.capture }),
     });
-    this.executor = new WorkerExecutor({ ...options, planner: this.app });
+    this.executor = new WorkerExecutor({ ...options, planner: this.planner });
   }
 
   async run(job: Job): Promise<Result> {
     return this.execute(kind(job, 'run'));
   }
 
-  async capture(job: Job): Promise<Result> {
-    return this.execute(kind(job, 'capture'));
+  async capture(job: Job): Promise<CaptureResult> {
+    return parseCaptureResult(await this.execute(kind(job, 'capture')));
   }
 
   async probe(job: Job): Promise<Result> {
@@ -58,11 +57,11 @@ export class Mimic {
   }
 
   async plan(job: Job): Promise<Plan<Op, PlanBind>> {
-    return this.app.plan(this.request(parseJob(job)));
+    return this.planner.plan(this.request(parseJob(job)));
   }
 
   async list(kindName: ListKind): Promise<readonly string[]> {
-    return this.app.list(kindName);
+    return this.planner.list(kindName);
   }
 
   close(): Promise<void> {

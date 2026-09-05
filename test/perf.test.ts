@@ -14,10 +14,11 @@ import {
   type Profile,
   type Shape,
 } from '../src/index.js';
-import { perfDriver, perfFeature } from '../src/features/perf.js';
-import { perfShape } from '../src/features/perf.shape.js';
-import { timeDriver, timeFeature } from '../src/features/time.js';
-import { timeShape } from '../src/features/time.shape.js';
+import { perfDriver } from '../src/features/perf.driver.js';
+import { perfFeature } from '../src/features/perf.compile.js';
+import { shape as composeShape } from '../src/features/shape.js';
+import { timeDriver } from '../src/features/time.driver.js';
+import { timeFeature } from '../src/features/time.compile.js';
 
 const source = { kind: 'manual' as const, hash: 'a'.repeat(64) };
 const parts = ['navigator', 'screen', 'window', 'timezone', 'webgl', 'canvas', 'audio', 'fonts'] as const;
@@ -111,7 +112,8 @@ function open(options: {
   resources?: readonly PerformanceResource[];
   time?: boolean;
 } = {}) {
-  const shape = perfShape(options.time ? timeShape(baseShape()) : baseShape());
+  const selectedFeatures = options.time ? ['time', 'perf'] : ['perf'];
+  const shape = composeShape(baseShape(), selectedFeatures);
   const profile = profileFor(shape);
   const page = pageFor(options.clock, options.resources);
   const engine = new JsdomEngine();

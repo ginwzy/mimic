@@ -2,17 +2,27 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal } from '../src/index.js';
-import { chromeDriver, chromeFeature, touchDriver, touchFeature } from '../src/features/chrome.js';
-import { domDriver } from '../src/features/dom.js';
-import { domFeature } from '../src/features/dom.js';
-import { globalsDriver, globalsFeature } from '../src/features/globals.js';
-import { navDriver, navFeature } from '../src/features/nav.js';
-import { netDriver, netFeature } from '../src/features/net.js';
-import { netShape } from '../src/features/net.shape.js';
-import { pluginsDriver, pluginsFeature } from '../src/features/plugins.js';
-import { screenDriver, screenFeature } from '../src/features/screen.js';
-import { uaDriver, uaFeature } from '../src/features/ua.js';
-import { viewDriver, viewFeature } from '../src/features/view.js';
+import { chromeDriver } from '../src/features/chrome.driver.js';
+import { chromeFeature } from '../src/features/chrome.compile.js';
+import { touchDriver } from '../src/features/touch.driver.js';
+import { touchFeature } from '../src/features/touch.compile.js';
+import { domDriver } from '../src/features/dom.driver.js';
+import { domFeature } from '../src/features/dom.compile.js';
+import { globalsDriver } from '../src/features/globals.driver.js';
+import { globalsFeature } from '../src/features/globals.compile.js';
+import { navDriver } from '../src/features/nav.driver.js';
+import { navFeature } from '../src/features/nav.compile.js';
+import { netDriver } from '../src/features/net.driver.js';
+import { netFeature } from '../src/features/net.compile.js';
+import { shape as composeShape } from '../src/features/shape.js';
+import { pluginsDriver } from '../src/features/plugins.driver.js';
+import { pluginsFeature } from '../src/features/plugins.compile.js';
+import { screenDriver } from '../src/features/screen.driver.js';
+import { screenFeature } from '../src/features/screen.compile.js';
+import { uaDriver } from '../src/features/ua.driver.js';
+import { uaFeature } from '../src/features/ua.compile.js';
+import { viewDriver } from '../src/features/view.driver.js';
+import { viewFeature } from '../src/features/view.compile.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 const features = [
@@ -41,7 +51,7 @@ async function open(id: string) {
     ops: [],
     support: { structure: imported.shape.support.structure || imported.shape.level },
   }));
-  const shape = netShape(base);
+  const shape = composeShape(base, ['net']);
   const { hash: _hash, ...body } = imported.profile;
   const profile = parseProfile(seal({ ...body, shape: { id: shape.id, hash: shape.hash } }));
   const engine = new JsdomEngine();
@@ -55,6 +65,30 @@ async function open(id: string) {
   });
   return { engine, runtime: engine.open(plan, drivers) };
 }
+
+test('OffscreenCanvas fallback never calls another task document', async () => {
+  const first = await open('chrome-mac');
+  const second = await open('chrome-mac');
+  try {
+    assert.equal(first.runtime.run(`globalThis.foreignCalls = 0;
+      const create = document.createElement;
+      document.createElement = function(...args) {
+        foreignCalls++;
+        return Reflect.apply(create, this, args);
+      }; 1`).ok, true);
+    const result = second.runtime.run(`document.createElement = () => { throw new Error('unavailable'); };
+      new OffscreenCanvas(2, 2)`);
+    assert.equal(result.ok, false);
+    if (result.ok) assert.fail('expected unavailable document');
+    assert.match(result.error, /document.createElement is unavailable/);
+    assert.deepEqual(first.runtime.run('foreignCalls'), { ok: true, value: 0 });
+  } finally {
+    first.runtime.dispose();
+    second.runtime.dispose();
+  }
+  assert.equal(first.engine.active, 0);
+  assert.equal(second.engine.active, 0);
+});
 
 test('dom shapes methods and accessor halves while retaining jsdom behavior', async () => {
   const { engine, runtime } = await open('macos-chrome-v149');

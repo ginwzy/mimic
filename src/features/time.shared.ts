@@ -1,0 +1,11 @@
+export const DATE = 'window.Date';
+export const DATE_NOW = 'window.Date.now';
+export const DATE_UTC = 'window.Date.UTC';
+export const DATE_GET_TIME = 'window.Date.prototype.getTime';
+export const DATE_TEXT = 'window.Date.prototype.toString';
+export const DATE_UTC_DAY = 'window.Date.prototype.getUTCDay';
+export const DATE_UTC_MILLISECONDS = 'window.Date.prototype.getUTCMilliseconds';
+export const DATE_SET_TIME = 'window.Date.prototype.setTime';
+export const RANDOM = 'window.Math.random';
+export const FORMAT = 'window.Intl.DateTimeFormat';
+export const FORMAT_PARTS = 'window.Intl.DateTimeFormat.prototype.formatToParts';

@@ -2,16 +2,15 @@ import type { Shape } from '../core/types.js';
 import { parseShape } from '../core/parse.js';
 import { seal } from '../core/seal.js';
 import type { DraftOp } from '../shape/types.js';
-import { operations } from './chrome.js';
+import { operations } from './chrome.compile.js';
 import { appendShape, extendShape, shapeSupport } from './extend.js';
-import { screenShape } from './screen.shape.js';
-import { touchShape } from './touch.shape.js';
 
 const DOCUMENT_PROTOTYPE = 'window.Document.prototype';
 const PRIVATE_TOKEN_KEYS = ['hasPrivateToken', 'hasRedemptionRecord'] as const;
 
 // Derived Android Shapes need the same Document key order as the captured BMS capability stubs.
-function chromeDocumentOrder(input: Shape): Shape {
+export function finalizeChromeShape(input: Shape): Shape {
+  if (input.target.host !== 'chrome') return input;
   let changed = false;
   const ops = input.ops.map((raw) => {
     if (raw === null || Array.isArray(raw) || typeof raw !== 'object') return raw;
@@ -30,17 +29,18 @@ function chromeDocumentOrder(input: Shape): Shape {
   return parseShape(seal({ ...body, ops }));
 }
 
-export function chromeShape(input: Shape): Shape {
-  let shape = screenShape(input);
+export function chromeShape(shape: Shape): Shape {
   const chrome = shape.target.host === 'chrome';
-  if (!chrome && shape.support['chrome.shape'] !== undefined) return touchShape(shape);
-  if (chrome) shape = chromeDocumentOrder(shape);
-  shape = chrome
+  if (!chrome && shape.support['chrome.shape'] !== undefined) return shape;
+  return chrome
     ? extendShape(shape, 'chrome', operations(shape), { 'chrome.shape': shapeSupport(shape) })
     : appendShape(shape, operations(shape), { 'chrome.shape': shapeSupport(shape) });
-  shape = touchShape(shape);
+}
+
+/** Retain support insertion order after Touch without recursing through its builder. */
+export function chromeSupport(shape: Shape): Shape {
   return appendShape(shape, [], {
     'window.secure-context': 'emulated',
-    ...(chrome ? { 'chrome.media-surface': 'emulated' as const } : {}),
+    ...(shape.target.host === 'chrome' ? { 'chrome.media-surface': 'emulated' as const } : {}),
   });
 }

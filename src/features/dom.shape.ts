@@ -1,7 +1,8 @@
-import type { JsonValue, Shape } from '../core/types.js';
+import type { Shape } from '../core/types.js';
 import type { DraftOp, FnPart } from '../shape/types.js';
 import { extendShape, shapeSupport } from './extend.js';
-import { globalsShape } from './globals.shape.js';
+import { checkContribution } from '../shape/check.js';
+import { callableWrite, operationWrites } from '../shape/writes.js';
 import { accessor, fn, fnShape, refProp, tag } from './ops.js';
 import { PROTOS } from './dom.data.js';
 import { SURFACES, type SurfaceId } from './dom.missing.data.js';
@@ -16,47 +17,13 @@ const NODE_KEYS = [
 
 const EVENT_KEYS = ['length', 'name', 'prototype', 'NONE', 'CAPTURING_PHASE', 'AT_TARGET', 'BUBBLING_PHASE'] as const;
 
-const token = (owner: string, key: string, part: FnPart): string => `${owner}\u0000${key}\u0000${part}`;
+const token = (path: string, key: string, part: FnPart): string => callableWrite({ path }, key, part);
 
-const DEFERRED_WRITES = [
-  token('window.Navigator.prototype', 'connection', 'get'),
-  token('window.Navigator.prototype', 'storage', 'get'),
-  token('window.Navigator.prototype', 'mediaDevices', 'get'),
-  token('window.Navigator.prototype', 'serviceWorker', 'get'),
-  token('window.Navigator.prototype', 'permissions', 'get'),
-  token('window.Document.prototype', 'fonts', 'get'),
-  token('window.XMLHttpRequest.prototype', 'send', 'value'),
-  token('window.Navigator.prototype', 'sendBeacon', 'value'),
-] as const;
-
-function record(value: JsonValue): Record<string, JsonValue> | undefined {
-  return value !== null && !Array.isArray(value) && typeof value === 'object' ? value : undefined;
-}
-
-function owned(shape: Shape): Set<string> {
-  const output = new Set<string>();
-  for (const raw of shape.ops) {
-    const op = record(raw);
-    const target = op && record(op.target as JsonValue);
-    if (!op || !target || typeof target.path !== 'string') continue;
-    if ((op.op === 'prop' || op.op === 'drop') && typeof op.key === 'string') {
-      for (const part of ['value', 'get', 'set'] as const) output.add(token(target.path, op.key, part));
-      continue;
-    }
-    if (op.op !== 'fn') continue;
-    if (typeof op.key === 'string' && (op.part === 'value' || op.part === 'get' || op.part === 'set')) {
-      output.add(token(target.path, op.key, op.part));
-      continue;
-    }
-    const split = target.path.lastIndexOf('.');
-    if (split > 'window'.length) output.add(token(target.path.slice(0, split), target.path.slice(split + 1), 'value'));
-  }
-  return output;
-}
-
-function operations(shape: Shape): DraftOp[] {
-  const writes = owned(shape);
-  for (const write of DEFERRED_WRITES) writes.add(write);
+function operations(shape: Shape, reserved: ReadonlySet<string>): DraftOp[] {
+  const writes = new Set([
+    ...(checkContribution({ operations: shape.ops }).operations ?? []).flatMap(operationWrites),
+    ...reserved,
+  ]);
   const ops: DraftOp[] = [];
   const add = (owner: string, key: string, part: FnPart, length: number): void => {
     if (writes.has(token(owner, key, part))) return;
@@ -338,9 +305,8 @@ function interfaceOps(shape: Shape): DraftOp[] {
   return ops;
 }
 
-export function domShape(input: Shape): Shape {
-  const shape = globalsShape(input);
-  return extendShape(shape, 'dom', operations(shape), {
+export function domShape(shape: Shape, reserved: ReadonlySet<string>): Shape {
+  return extendShape(shape, 'dom', operations(shape, reserved), {
     'dom.shape': shapeSupport(shape),
     'dom.api': 'shape-only',
   });

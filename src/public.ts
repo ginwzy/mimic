@@ -1,9 +1,11 @@
 import { MimicError } from './core/error.js';
 import type { Job, Plan, Result } from './core/types.js';
+import type { CaptureResult } from './core/capture.js';
 import type { Op, PlanBind } from './shape/types.js';
 import { createMimic as createInternal, type MimicOptions } from './sdk.js';
 
 export { MimicError };
+export type { CapturePost, CaptureValue, CaptureResult } from './core/capture.js';
 export type {
   ErrorInfo,
   Hash,
@@ -29,7 +31,7 @@ export type MimicClientOptions = MimicOptions;
 
 export interface MimicClient {
   run(job: RunJob): Promise<Result>;
-  capture(job: CaptureJob): Promise<Result>;
+  capture(job: CaptureJob): Promise<CaptureResult>;
   plan(job: PlanJob): Promise<Plan<Op, PlanBind>>;
   list(kind: ListKind): Promise<readonly string[]>;
   close(): Promise<void>;

@@ -1,10 +1,8 @@
 import type { Shape } from '../core/types.js';
-import { operations } from './audio.js';
-import { domShape } from './dom.shape.js';
+import { operations } from './audio.compile.js';
 import { extendShape } from './extend.js';
 
-export function audioShape(input: Shape): Shape {
-  const shape = domShape(input);
+export function audioShape(shape: Shape): Shape {
   return extendShape(shape, 'audio', operations(), {
     'audio.shape': 'derived',
     // Channel buffers exist; true device audio capture is not claimed here.

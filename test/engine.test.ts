@@ -21,7 +21,7 @@ import { JSDOM_ENGINE_ABI } from '../src/engine/jsdom.js';
 const store = new LegacyProfiles(path.resolve('profiles'));
 
 test('JsdomEngine locks the current ABI', () => {
-  assert.equal(JSDOM_ENGINE_ABI, 'mimic-jsdom-v2.9');
+  assert.equal(JSDOM_ENGINE_ABI, 'mimic-jsdom-v2.11');
 });
 
 function shapeFor(shape: Shape, features: readonly Feature[]): Shape {
@@ -83,6 +83,60 @@ const surface: Feature = {
 const answer: Driver = {
   open: () => ({ call: () => 42 }),
 };
+
+test('Engine owns driver sessions across child Realms, failed installation and failed cleanup', async () => {
+  const imported = await store.load('chrome-mac');
+  const engine = new JsdomEngine();
+  const plan = compile({
+    ...select(imported.profile, imported.shape, [surface]),
+    job: parseJob({ kind: 'run', code: 'v2answer()' }),
+    engine: engine.manifest,
+    drivers: ['answer'],
+  });
+  const opened: number[] = [];
+  const closed: number[] = [];
+  let created = 0;
+  let failOpen = false;
+  let failClose = false;
+  const scoped: Driver = {
+    open: () => { throw new Error('session factory was bypassed'); },
+    createSession: () => {
+      const id = ++created;
+      return {
+        open: () => {
+          if (failOpen) throw new Error('open failed');
+          opened.push(id);
+          return {
+            call: () => id,
+            close: () => { if (failClose) throw new Error('close failed'); },
+          };
+        },
+        close: () => { closed.push(id); },
+      };
+    },
+  };
+  const first = engine.open(plan, { answer: scoped });
+  const second = engine.open(plan, { answer: scoped });
+  try {
+    assert.deepEqual(first.run(`const frame = document.createElement('iframe');
+      document.body.appendChild(frame); frame.contentWindow.v2answer()`), { ok: true, value: 1 });
+    assert.deepEqual(second.run('v2answer()'), { ok: true, value: 2 });
+    assert.deepEqual(opened, [1, 2, 1]);
+    first.dispose();
+    first.dispose();
+    assert.deepEqual(closed, [1]);
+    failClose = true;
+    assert.throws(() => second.dispose(), /close failed/);
+    assert.deepEqual(closed, [1, 2]);
+  } finally {
+    first.dispose();
+    second.dispose();
+  }
+  failOpen = true;
+  assert.throws(() => engine.open(plan, { answer: scoped }), /安装失败/);
+  assert.deepEqual(closed, [1, 2, 3]);
+  assert.equal(engine.active, 0);
+});
 
 test('JsdomEngine atomically installs a compiled Plan and executes it', async () => {
   const imported = await store.load('chrome-mac');

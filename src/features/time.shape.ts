@@ -1,6 +1,6 @@
 import type { Shape } from '../core/types.js';
 import { extendShape, shapeSupport } from './extend.js';
-import { operations } from './time.js';
+import { operations } from './time.compile.js';
 
 export function timeShape(input: Shape): Shape {
   return extendShape(input, 'time', operations(), {

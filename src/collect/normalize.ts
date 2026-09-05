@@ -2,24 +2,23 @@ import { MimicError } from '../core/error.js';
 import { jsonCopy } from '../core/json.js';
 import { parseShape } from '../core/parse.js';
 import { digest, seal } from '../core/seal.js';
-import type { Data, Hash, JsonValue, Target } from '../core/types.js';
+import type { Data, Hash, JsonValue, Page, Profile, Shape, Target } from '../core/types.js';
 import { shape as builtShape } from '../features/shape.js';
-import {
-  importLegacyData,
-  legacyTarget,
-  type ImportedProfile,
-  type MigrationReport,
-} from '../legacy/profiles.js';
+import { browserFacts, capturedParts } from '../profiles/browser.js';
+import { normalizeIdentity } from '../profiles/normalize.js';
+import { inferTarget, validateTargetClaims } from '../profiles/target.js';
+import { createReport } from '../profiles/report.js';
+import type { NormalizationReport } from '../profiles/types.js';
 import type { CollectBundle, RawEvidence } from './types.js';
 import { probeShape } from './shape.js';
 import type { ProbeSnapshot } from './probe.js';
 
 export interface NormalizedCollect {
   readonly capture: Readonly<{ id: string; hash: Hash }>;
-  readonly profile: ImportedProfile['profile'];
-  readonly page?: ImportedProfile['page'];
-  readonly shape: ImportedProfile['shape'];
-  readonly report: MigrationReport;
+  readonly profile: Profile;
+  readonly page?: Page;
+  readonly shape: Shape;
+  readonly report: NormalizationReport;
 }
 
 function bad(message: string): never {
@@ -67,14 +66,14 @@ export function normalizeCollect(bundle: CollectBundle): NormalizedCollect {
   }
   const profileRaw = jsonCopy(bundle.profileRaw);
   const probeSnapshot = jsonCopy(bundle.probeSnapshot);
-  const target = legacyTarget(profileRaw);
+  const target = inferTarget(profileRaw);
+  const meta = record(profileRaw.meta) || {};
+  validateTargetClaims(target, meta.traits);
   validatePair(profileRaw, probeSnapshot, target);
 
   const identityHash = digest(profileRaw);
   const probeHash = digest(probeSnapshot);
   const id = profileName(target, identityHash);
-  const meta = record(profileRaw.meta) || {};
-  const legacy = { ...profileRaw, meta: { ...meta, name: id } };
   const source = { kind: 'capture' as const, hash: identityHash };
   const shape = probeShape(builtShape(parseShape(seal({
     schema: 2 as const,
@@ -86,12 +85,15 @@ export function normalizeCollect(bundle: CollectBundle): NormalizedCollect {
     ops: [],
     support: { structure: 'derived' as const },
   }))), probeSnapshot as ProbeSnapshot);
-  const imported = importLegacyData(id, legacy, { source, shape });
+  const { derived, ...normalized } = normalizeIdentity({
+    id, target, source, shape, ...browserFacts(profileRaw),
+    captured: capturedParts(meta.fidelity),
+  });
+  // The published ledger retains its historical metadata paths and origin hashes.
+  const report = createReport(id, { ...profileRaw, meta: { ...meta, name: id } }, derived);
   return {
     capture: { id: bundle.id, hash: bundle.hash },
-    profile: imported.profile,
-    ...(imported.page === undefined ? {} : { page: imported.page }),
-    shape: imported.shape,
-    report: imported.report,
+    ...normalized,
+    report,
   };
 }

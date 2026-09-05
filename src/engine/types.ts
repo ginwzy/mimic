@@ -23,8 +23,16 @@ export interface DriverInstance {
   close?(): void;
 }
 
-export interface Driver {
+export interface DriverSession {
   open(port: Port): DriverInstance;
+  /** Combine Realm reports and ordered records without exposing feature names to Engine. */
+  reduceReports?(reports: readonly JsonValue[], records: readonly JsonValue[]): JsonValue;
+  close?(): void;
+}
+
+export interface Driver extends DriverSession {
+  /** Optional state shared only by the Realms of one task. */
+  createSession?(): DriverSession;
 }
 
 export type Drivers = Readonly<Record<string, Driver>>;

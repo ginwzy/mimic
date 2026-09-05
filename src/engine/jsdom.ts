@@ -1,104 +1,22 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import vm from 'node:vm';
 import { CookieJar, JSDOM } from 'jsdom';
 import { MimicError } from '../core/error.js';
 import { deepFreeze, jsonCopy } from '../core/json.js';
 import type { Data, JsonValue, Plan } from '../core/types.js';
-import { createTouchList } from './touch.js';
+import { hookFrameLifecycle, installJsdomHooks, jsdomImplementation, watchFrameOwner } from './jsdom-compat.js';
 import type { DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult, RuntimeRunOptions } from './types.js';
 import type { Desc, EngineManifest, FnShape, Key, Op, PlanBind, Ref, StoredValue } from '../shape/types.js';
 import { parsePlan } from '../compile/parse.js';
+import { jsdomManifest } from './manifest.js';
+import { ExecutionSession } from '../runtime/session.js';
 
 type BrowserWindow = Window & typeof globalThis;
 type Callable = (...args: unknown[]) => unknown;
 type FunctionOp = Extract<Op, { op: 'alloc'; kind: 'function' }>;
 type ShapeOp = Extract<Op, { op: 'fn' }>;
 
-export const JSDOM_ENGINE_ABI = 'mimic-jsdom-v2.9';
-export const REQUESTED_JSDOM_VERSION = '29.1.1';
-
-type TouchEventInitModule = {
-  convert(globalObject: object, value: unknown, options: unknown): Record<string, unknown>;
-};
-
-const HOOKED_TOUCH_EVENT_INIT = new WeakSet<object>();
-const TOUCH_LIST_FIELDS = ['touches', 'targetTouches', 'changedTouches'] as const;
-
-function hookTouchEventInit(require: NodeRequire): void {
-  const touchEventInit = require('jsdom/lib/generated/idl/TouchEventInit.js') as TouchEventInitModule;
-  if (HOOKED_TOUCH_EVENT_INIT.has(touchEventInit)) return;
-  const originalConvert = touchEventInit.convert;
-  touchEventInit.convert = (globalObject, value, options) => {
-    const output = Reflect.apply(originalConvert, touchEventInit, [globalObject, value, options]) as Record<string, unknown>;
-    const touchListConstructor = Reflect.get(globalObject, 'TouchList');
-    if (typeof touchListConstructor !== 'function') return output;
-    for (const field of TOUCH_LIST_FIELDS) {
-      const items = output[field];
-      if (Array.isArray(items)) output[field] = createTouchList(touchListConstructor, items);
-    }
-    return output;
-  };
-  HOOKED_TOUCH_EVENT_INIT.add(touchEventInit);
-}
-
-const FRAME_OWNERS = new WeakMap<object, (child: unknown) => void>();
-const FRAME_ATTACH_HOOKS = new WeakSet<object>();
-const FRAME_ATTRIBUTE_HOOKS = new WeakSet<object>();
-
-function ownerOf(value: unknown, method: string): object | undefined {
-  let prototype = value !== null && typeof value === 'object' ? Object.getPrototypeOf(value) as object | null : null;
-  while (prototype && !Object.hasOwn(prototype, method)) prototype = Object.getPrototypeOf(prototype) as object | null;
-  return prototype ?? undefined;
-}
-
-function dispatchFrame(frame: unknown): void {
-  if (frame === null || typeof frame !== 'object') return;
-  const item = frame as {
-    _ownerDocument?: { _defaultView?: object };
-    contentWindow?: { _globalProxy?: unknown };
-  };
-  const owner = item._ownerDocument?._defaultView;
-  const install = owner && (FRAME_OWNERS.get(owner)
-    ?? FRAME_OWNERS.get((owner as { _globalProxy?: object })._globalProxy ?? owner));
-  const child = item.contentWindow;
-  if (install && child) install(child._globalProxy ?? child);
-}
-
-function hookFrameLifecycle(frame: unknown): void {
-  const attachOwner = ownerOf(frame, '_attach');
-  if (attachOwner && !FRAME_ATTACH_HOOKS.has(attachOwner)) {
-    const desc = Object.getOwnPropertyDescriptor(attachOwner, '_attach');
-    if (desc && typeof desc.value === 'function') {
-      const original = desc.value as (...args: unknown[]) => unknown;
-      Object.defineProperty(attachOwner, '_attach', {
-        ...desc,
-        value: function frameAttach(this: unknown, ...args: unknown[]) {
-          const result = Reflect.apply(original, this, args);
-          dispatchFrame(this);
-          return result;
-        },
-      });
-      FRAME_ATTACH_HOOKS.add(attachOwner);
-    }
-  }
-  const attributeOwner = ownerOf(frame, '_attrModified');
-  if (attributeOwner && !FRAME_ATTRIBUTE_HOOKS.has(attributeOwner)) {
-    const desc = Object.getOwnPropertyDescriptor(attributeOwner, '_attrModified');
-    if (desc && typeof desc.value === 'function') {
-      const original = desc.value as (...args: unknown[]) => unknown;
-      Object.defineProperty(attributeOwner, '_attrModified', {
-        ...desc,
-        value: function frameAttribute(this: unknown, ...args: unknown[]) {
-          const result = Reflect.apply(original, this, args);
-          dispatchFrame(this);
-          return result;
-        },
-      });
-      FRAME_ATTRIBUTE_HOOKS.add(attributeOwner);
-    }
-  }
-}
+export { JSDOM_ENGINE_ABI, REQUESTED_JSDOM_VERSION } from './manifest.js';
 
 interface FunctionProperty {
   owner: object;
@@ -117,7 +35,7 @@ interface RealmRegistry {
   readonly nativeFunctions: WeakMap<Function, string>;
   readonly hiddenSymbols: Set<symbol>;
   readonly installers: WeakMap<object, Installer>;
-  readonly records: Map<string, JsonValue[]>;
+  readonly session: ExecutionSession;
   nextRealm: number;
 }
 
@@ -137,61 +55,6 @@ function publicStack(stack: string, name: string, message: string): string {
     .slice(headerIndex < 0 ? 0 : headerIndex + 1)
     .filter((line) => /^\s*at\s+/.test(line) && !unsafeStackFrame(line));
   return [header, ...frames].join('\n');
-}
-
-function reportData(value: JsonValue | undefined): Data | undefined {
-  return value !== null && value !== undefined && !Array.isArray(value) && typeof value === 'object'
-    ? value as Data
-    : undefined;
-}
-
-function mergeRealmReport(id: string, current: JsonValue | undefined, child: JsonValue): JsonValue {
-  const left = reportData(current);
-  const right = reportData(child);
-  if (!left || !right) return current ?? child;
-  if (id === 'net') {
-    const leftPosts = Array.isArray(left.posts) ? left.posts : [];
-    const rightPosts = Array.isArray(right.posts) ? right.posts : [];
-    return {
-      ...left,
-      ...right,
-      body: typeof left.body === 'string' ? left.body : (typeof right.body === 'string' ? right.body : null),
-      posts: [...leftPosts, ...rightPosts],
-    };
-  }
-  if (id === 'trace') {
-    const leftCode = Array.isArray(left.dynamicCode) ? left.dynamicCode : [];
-    const rightCode = Array.isArray(right.dynamicCode) ? right.dynamicCode : [];
-    return { ...left, ...right, dynamicCode: [...leftCode, ...rightCode] };
-  }
-  return current ?? child;
-}
-
-function recordedNetReport(current: JsonValue | undefined, records: readonly JsonValue[]): JsonValue {
-  const data = reportData(current) ?? {};
-  const posts = records
-    .map((value) => jsonCopy(value))
-    .filter((value): value is Data => reportData(value) !== undefined);
-  const first = posts.find((post) => typeof post.len === 'number' && post.len > 0 && typeof post.body === 'string');
-  return {
-    ...data,
-    body: first && typeof first.body === 'string' ? first.body : null,
-    posts,
-  };
-}
-
-type JsdomImplementation = Record<PropertyKey, unknown>;
-
-function jsdomImplementation(wrapper: unknown, name: string): JsdomImplementation {
-  if ((typeof wrapper !== 'object' && typeof wrapper !== 'function') || wrapper === null) {
-    throw new TypeError(`${name} is not a jsdom wrapper`);
-  }
-  const key = Object.getOwnPropertySymbols(wrapper).find((symbol) => symbol.description === 'impl');
-  const implementation = key === undefined ? undefined : Reflect.get(wrapper, key);
-  if ((typeof implementation !== 'object' && typeof implementation !== 'function') || implementation === null) {
-    throw new TypeError(`${name} has no jsdom implementation`);
-  }
-  return implementation as JsdomImplementation;
 }
 
 class JsdomRuntime implements Runtime {
@@ -389,7 +252,7 @@ class Installer {
       nativeFunctions: new WeakMap(),
       hiddenSymbols: new Set(),
       installers: new WeakMap(),
-      records: new Map(),
+      session: new ExecutionSession(drivers, plan.id),
       nextRealm: 0,
     };
     this.realmOrdinal = this.registry.nextRealm++;
@@ -456,7 +319,11 @@ class Installer {
       }
     }
     this.children.clear();
-    if (this.closeDescriptor) Object.defineProperty(this.window, 'close', this.closeDescriptor);
+    try {
+      if (this.closeDescriptor) Object.defineProperty(this.window, 'close', this.closeDescriptor);
+    } catch (cause) {
+      first ??= cause;
+    }
     for (const instance of this.opened.slice().reverse()) {
       try {
         instance.close?.();
@@ -471,11 +338,21 @@ class Installer {
     this.resolved.clear();
     this.resolvedKeys.clear();
     this.sources.clear();
-    if (this.realmOrdinal === 0) this.registry.records.clear();
+    if (this.realmOrdinal === 0) {
+      try {
+        this.registry.session.close();
+      } catch (cause) {
+        first ??= cause;
+      }
+    }
     if (first) throw first;
   }
 
   report(): Data {
+    return this.registry.session.report(this.realmReports());
+  }
+
+  private realmReports(): Data[] {
     if (this.closed) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: 'Installer 已关闭' });
     const output: Data = {};
     for (const [id, instance] of this.instances) {
@@ -494,15 +371,7 @@ class Installer {
         });
       }
     }
-    for (const child of this.children) {
-      const nested = child.report();
-      for (const [id, value] of Object.entries(nested)) output[id] = mergeRealmReport(id, output[id], value);
-    }
-    if (this.realmOrdinal === 0) {
-      const records = this.registry.records.get('net');
-      if (records?.length) output.net = recordedNetReport(output.net, records);
-    }
-    return output;
+    return [output, ...[...this.children].flatMap((child) => child.realmReports())];
   }
 
   hiddenSymbols(): Set<symbol> {
@@ -564,14 +433,7 @@ class Installer {
       },
       error: (name, message) => new this.window[name](message),
       resolve: (value) => this.window.Promise.resolve(value === undefined ? undefined : this.value({ json: value })),
-      record: (value) => {
-        let records = this.registry.records.get(driver);
-        if (!records) {
-          records = [];
-          this.registry.records.set(driver, records);
-        }
-        records.push(jsonCopy(value));
-      },
+      record: (value) => this.registry.session.record(driver, value),
       evaluate: (source) => this.evaluate(source),
       realm: () => this.realmOrdinal,
       now: () => this.window.Date.now(),
@@ -580,8 +442,7 @@ class Installer {
     for (const bind of this.plan.binds) {
       let instance = this.instances.get(bind.driver);
       if (!instance) {
-        const driver = this.drivers[bind.driver];
-        if (!driver) throw new MimicError({ phase: 'install', code: 'NO_DRIVER', message: `Runtime 缺少 Driver:${bind.driver}` });
+        const driver = this.registry.session.driver(bind.driver);
         instance = driver.open(port(bind.driver));
         if (instance === null || typeof instance !== 'object') {
           throw new MimicError({ phase: 'install', code: 'INSTALL_FAILED', message: `Driver.open 必须返回对象:${bind.driver}` });
@@ -674,7 +535,7 @@ class Installer {
     const internal = this.window as unknown as { _globalObject?: object; _globalProxy?: object };
     const install = (child: unknown): void => this.installChild(child);
     for (const owner of [this.window, internal._globalObject, internal._globalProxy]) {
-      if (owner !== undefined) FRAME_OWNERS.set(owner, install);
+      if (owner !== undefined) watchFrameOwner(owner, install);
     }
     const sample = this.window.document.createElement('iframe');
     const implKey = Object.getOwnPropertySymbols(sample).find((key) => key.description === 'impl');
@@ -1193,23 +1054,8 @@ export class JsdomEngine implements Engine {
   private activeCount = 0;
 
   constructor() {
-    const require = createRequire(import.meta.url);
-    hookTouchEventInit(require);
-    const jsdomVersion = (require('jsdom/package.json') as { version: string }).version;
-    const source = {
-      engine: 'jsdom',
-      abi: JSDOM_ENGINE_ABI,
-      jsdom: jsdomVersion,
-      requestedJsdom: REQUESTED_JSDOM_VERSION,
-      node: process.versions.node.split('.')[0],
-      v8: process.versions.v8,
-      options: { runScripts: 'outside-only', pretendToBeVisual: true, cookieJar: true },
-    };
-    this.manifest = deepFreeze({
-      id: 'jsdom',
-      hash: createHash('sha256').update(JSON.stringify(source)).digest('hex'),
-      blocked: [],
-    });
+    installJsdomHooks();
+    this.manifest = jsdomManifest();
   }
 
   get active(): number {

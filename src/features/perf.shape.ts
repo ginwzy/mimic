@@ -1,6 +1,6 @@
 import type { Shape } from '../core/types.js';
 import { extendShape, shapeSupport } from './extend.js';
-import { operations } from './perf.js';
+import { operations } from './perf.compile.js';
 
 export function perfShape(input: Shape): Shape {
   return extendShape(input, 'perf', operations(), {

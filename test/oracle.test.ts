@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob } from '../src/index.js';
-import { drivers, features } from '../src/features/index.js';
+import { drivers } from '../src/features/drivers.js';
+import { features } from '../src/features/compile.js';
 import { diff, summarize, type ProbeSnapshot } from '../src/collect/probe.js';
 
 interface Budget {

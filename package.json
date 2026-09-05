@@ -57,7 +57,9 @@
     "check:data": "npm run build && npm run check:data:compiled",
     "check": "npm run typecheck && npm run check:shapes && npm run check:data:compiled",
     "bench": "npm run build && node dist/src/quality/bench.js",
-    "gate:leak": "npm run build && node dist/src/quality/leak.js"
+    "gate:leak": "npm run build && node dist/src/quality/leak.js",
+    "gate:memory": "npm run build && node dist/src/quality/memory.js",
+    "gate:capabilities": "npm run build && node dist/src/quality/capabilities.js"
   },
   "keywords": [
     "jsdom",

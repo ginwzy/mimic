@@ -5,8 +5,9 @@ import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, seal,
   parseShape,
 } from '../src/index.js';
-import { viewDriver, viewFeature } from '../src/features/view.js';
-import { viewShape } from '../src/features/view.shape.js';
+import { viewDriver } from '../src/features/view.driver.js';
+import { viewFeature } from '../src/features/view.compile.js';
+import { shape as composeShape } from '../src/features/shape.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 
@@ -19,7 +20,7 @@ async function open(id: string) {
     ops: [],
     support: { structure: imported.shape.support.structure || imported.shape.level },
   }));
-  const shape = viewShape(base);
+  const shape = composeShape(base, ['view']);
   const { hash: _hash, ...body } = imported.profile;
   const profile = parseProfile(seal({ ...body, shape: { id: shape.id, hash: shape.hash } }));
   const engine = new JsdomEngine();

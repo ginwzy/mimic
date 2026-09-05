@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { createNodeApplication, JsdomEngine } from '../src/index.js';
-import { drivers } from '../src/features/index.js';
+import { drivers } from '../src/features/drivers.js';
 
 const profilesRoot = path.resolve('profiles');
 const probePath = path.resolve('resources/probe.js');

@@ -1,18 +1,16 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import type { TaskRequest } from '../app/types.js';
 import { trustPlan } from '../compile/trusted.js';
 import { deepFreeze } from '../core/json.js';
 import { encodeResult } from '../core/result.js';
 import type { Plan, Result } from '../core/types.js';
 import { createNodeRuntime } from '../node/runtime.js';
 import type { Op, PlanBind } from '../shape/types.js';
-import type { WorkerConfig } from './pool.js';
+import { WORKER_PLAN_CACHE_LIMIT, type ExecuteMessage, type WorkerConfig } from './protocol.js';
 
 if (!parentPort) throw new Error('executor/worker must run inside worker_threads');
 
 const app = createNodeRuntime(workerData as WorkerConfig);
 const plans = new Map<string, Plan<Op, PlanBind>>();
-const PLAN_CACHE_LIMIT = 128;
 
 function failure(cause: unknown): Result {
   const message = cause instanceof Error ? cause.message : String(cause);
@@ -22,12 +20,7 @@ function failure(cause: unknown): Result {
   });
 }
 
-parentPort.on('message', async ({ id, request, planId, plan: wire }: {
-  id: number;
-  request: TaskRequest;
-  planId: string;
-  plan?: Plan<Op, PlanBind>;
-}) => {
+parentPort.on('message', async ({ id, job, policy, planId, plan: wire }: ExecuteMessage) => {
   parentPort!.postMessage({ id, started: true });
   let result: Result;
   try {
@@ -39,9 +32,9 @@ parentPort.on('message', async ({ id, request, planId, plan: wire }: {
       if (wire === undefined || wire.id !== planId) throw new Error(`worker missing Plan:${planId}`);
       plan = trustPlan(deepFreeze(wire));
       plans.set(planId, plan);
-      while (plans.size > PLAN_CACHE_LIMIT) plans.delete(plans.keys().next().value!);
+      while (plans.size > WORKER_PLAN_CACHE_LIMIT) plans.delete(plans.keys().next().value!);
     }
-    result = await app.executePrepared(request, plan);
+    result = await app.executePrepared({ plan, job: deepFreeze(job), policy: deepFreeze(policy) });
   } catch (cause) {
     result = failure(cause);
   }

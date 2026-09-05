@@ -1,10 +1,8 @@
 import type { Shape } from '../core/types.js';
 import { extendShape, shapeSupport } from './extend.js';
-import { operations } from './screen.js';
-import { viewShape } from './view.shape.js';
+import { operations } from './screen.compile.js';
 
-export function screenShape(input: Shape): Shape {
-  const shape = viewShape(input);
+export function screenShape(shape: Shape): Shape {
   return extendShape(shape, 'screen', operations(), {
     'screen.shape': shapeSupport(shape),
     'screen.api': 'emulated',

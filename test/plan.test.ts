@@ -4,7 +4,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { Catalog, compile, explain, LegacyProfiles, MimicError, parseJob, parsePlan, parseProfile, parseShape, seal, type CompileInput, type Feature, type JsonValue, type Profile, type Shape } from '../src/index.js';
 import { canonical } from '../src/core/canonical.js';
-import { drivers as builtDrivers, features as builtFeatures } from '../src/features/index.js';
+import { drivers as builtDrivers } from '../src/features/drivers.js';
+import { features as builtFeatures } from '../src/features/compile.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 
@@ -622,5 +623,5 @@ test('compile produces a unique base Plan for every migrated Profile', async () 
     assert.equal(Object.hasOwn(plan, 'synthetic'), false, id);
     assert.doesNotThrow(() => JSON.stringify(plan), id);
   }
-  assert.equal(plans.size, 1012);
+  assert.equal(plans.size, ids.length);
 });

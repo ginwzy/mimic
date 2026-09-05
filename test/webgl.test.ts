@@ -5,9 +5,11 @@ import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal,
   type Feature,
 } from '../src/index.js';
-import { canvasDriver, canvasFeature } from '../src/features/canvas.js';
-import { webglDriver, webglFeature } from '../src/features/webgl.js';
-import { webglShape } from '../src/features/webgl.shape.js';
+import { canvasDriver } from '../src/features/canvas.driver.js';
+import { canvasFeature } from '../src/features/canvas.compile.js';
+import { webglDriver } from '../src/features/webgl.driver.js';
+import { webglFeature } from '../src/features/webgl.compile.js';
+import { shape as composeShape } from '../src/features/shape.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 // Keep the Runtime seam real while excluding unrelated upstream feature graphs from this slice.
@@ -20,7 +22,7 @@ const drivers = {
 };
 const bases = new Map<string, Promise<{
   imported: Awaited<ReturnType<LegacyProfiles['load']>>;
-  shape: ReturnType<typeof webglShape>;
+  shape: ReturnType<typeof composeShape>;
   catalog: Catalog;
 }>>();
 
@@ -42,7 +44,7 @@ async function base(id: string) {
   if (cached) return cached;
   const pending = (async () => {
     const imported = await store.load(id);
-    const shape = webglShape(parseShape(seal({
+    const shape = composeShape(parseShape(seal({
       schema: 2,
       id: imported.shape.id,
       target: imported.shape.target,
@@ -51,7 +53,7 @@ async function base(id: string) {
       features: deps,
       ops: [],
       support: { structure: imported.shape.support.structure ?? 'derived' },
-    })));
+    })), ['webgl']);
     return { imported, shape, catalog: Catalog.create('builtin', [shape], features) };
   })();
   bases.set(id, pending);

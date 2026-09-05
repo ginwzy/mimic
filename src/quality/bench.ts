@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type { Application, TaskRequest } from '../app/index.js';
 import { JsdomEngine } from '../engine/jsdom.js';
 import { WorkerExecutor } from '../executor/pool.js';
-import { drivers } from '../features/index.js';
+import { drivers } from '../features/drivers.js';
 import { createNodeApplication } from '../node/app.js';
 
 const DEFAULT_PROFILES = ['chrome-mac', 'android-webview-v138'] as const;

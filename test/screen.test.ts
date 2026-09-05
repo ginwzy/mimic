@@ -5,9 +5,11 @@ import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, seal,
   parseShape,
 } from '../src/index.js';
-import { screenDriver, screenFeature } from '../src/features/screen.js';
-import { screenShape } from '../src/features/screen.shape.js';
-import { viewDriver, viewFeature } from '../src/features/view.js';
+import { screenDriver } from '../src/features/screen.driver.js';
+import { screenFeature } from '../src/features/screen.compile.js';
+import { shape as composeShape } from '../src/features/shape.js';
+import { viewDriver } from '../src/features/view.driver.js';
+import { viewFeature } from '../src/features/view.compile.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 
@@ -20,7 +22,7 @@ async function open(id: string) {
     ops: [],
     support: { structure: imported.shape.support.structure || imported.shape.level },
   }));
-  const shape = screenShape(base);
+  const shape = composeShape(base, ['screen']);
   const { hash: _hash, ...body } = imported.profile;
   const profile = parseProfile(seal({ ...body, shape: { id: shape.id, hash: shape.hash } }));
   const engine = new JsdomEngine();

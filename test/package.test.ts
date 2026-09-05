@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -114,17 +114,30 @@ async function assertImportGraph(
   for (const relative of roots) await walk(path.join(root, relative));
 }
 
+test('Drivers do not load identity synthesis policy', async () => {
+  await assertImportGraph(['src/features/drivers.ts', 'src/executor/worker.ts'], resolved =>
+    resolved.includes(`${path.sep}environment${path.sep}`) ? path.relative(root, resolved) : undefined);
+});
+
+test('identity policy only consumes pure shared Feature protocols', async () => {
+  await assertImportGraph(['src/environment/identity.ts'], resolved => {
+    if (resolved.includes(`${path.sep}runtime${path.sep}`) || resolved.includes(`${path.sep}legacy${path.sep}`)) return path.relative(root, resolved);
+    if (resolved.includes(`${path.sep}features${path.sep}`) && !resolved.endsWith('.shared.ts')) return path.relative(root, resolved);
+    return undefined;
+  });
+});
+
 test('execute catalog does not import DOM capture tables', async () => {
   const tables = ['dom.data.ts', 'dom.missing.data.ts'];
   await assertImportGraph(
-    ['src/features/index.ts', 'src/node/app.ts', 'src/executor/worker.ts', 'src/public.ts'],
+    ['src/features/drivers.ts', 'src/node/app.ts', 'src/executor/worker.ts', 'src/public.ts'],
     (resolved) => tables.find((table) => resolved.endsWith(table)),
   );
 });
 
 test('execute catalog does not import Shape compilers', async () => {
   await assertImportGraph(
-    ['src/features/index.ts', 'src/node/runtime.ts', 'src/executor/worker.ts', 'src/public.ts'],
+    ['src/features/drivers.ts', 'src/node/runtime.ts', 'src/executor/worker.ts', 'src/public.ts'],
     (resolved) => {
       if (resolved.endsWith(`${path.sep}features${path.sep}shape.ts`)) return path.relative(root, resolved);
       if (resolved.endsWith(`${path.sep}features${path.sep}extend.ts`)) return path.relative(root, resolved);
@@ -145,6 +158,52 @@ test('worker runtime does not import the Profile importer', async () => {
   );
 });
 
+test('new evidence adapters do not import Legacy', async () => {
+  await assertImportGraph(
+    ['src/collect/normalize.ts', 'src/collect/store.ts', 'src/profiles/fp-env.ts'],
+    resolved => resolved.includes(`${path.sep}legacy${path.sep}`) ? path.relative(root, resolved) : undefined,
+  );
+});
+
+test('identity normalization does not depend on input adapters or migration reporting', async () => {
+  await assertImportGraph(
+    ['src/profiles/normalize.ts'],
+    resolved => {
+      const isAdapterOrReport = ['browser.ts', 'fp-env.ts', 'report.ts'].some(file => resolved.endsWith(path.join('profiles', file)))
+        || resolved.includes(`${path.sep}legacy${path.sep}`) || resolved.includes(`${path.sep}collect${path.sep}`);
+      return isAdapterOrReport ? path.relative(root, resolved) : undefined;
+    },
+  );
+});
+
+test('worker runtime does not import Feature compilation', async () => {
+  await assertImportGraph(
+    ['src/features/drivers.ts', 'src/node/runtime.ts', 'src/executor/worker.ts'],
+    resolved => resolved.endsWith('.compile.ts') || resolved.endsWith(path.join('features', 'compile.ts'))
+      ? path.relative(root, resolved) : undefined,
+  );
+});
+
+test('planning does not import Feature Drivers or runtime implementations', async () => {
+  await assertImportGraph(
+    ['src/features/compile.ts', 'src/features/shape.ts', 'src/node/planner.ts', 'src/public.ts'],
+    resolved => {
+      const isRuntimeImplementation = resolved.endsWith('.driver.ts') || resolved.endsWith(path.join('features', 'drivers.ts'))
+        || resolved.endsWith(path.join('engine', 'jsdom.ts')) || resolved.endsWith(path.join('runtime', 'runner.ts'));
+      return isRuntimeImplementation ? path.relative(root, resolved) : undefined;
+    },
+  );
+});
+
+test('Shape contributions do not recursively import other Shape contributions', async () => {
+  const files = await readdir(path.join(root, 'src/features'));
+  await assertImportGraph(
+    files.filter(file => file.endsWith('.shape.ts')).map(file => path.join('src/features', file)),
+    resolved => resolved.endsWith('.shape.ts') || resolved.endsWith(path.join('features', 'shape.ts'))
+      ? path.relative(root, resolved) : undefined,
+  );
+});
+
 test('worker runtime does not import the planner Application', async () => {
   const forbidden = [
     `${path.sep}app${path.sep}index.ts`,
@@ -156,6 +215,14 @@ test('worker runtime does not import the planner Application', async () => {
     ['src/executor/worker.ts', 'src/node/runtime.ts'],
     (resolved) => forbidden.find((suffix) => resolved.endsWith(suffix)),
   );
+});
+
+test('execution preparation does not load Runtime or interaction implementations', async () => {
+  await assertImportGraph(['src/runtime/task.ts'], resolved =>
+    resolved.includes(`${path.sep}interaction${path.sep}`)
+      || ['runner.ts', 'capture.ts', 'script.ts'].some(file => resolved.endsWith(path.join('runtime', file)))
+      || resolved.endsWith(path.join('engine', 'jsdom.ts'))
+      ? path.relative(root, resolved) : undefined);
 });
 
 test('npm tarball exposes only the current public surfaces', async (t) => {

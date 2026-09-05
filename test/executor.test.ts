@@ -146,10 +146,11 @@ test('WorkerExecutor preserves parent-side planning errors as validated Results'
   }
 });
 
-test('WorkerExecutor starts one worker and scales to the configured concurrency on demand', async () => {
+test('WorkerExecutor starts no workers and scales to the configured concurrency on demand', async () => {
   const pool = new WorkerExecutor({ profilesRoot, probePath, size: 3, timeoutMs: 5_000, maxQueue: 3 });
   try {
-    assert.equal(pool.stats.idle, 1);
+    assert.equal(pool.stats.idle, 0);
+    assert.deepEqual(pool.workerLifecycle, { created: 0, terminated: 0, live: 0 });
     const pending = [pool.run(request('1')), pool.run(request('2')), pool.run(request('3'))];
     assert.equal(pool.active, 3);
     const results = await Promise.all(pending);

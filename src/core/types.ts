@@ -208,7 +208,7 @@ export interface Profile {
   window?: WindowData;
   timezone?: TimezoneData;
   webgl?: WebGlData;
-  /** Optional captured/synthetic OfflineAudio 4-tuple; absent → runtime synthesizes from profile id. */
+  /** Optional OfflineAudio 4-tuple; absence is resolved by the compile-time identity policy. */
   audio?: AudioData;
   /** Optional system-color rgb map for getComputedStyle; absent → synthesize from profile id. */
   systemColors?: SystemColorsData;

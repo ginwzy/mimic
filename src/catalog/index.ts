@@ -29,6 +29,7 @@ export class Catalog implements CatalogPort {
         rev,
         ...(feature.requires === undefined ? {} : { requires: Object.freeze([...feature.requires]) }),
         build: feature.build,
+        ...(feature.describe === undefined ? {} : { describe: feature.describe }),
       }));
     }
     this.features = featureMap;

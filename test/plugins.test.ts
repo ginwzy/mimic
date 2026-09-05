@@ -2,13 +2,21 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal } from '../src/index.js';
-import { chromeDriver, chromeFeature, touchDriver, touchFeature } from '../src/features/chrome.js';
-import { navDriver, navFeature } from '../src/features/nav.js';
-import { pluginsDriver, pluginsFeature } from '../src/features/plugins.js';
-import { pluginsShape } from '../src/features/plugins.shape.js';
-import { screenDriver, screenFeature } from '../src/features/screen.js';
-import { uaDriver, uaFeature } from '../src/features/ua.js';
-import { viewDriver, viewFeature } from '../src/features/view.js';
+import { chromeDriver } from '../src/features/chrome.driver.js';
+import { chromeFeature } from '../src/features/chrome.compile.js';
+import { touchDriver } from '../src/features/touch.driver.js';
+import { touchFeature } from '../src/features/touch.compile.js';
+import { navDriver } from '../src/features/nav.driver.js';
+import { navFeature } from '../src/features/nav.compile.js';
+import { pluginsDriver } from '../src/features/plugins.driver.js';
+import { pluginsFeature } from '../src/features/plugins.compile.js';
+import { shape as composeShape } from '../src/features/shape.js';
+import { screenDriver } from '../src/features/screen.driver.js';
+import { screenFeature } from '../src/features/screen.compile.js';
+import { uaDriver } from '../src/features/ua.driver.js';
+import { uaFeature } from '../src/features/ua.compile.js';
+import { viewDriver } from '../src/features/view.driver.js';
+import { viewFeature } from '../src/features/view.compile.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 const features = [viewFeature, screenFeature, chromeFeature, touchFeature, navFeature, uaFeature, pluginsFeature];
@@ -26,7 +34,7 @@ async function open(id: string) {
     ops: [],
     support: { structure: imported.shape.support.structure || imported.shape.level },
   }));
-  const shape = pluginsShape(base);
+  const shape = composeShape(base, ['plugins']);
   const { hash: _hash, ...body } = imported.profile;
   const profile = parseProfile(seal({ ...body, shape: { id: shape.id, hash: shape.hash } }));
   const engine = new JsdomEngine();

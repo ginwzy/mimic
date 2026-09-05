@@ -30,10 +30,6 @@ export interface CaptureBodiesResult {
   posts: readonly CapturedPost[];
 }
 
-interface CapturedBodyPost extends CapturedPost {
-  body: string | null;
-}
-
 function positiveInteger(value: number, name: string): void {
   if (!Number.isInteger(value) || value < 1) throw new TypeError(`${name} must be a positive integer`);
 }
@@ -54,23 +50,6 @@ function capturePage(options: CaptureBodiesOptions): Page {
     html: options.pageHtml,
     cookies: [...(options.cookies ?? [])],
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && !Array.isArray(value) && typeof value === 'object';
-}
-
-function isCapturedBodyPost(value: unknown): value is CapturedBodyPost {
-  if (!isRecord(value)) return false;
-  return typeof value.via === 'string'
-    && typeof value.tag === 'string'
-    && typeof value.len === 'number'
-    && (typeof value.body === 'string' || value.body === null);
-}
-
-function capturedPosts(value: unknown): CapturedBodyPost[] {
-  if (!isRecord(value) || !Array.isArray(value.posts)) return [];
-  return value.posts.filter(isCapturedBodyPost);
 }
 
 function captureInteraction(options: CaptureBodiesOptions) {
@@ -113,7 +92,7 @@ export async function captureBodies(options: CaptureBodiesOptions): Promise<Capt
     if (!result.ok) {
       throw new Error(`mimic capture failed: ${result.error.code}: ${result.error.message}`);
     }
-    const posts = capturedPosts(result.value);
+    const posts = result.value.posts;
     return {
       bodies: posts.flatMap((post) => post.body === null || post.body.length === 0 ? [] : [post.body]),
       posts: posts.map(({ via, tag, len }) => ({ via, tag, len })),

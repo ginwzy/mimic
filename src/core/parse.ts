@@ -1,16 +1,16 @@
-import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
+import { Ajv, type ValidateFunction } from 'ajv';
 import collectSchema from '../../schemas/v2/collect.schema.json' with { type: 'json' };
 import dataSchema from '../../schemas/v2/data.schema.json' with { type: 'json' };
 import catalogSchema from '../../schemas/v2/catalog.schema.json' with { type: 'json' };
 import irSchema from '../../schemas/v2/ir.schema.json' with { type: 'json' };
-import jobSchema from '../../schemas/v2/job.schema.json' with { type: 'json' };
 import pageSchema from '../../schemas/v2/page.schema.json' with { type: 'json' };
 import profileSchema from '../../schemas/v2/profile.schema.json' with { type: 'json' };
 import shapeSchema from '../../schemas/v2/shape.schema.json' with { type: 'json' };
 import { MimicError } from './error.js';
-import { deepFreeze, jsonCopy } from './json.js';
+import { parseValue as parse, httpUrl } from './validation.js';
 import { validHash } from './seal.js';
-import type { CatalogDoc, CollectBundle, ErrorCode, Job, Page, ParseIssue, Profile, Shape, Target } from './types.js';
+import type { CatalogDoc, CollectBundle, ErrorCode, Page, Profile, Shape, Target } from './types.js';
+export { parseJob } from './job.js';
 import {
   isTrustedPage,
   isTrustedProfile,
@@ -24,47 +24,11 @@ const ajv = new Ajv({ allErrors: true, strict: true });
 ajv.addSchema(dataSchema);
 ajv.addSchema(irSchema);
 ajv.addSchema(shapeSchema);
-const validateJob = ajv.compile<Job>(jobSchema);
 const validateCollect = ajv.compile<CollectBundle>(collectSchema);
 const validateShape = ajv.getSchema<Shape>(shapeSchema.$id) as ValidateFunction<Shape>;
 const validateProfile = ajv.compile<Profile>(profileSchema);
 const validatePage = ajv.compile<Page>(pageSchema);
 const validateCatalog = ajv.compile<CatalogDoc>(catalogSchema);
-
-function issues(errors: ErrorObject[] | null | undefined): ParseIssue[] {
-  return (errors || []).map((error) => ({
-    path: error.instancePath || '/',
-    rule: error.keyword,
-    message: error.message || 'invalid value',
-  }));
-}
-
-function parse<T>(input: unknown, validate: ValidateFunction<T>, code: ErrorCode, name: string): T {
-  let value: unknown;
-  try {
-    value = jsonCopy(input);
-  } catch (cause) {
-    throw new MimicError({ phase: 'parse', code, message: `${name} 不是纯 JSON`, cause });
-  }
-  if (!validate(value)) {
-    throw new MimicError({
-      phase: 'parse',
-      code,
-      message: `${name} 不符合 v2 Schema`,
-      details: issues(validate.errors),
-    });
-  }
-  return deepFreeze(value as T);
-}
-
-function httpUrl(value: string, code: ErrorCode, name: string): void {
-  try {
-    const url = new URL(value);
-    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname) throw new TypeError('unsupported URL');
-  } catch (cause) {
-    throw new MimicError({ phase: 'parse', code, message: `${name} 必须是完整的 HTTP(S) URL`, cause });
-  }
-}
 
 function targetId(target: Target): string {
   return `chromium/${target.host}/${target.platform}/${target.form}/${target.version}`;
@@ -76,12 +40,6 @@ function coherent(shape: Shape, code: ErrorCode): void {
     throw new MimicError({ phase: 'parse', code, message: `Shape id 与字段不一致:${shape.id}` });
   }
 }
-
-export const parseJob = (input: unknown): Job => {
-  const job = parse(input, validateJob, 'BAD_JOB', 'Job');
-  if ('scriptUrl' in job && job.scriptUrl !== undefined) httpUrl(job.scriptUrl, 'BAD_JOB', 'scriptUrl');
-  return job;
-};
 
 export const parseCollect = (input: unknown): CollectBundle => {
   const collect = parse(input, validateCollect, 'BAD_COLLECT', 'Collect');

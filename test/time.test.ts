@@ -13,8 +13,9 @@ import {
   type Profile,
   type Shape,
 } from '../src/index.js';
-import { timeDriver, timeFeature } from '../src/features/time.js';
-import { timeShape } from '../src/features/time.shape.js';
+import { timeDriver } from '../src/features/time.driver.js';
+import { timeFeature } from '../src/features/time.compile.js';
+import { shape as composeShape } from '../src/features/shape.js';
 
 const source = { kind: 'manual' as const, hash: 'a'.repeat(64) };
 const parts = ['navigator', 'screen', 'window', 'timezone', 'webgl', 'canvas', 'audio', 'fonts'] as const;
@@ -103,7 +104,7 @@ function open(options: {
   clock?: { now: number; seed: number };
   timeZone?: string | undefined;
 } = {}) {
-  const shape = timeShape(baseShape());
+  const shape = composeShape(baseShape(), ['time']);
   const profile = profileFor(shape, Object.hasOwn(options, 'timeZone') ? options.timeZone : 'UTC');
   const page = pageFor(options.clock);
   const engine = new JsdomEngine();

@@ -1,6 +1,6 @@
 import type { Shape } from '../core/types.js';
 import { extendShape, shapeSupport } from './extend.js';
-import { operations } from './view.js';
+import { operations } from './view.compile.js';
 
 export function viewShape(shape: Shape): Shape {
   return extendShape(shape, 'view', operations(), {

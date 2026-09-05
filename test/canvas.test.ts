@@ -1,3 +1,4 @@
+import { synthesizeCanvasDataURL, EMPTY_CANVAS_DATA_URL } from '../src/environment/identity.js';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
@@ -5,21 +6,30 @@ import {
   Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal,
   type Driver, type Feature,
 } from '../src/index.js';
-import {
-  canvasContext, canvasDriver, canvasFeature, canvasFingerprintHex,
-  EMPTY_CANVAS_DATA_URL, synthesizeCanvasDataURL,
-} from '../src/features/canvas.js';
-import { canvasShape } from '../src/features/canvas.shape.js';
-import { chromeDriver, chromeFeature, touchDriver, touchFeature } from '../src/features/chrome.js';
-import { domDriver, domFeature } from '../src/features/dom.js';
-import { globalsDriver, globalsFeature } from '../src/features/globals.js';
-import { navDriver, navFeature } from '../src/features/nav.js';
-import { netDriver, netFeature } from '../src/features/net.js';
-import { netShape } from '../src/features/net.shape.js';
-import { pluginsDriver, pluginsFeature } from '../src/features/plugins.js';
-import { screenDriver, screenFeature } from '../src/features/screen.js';
-import { uaDriver, uaFeature } from '../src/features/ua.js';
-import { viewDriver, viewFeature } from '../src/features/view.js';
+import { canvasContext, canvasFeature, canvasFingerprintHex } from '../src/features/canvas.compile.js';
+import { canvasDriver } from '../src/features/canvas.driver.js';
+import { shape as composeShape } from '../src/features/shape.js';
+import { chromeDriver } from '../src/features/chrome.driver.js';
+import { chromeFeature } from '../src/features/chrome.compile.js';
+import { touchDriver } from '../src/features/touch.driver.js';
+import { touchFeature } from '../src/features/touch.compile.js';
+import { domDriver } from '../src/features/dom.driver.js';
+import { domFeature } from '../src/features/dom.compile.js';
+import { globalsDriver } from '../src/features/globals.driver.js';
+import { globalsFeature } from '../src/features/globals.compile.js';
+import { navDriver } from '../src/features/nav.driver.js';
+import { navFeature } from '../src/features/nav.compile.js';
+import { netDriver } from '../src/features/net.driver.js';
+import { netFeature } from '../src/features/net.compile.js';
+
+import { pluginsDriver } from '../src/features/plugins.driver.js';
+import { pluginsFeature } from '../src/features/plugins.compile.js';
+import { screenDriver } from '../src/features/screen.driver.js';
+import { screenFeature } from '../src/features/screen.compile.js';
+import { uaDriver } from '../src/features/ua.driver.js';
+import { uaFeature } from '../src/features/ua.compile.js';
+import { viewDriver } from '../src/features/view.driver.js';
+import { viewFeature } from '../src/features/view.compile.js';
 
 const store = new LegacyProfiles(path.resolve('profiles'));
 const features = [
@@ -49,7 +59,7 @@ async function open(id: string) {
     ops: [],
     support: { structure: imported.shape.support.structure || imported.shape.level },
   }));
-  const shape = canvasShape(netShape(base));
+  const shape = composeShape(base, ['net', 'canvas']);
   const { hash: _hash, ...body } = imported.profile;
   const profile = parseProfile(seal({ ...body, shape: { id: shape.id, hash: shape.hash } }));
   const engine = new JsdomEngine();
@@ -368,12 +378,12 @@ test('canvas rejects illegal construction, missing new, and borrowed WebIDL call
 test('canvas context registry composes an independent provider without replacing getContext', async () => {
   const imported = await store.load('macos-chrome-v149');
   const { hash: _importedShapeHash, ...importedShapeBody } = imported.shape;
-  const base = canvasShape(netShape(parseShape(seal({
+  const base = composeShape(parseShape(seal({
     ...importedShapeBody,
     features: [],
     ops: [],
     support: { structure: imported.shape.support.structure || imported.shape.level },
-  }))));
+  })), ['net', 'canvas']);
   const { hash: _shapeHash, ...shapeBody } = base;
   const shape = parseShape(seal({
     ...shapeBody,

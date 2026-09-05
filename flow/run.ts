@@ -50,7 +50,7 @@ async function runAna(proxyMode: ProxyMode, log: Log): Promise<FlowExecution> {
   let sessionId: string | undefined;
 
   if (proxyMode === 'reqable') {
-    options.proxy = 'http://10.5.2.163:9001';
+    options.proxy = 'http://127.0.0.1:9001';
   } else if (proxyMode === 'lumi') {
     const lumi = createLumiProxy({
       customerZone: 'lum-customer-travel_fusion-zone-gen',
