@@ -1,6 +1,8 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { createNodePlanner } from '../node/planner.js';
 import type { TaskRequest } from '../app/index.js';
+import { resolveEnvironment } from '../core/environment.js';
+import { listRegions, regionalCatalog, regionalRuntime } from '../core/regions.js';
 import { QueueFullError, WorkerExecutor, type ExecutorOptions } from '../executor/pool.js';
 
 export const DEFAULT_MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -146,6 +148,10 @@ export function startServer(options: ServerOptions): ServerHandle {
         send(response, 200, await planner.list('profiles'));
         return;
       }
+      if (request.method === 'GET' && pathname === '/regions') {
+        send(response, 200, { catalog: regionalCatalog, runtime: regionalRuntime, regions: listRegions({ supportedOnly: false }) });
+        return;
+      }
 
       const expected = request.method === 'POST' ? taskRoutes.get(pathname) : undefined;
       if (expected === undefined) {
@@ -157,7 +163,13 @@ export function startServer(options: ServerOptions): ServerHandle {
       if (input.job.kind !== expected) {
         throw new RequestError(400, 'BAD_ROUTE_KIND', `${pathname} requires a ${expected} job`);
       }
-      send(response, 200, await executor.run(input));
+      if (input.environment !== undefined) {
+        input.environment = resolveEnvironment(input.environment);
+      }
+      const result = await executor.run(input);
+      send(response, 200, input.environment?.selection === undefined ? result : {
+        ...result, report: { ...result.report, environment: input.environment },
+      });
     })().catch((error: unknown) => {
       if (error instanceof RequestError) {
         send(response, error.status, wireError(error.code, error.message));

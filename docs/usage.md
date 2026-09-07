@@ -9,7 +9,7 @@
 | 执行脚本并返回值 | `run` | `run` | `POST /run` |
 | 捕获 fetch/XHR/sendBeacon 请求体 | `capture` | `capture` | `POST /capture` |
 | 查看安装计划 | `plan` | `plan` | - |
-| 列出 Profile/Shape/Feature/Driver | `list` | `list` | `GET /profiles` |
+| 列出 Profile/Shape/Feature/Driver/区域 | `list` | `list` | `GET /profiles`、`GET /regions` |
 | 运行结构探针 | 高级入口 | `probe` | `POST /probe` |
 | 诊断动态代码与缺失面 | 高级入口 | `diagnose` | `POST /diagnose` |
 | 对比真机结构基线 | - | `diff` | - |
@@ -28,7 +28,8 @@
 import { createMimic } from 'mimic';
 
 const mimic = createMimic({
-  profile: 'chrome-mac',
+  profilesRoot: './profiles',
+  profile: 'android-chrome/23049pcd8g-v148-1589412',
   size: 2,
   timeoutMs: 5_000,
   maxQueue: 100,
@@ -47,7 +48,9 @@ try {
 
 | 参数 | 默认值 | 含义 |
 |---|---:|---|
-| `profile` | `chrome-mac` | 所有任务使用的 Profile ID |
+| `profile` | 无 | 执行任务必须指定本地 fp-env ID;仅 list/close 可省略 |
+| `profilesRoot` | 当前工作目录的 `./profiles` | 本地数据根目录,包含 `_fp-env` 子目录 |
+| `environment` | 无 | 创建 client 时固定区域配置,不修改原始 fp-env 或设备身份 |
 | `size` | 最多 4 个 worker | 按需启动的最大并行 worker 数 |
 | `timeoutMs` | `5000` | worker watchdog;设为 `null` 可关闭 |
 | `maxQueue` | `100` | 所有 worker 忙碌时允许等待的任务数 |
@@ -56,12 +59,92 @@ try {
 | `require` | 无 | 按能力声明最低 Support 等级 |
 | `capture` | 见下文 | 请求捕获的等待时间、轮询间隔和目标 POST 数 |
 
-`profilesRoot`、`shapesRoot`、`probePath` 可覆盖包内数据路径,主要用于自定义数据集与开发测试。
+`shapesRoot`、`probePath` 保留结构资源和探针路径配置;`profilesRoot` 不再指向包内设备库。
 
-### 直接使用 fp-env
+### 内置区域与随机选择
+
+区域数据和选择逻辑由 mimic 内置。`createMimic({ environment, ... })` 和 HTTP 任务体的
+`environment` 支持以下三种互斥形式：
+
+```js
+// 指定预设。ID 可由 listRegions() 或 mimic.list('regions') 查询。
+const environment = { regional: { preset: 'jp-ja-tokyo' } };
+
+// 限定国家/地区。省略 countries 时使用全部运行时可用地区。
+const randomEnvironment = {
+  regional: { random: true, countries: ['JP', 'GB', 'DE'], seed: 'run-001' },
+};
+```
+
+`seed` 可省略,此时每次解析生成独立随机 seed。相同目录、运行时、国家范围和 seed 重现相同预设。
+随机时先均匀选择地区,再均匀选择该地区的可用预设;这不是人口或真人浏览器配置频率分布。
+国家代码不区分大小写。未知国家、空列表、未知预设或无运行时可用预设均报错,不会切换到其他地区。
+
+SDK 每个 client 只解析一次,可通过 `mimic.environment` 读取并保存完整解析结果。
+ANA 内部从全部可用地区随机选择,Cebu 固定从 `['JP', 'GB', 'DE']` 随机选择。
+两者均不接受外部 `environment` 参数或 flow CLI 的 `--environment` 选项。
+每条 flow 独立选择一次,ABCK、BMS、verify/search 共享结果;
+返回值的 `environment` 包含实际字段及 `selection` 中的预设、目录版本/哈希、运行时版本、seed 和范围。
+区域选择也在加载设备之前写入 flow 日志,后续异常仍可从日志重放。CLI 在 stderr 输出解析结果。
+HTTP 每个任务解析一次,在 Result 的 `report.environment` 中返回完整解析结果,保留其他报告内容;
+选择信息不写入 HTTP 响应头,因此 seed 可以包含 Unicode。
+可以保存完整解析结果再作为 mimic SDK/HTTP 的 `environment` 传入;目录或运行时版本不符时报错,不静默重选。
+
+```js
+import { listRegions, regionalCatalog, regionalRuntime, resolveEnvironment } from 'mimic';
+
+const japanesePresets = listRegions({ countries: ['JP'] });
+const all = listRegions({ supportedOnly: false }); // 含 supported/unsupported 原因
+const resolved = resolveEnvironment({ regional: { random: true, countries: ['CA'] } });
+console.log(regionalCatalog.version, regionalRuntime, resolved.selection);
+```
+
+当前内置目录由 CLDR 48.0.0 与 IANA tzdb 2026c 生成,包含 596 个预设、246 个国家/地区。
+语言选择基于 CLDR 官方语言资料,无官方语言记录时选使用比例最高的已记录语言,并要求 CLDR
+具备该语言/文字系统的格式化数据。多时区国家的区域性语言不自动配对到全国所有时区;
+南极和省略的关联列于 `regionalCatalog`。所有预设均标为 `derived`,不是设备采集或真实用户分布。
+内置语言列表只含所选 locale,不编造英语备用偏好;多语言组合请用下面的自定义形式。
+
+可用列表根据当前 ICU 对 Intl 构造器和时区的支持过滤,不支持项仍可在完整目录中查看。
+`regionalRuntime` 和目录来源版本分别记录;IANA 数据用于地区/时区映射,实际日期规则来自运行时 ICU,
+不会因目录更新而自动升级宿主时区规则。来源 URL、SHA-256、生成规则和许可证均随包保留。
+构建、运行和安装不联网。只有显式运行 `npm run generate:regions` 才下载固定版本源数据并校验哈希;
+`node scripts/generate-regions.mjs --check --input <directory>` 可用原始四份文件进行离线再生成检查。
+
+也可继续显式指定全部字段：
+
+```js
+const environment = {
+  regional: {
+    languages: ['ja-JP', 'ja', 'en-US', 'en'],
+    locale: 'ja-JP',
+    timeZone: 'Asia/Tokyo',
+  },
+};
+```
+
+自定义形式的三个字段均必填。`languages[0]` 是 `navigator.language`;`locale` 控制默认 Intl 和本地格式化,
+`timeZone` 控制默认时区与按日期计算的夏令时。脚本显式传入的 locale/timeZone 保持有效。
+ANA/Cebu 所有请求的 `Accept-Language` 按 Chromium 145 规则扩展基础语言、去重并逐项递减 q 值,
+最低为 0.1;例如 `['en-US','en-CA','fr']` 生成 `en-US,en-CA;q=0.9,en;q=0.8,fr;q=0.7`。
+这与 `navigator.languages` 的原始偏好列表不必逐项相同。mimic SDK/HTTP 不传配置则保留原行为。
+代理/IP、站点 URL/业务语言、设备型号和硬件字段不随区域配置改变。
+派生 Profile 保留基础 ID,生成新哈希与来源记录;`timezone.offset` 是 Unix epoch 时刻的兼容快照,
+运行时偏移始终由 IANA 时区和具体日期计算。无需修改磁盘上的 fp-env。
+
+执行 CLI 支持区域 JSON 参数;flow CLI 无需传入区域配置：
+
+```bash
+node dist/src/cli.js list regions
+node dist/src/cli.js run script.js --profile <fp-env-ID> --environment '{"regional":{"preset":"jp-ja-tokyo"}}'
+npm run flow -- ana none
+```
+
+### 唯一数据源 fp-env
 
 `profiles/generate.mjs` 下载的原始 `z__env` 文件会写入 `profiles/_fp-env/<platform>_<version>/`。该目录是
-本地 raw cache,默认被 Git 和 npm 构建排除。使用仓库 Profile root 时,mimic 会自动索引这些文件：
+本地 raw cache,默认被 Git 和 npm 构建排除。运行时只索引这些文件,不再读取旧 Profile JSON 或解析
+`meta.extends`,也不会回退到内置设备。以下下载只在准备数据时执行,Plan 编译和 capture 不联网取数据：
 
 ```bash
 node profiles/generate.mjs --startAfterId 1589411 --limit 100
@@ -69,7 +152,8 @@ npm run build
 node dist/src/cli.js list profiles --profiles ./profiles
 ```
 
-生成的 ID 采用 `<platform>-<host>/<model>-v<version>-<recordId>`。例如：
+生成的 ID 采用 `<platform>-<host>/<model>-v<version>-<recordId>`。必须从 list 结果选择已存在的 ID;
+下面仅为示例。数据根目录应是 `_fp-env` 的父目录：
 
 ```js
 const mimic = createMimic({
@@ -81,6 +165,10 @@ const mimic = createMimic({
 raw 数据在主线程按需规范化成内存 Profile/Page/Shape。原始采集字段标记为 `captured`;缺失但可由 Chromium
 合同确定的 `navigator.vendor`、`cookieEnabled` 标记为 `derived`;当前无法可靠映射的 Audio、Canvas 和字体
 数据保持 `unsupported`。未知版本的 Shape 从 Feature 表生成并标记为 `derived`,不会冒充真机结构采集。
+
+空目录的 `list profiles` 返回空数组,执行缺失 ID 会报 `BAD_PROFILE`。SDK 不再默认使用 `chrome-mac`;
+未指定 profile 的执行请求会报错。ANA/Cebu 可以从非空 Android Chrome raw 池随机选取,池为空直接报错。
+构建、npm 安装和测试不要求私人 raw 缓存存在;测试使用独立夹具,包内不分发设备身份数据。
 
 ### run
 
@@ -151,11 +239,13 @@ Engine 的内部派发路径呈现 `isTrusted: true`；touch 列表和触点分�
 swipe 的 motion/orientation/touch 数值由同一个 CSD4CA 匿名低秩样本生成；同一次 capture 还会选择
 一个匿名 recording-session 姿态，并让后续 swipe 按真实手势间隔沿该 session 的 pose transition
 演化。模型保留校准后的跨流时序、压力和触点面积，不包含参与者标识或单条原始轨迹。tap 没有对应的
-CSD4CA sensor 数据，因此保持 sensorless。重新编译需要单独安装
-`scripts/csd4ca-requirements.txt`，然后执行：
+CSD4CA sensor 数据，因此保持 sensorless。逐帧姿态由原始采样率的陀螺仪旋转和去旋转后的加速度
+稳健中心估计，不等同于独立测得的重力真值。运行时从同一姿态计算重力和方向角，线性加速度单独
+投射。重新编译需要在隔离的 Python 环境中安装 `scripts/csd4ca-requirements.txt` 中的 NumPy/SciPy：
 
 ```bash
-npm run generate:interaction-model -- \
+/path/to/csd4ca-venv/bin/python -m pip install -r scripts/csd4ca-requirements.txt
+/path/to/csd4ca-venv/bin/python scripts/compile-csd4ca.py \
   --input /path/to/CSD4CA \
   --output src/interaction/csd4ca.model.ts
 ```
@@ -286,6 +376,26 @@ ANA/Cebu 的 wire profile 固定为 Chrome 145/Android；`profile` 只控制 mim
 `verify`/`search` 结果中。结果包含完整 cookie 仅用于调用方调试和后续请求,不应直接写入日志。
 ANA 执行 verify 前会先用当前会话生成的 cookies 提交固定的 `flight-search` 表单导航请求。
 
+同一进程内重复调用时,可共享捕获池以复用 worker 和编译缓存。每次捕获仍创建独立 Realm;
+不同数据目录、deadline 和 maxPosts 使用各自的执行器。调用方必须在全部任务结束后关闭池：
+
+```js
+import { CapturePool, runAnaFlow } from 'mimic/flow';
+
+const capturePool = new CapturePool(2); // 每种捕获配置最多两个 worker
+try {
+  await Promise.allSettled([
+    runAnaFlow({ profilesRoot: './profiles', capturePool }),
+    runAnaFlow({ profilesRoot: './profiles', capturePool }),
+  ]);
+} finally {
+  await capturePool.close();
+}
+```
+
+`npm run flow -- ana reqable --total 10 --concurrency 2` 自动在整批任务中共享并关闭捕获池。
+不传 `capturePool` 时保持一次性捕获行为。`captureBodies(options, capturePool)` 也可直接复用同一个池。
+
 ## CLI
 
 CLI 每次只向 stdout 写一行 JSON。参数错误写入 stderr 的 JSON,失败退出码为 `1`。
@@ -293,11 +403,11 @@ CLI 每次只向 stdout 写一行 JSON。参数错误写入 stderr 的 JSON,失�
 ### 执行与检查
 
 ```bash
-mimic run script.js --profile chrome-mac
-mimic capture script.js --profile chrome-mac
-mimic diagnose script.js --profile chrome-mac
-mimic probe --profile chrome-mac
-mimic plan script.js --profile chrome-mac
+mimic run script.js --profile android-chrome/23049pcd8g-v148-1589412
+mimic capture script.js --profile android-chrome/23049pcd8g-v148-1589412
+mimic diagnose script.js --profile android-chrome/23049pcd8g-v148-1589412
+mimic probe --profile android-chrome/23049pcd8g-v148-1589412
+mimic plan script.js --profile android-chrome/23049pcd8g-v148-1589412
 mimic list profiles
 mimic list shapes
 mimic list features
@@ -311,8 +421,8 @@ mimic list drivers
 
 | 参数 | CLI 默认值 | 含义 |
 |---|---:|---|
-| `--profile <id>` | `chrome-mac` | Profile ID |
-| `--profiles <dir>` | 包内数据 | 自定义 Profile 根目录 |
+| `--profile <id>` | 无 | 执行命令必填的 fp-env Profile ID |
+| `--profiles <dir>` | 当前工作目录的 `./profiles` | 本地数据根目录,包含 `_fp-env` |
 | `--probe <file>` | 包内探针 | 自定义 probe 脚本 |
 | `--pool-size <n>` | `1` | worker 数 |
 | `--timeout <ms>` | `5000` | worker watchdog |
@@ -327,13 +437,12 @@ mimic list drivers
 ### diff
 
 ```bash
-mimic diff chrome-mac
-mimic diff chrome-mac --baseline macos-chrome-v148
-mimic diff --profile chrome-mac --baseline ./macos-chrome-baseline.json --t1 true
+mimic diff android-chrome/23049pcd8g-v148-1589412 --baseline ./android-chrome-baseline.json
+mimic diff --profile android-chrome/23049pcd8g-v148-1589412 --baseline ./android-chrome-baseline.json --t1 true
 ```
 
-`diff` 最多接受一个位置参数作为 Profile;也可使用共享的 `--profile`,两者都省略时使用
-`chrome-mac`。`--baseline` 接受内建 baseline 名或 JSON 快照路径;省略时按内建配对、同名或唯一前缀
+`diff` 最多接受一个位置参数作为 Profile;也可使用共享的 `--profile`,两者都省略时报错。
+`--baseline` 接受内建 baseline 名或 JSON 快照路径;省略时按同名或唯一前缀
 查找。`--t1 true` 只汇总 T1 gate。
 
 输出是标准 `Result`,其中 `value` 为 `{ profile, baseline, summary, entries }`,并用 entries 区分
@@ -377,6 +486,9 @@ mimic-data/
   catalog.json               从全部 Shape 可重复构建的 Catalog
 ```
 
+这些是 collect 的证据和回归产物,不会被默认 fp-env 加载器当作第二套运行时设备库扫描。
+高级调用仍可通过 `ProfileFiles` 显式读取它们进行采集验证。
+
 只有身份与结构两部分证据都存在时才生成派生物;原始 `captures/` 永远不被 normalize 覆写。
 
 ## 执行 HTTP API
@@ -397,7 +509,7 @@ mimic-data/
 curl -sS http://127.0.0.1:3000/run \
   -H 'content-type: application/json' \
   --data '{
-    "profile":"chrome-mac",
+    "profile":"android-chrome/23049pcd8g-v148-1589412",
     "job":{"kind":"run","code":"({ua:navigator.userAgent})","timeout":1000}
   }'
 ```
@@ -406,7 +518,7 @@ curl -sS http://127.0.0.1:3000/run \
 curl -sS http://127.0.0.1:3000/capture \
   -H 'content-type: application/json' \
   --data '{
-    "profile":"chrome-mac",
+    "profile":"android-chrome/23049pcd8g-v148-1589412",
     "job":{"kind":"capture","code":"navigator.sendBeacon(\"/t\",\"body\")"}
   }'
 ```

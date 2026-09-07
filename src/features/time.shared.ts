@@ -9,3 +9,4 @@ export const DATE_SET_TIME = 'window.Date.prototype.setTime';
 export const RANDOM = 'window.Math.random';
 export const FORMAT = 'window.Intl.DateTimeFormat';
 export const FORMAT_PARTS = 'window.Intl.DateTimeFormat.prototype.formatToParts';
+export const CANONICAL_LOCALES = 'window.Intl.getCanonicalLocales';

@@ -4,7 +4,7 @@ import test from 'node:test';
 import { createNodeApplication, JsdomEngine } from '../src/index.js';
 import { drivers } from '../src/features/drivers.js';
 
-const profilesRoot = path.resolve('profiles');
+const profilesRoot = path.resolve('test/fixtures/fp-env');
 const probePath = path.resolve('resources/probe.js');
 const cwd = process.cwd();
 
@@ -39,7 +39,7 @@ function application() {
 test('Runtime sanitizes a synchronous Error stack at the public execution boundary', async () => {
   const { app, engine } = application();
   const plan = await app.plan({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'run',
       code: 'throw new TypeError("sync boom")',
@@ -63,7 +63,7 @@ test('Runtime sanitizes a synchronous Error stack at the public execution bounda
 test('Application returns sanitized event and Promise Error stacks with user frames intact', async () => {
   const { app, engine } = application();
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'run',
       scriptUrl: 'https://user.example/security-stack.js',
@@ -93,7 +93,7 @@ test('Application returns sanitized event and Promise Error stacks with user fra
 test('Runtime sanitizes Error stacks created in a Promise microtask', async () => {
   const { app, engine } = application();
   const plan = await app.plan({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'run',
       code: 'Promise.resolve().then(() => new Error("microtask boom").stack)',
@@ -116,7 +116,7 @@ test('Runtime sanitizes Error stacks created in a Promise microtask', async () =
 test('Application hides jsdom implementation Symbols from browser-facing objects', async () => {
   const { app, engine } = application();
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'run',
       code: `(() => {
@@ -159,7 +159,7 @@ test('Application hides jsdom implementation Symbols from browser-facing objects
 test('same-origin iframe Realms receive the Plan and cannot use foreign intrinsics to reveal main-Realm internals', async () => {
   const { app, engine } = application();
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'run',
       code: `(() => {
@@ -208,7 +208,7 @@ test('same-origin iframe Realms receive the Plan and cannot use foreign intrinsi
 test('same-origin iframe network effects are included in the parent Runtime report', async () => {
   const { app, engine } = application();
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'capture',
       code: `(() => {
@@ -236,7 +236,7 @@ test('same-origin iframe network effects are included in the parent Runtime repo
 test('same-origin iframe network reports preserve global call order and the first non-empty body', async () => {
   const { app, engine } = application();
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'capture',
       code: `(() => {

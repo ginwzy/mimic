@@ -17,7 +17,7 @@ export type { CapturePost, CaptureValue, CaptureResult } from './core/capture.js
 export { digest, seal } from './core/seal.js';
 export { JsdomEngine } from './engine/jsdom.js';
 export { QueueFullError, WorkerExecutor } from './executor/pool.js';
-export { LegacyProfiles, importLegacyData, legacyTarget } from './legacy/profiles.js';
+export { normalizeIdentity, identityTarget } from './collect/identity.js';
 export { FpEnvProfiles, normalizeFpEnv } from './profiles/fp-env.js';
 export { createNodeApplication } from './node/app.js';
 export { ProfileFiles } from './collect/profiles.js';
@@ -33,5 +33,5 @@ export type { LayoutCaptureOptions } from './collect/layout.js';
 export type * from './engine/types.js';
 export type * from './shape/types.js';
 export type { ExecutorOptions, ExecutorStats } from './executor/pool.js';
-export type { ImportedProfile, LedgerEntry, MigrationReport } from './legacy/profiles.js';
+export type { ImportedProfile, LedgerEntry, MigrationReport } from './collect/identity.js';
 export type { CollectBundle, LegacyCollectV1, RawEvidence } from './collect/types.js';

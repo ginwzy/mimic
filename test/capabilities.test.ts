@@ -9,11 +9,11 @@ import type { JsonValue } from '../src/core/types.js';
 import { features, driverIds } from '../src/features/compile.js';
 import { jsdomManifest } from '../src/engine/manifest.js';
 import { createNodePlanner } from '../src/node/planner.js';
-import { LegacyProfiles } from '../src/legacy/profiles.js';
+import { FixtureProfiles } from './fixtures.js';
 import { memoryBudget } from '../src/quality/memory.js';
 
 test('capability sidecars are immutable and preserve v2 support and cached Plan identity', async () => {
-  const planner = createNodePlanner();
+  const planner = createNodePlanner({ profiles: new FixtureProfiles() });
   const request = { profile: 'chrome-mac', job: { kind: 'run' as const, code: '42' } };
   const first = await planner.inspect(request);
   assert.equal(await planner.plan(request), first.plan);
@@ -31,7 +31,7 @@ test('capability sidecars are immutable and preserve v2 support and cached Plan 
 });
 
 test('captured fingerprint constants do not satisfy complete rendering requirements', async () => {
-  const imported = await new LegacyProfiles('profiles').load('chrome-mac');
+  const imported = await new FixtureProfiles().load('chrome-mac');
   const { hash: _hash, ...body } = imported.profile;
   const profile = parseProfile(seal({ ...body, canvas: { toDataURL: 'data:image/png;base64,AAAA' },
     evidence: { ...body.evidence, canvas: { ...body.evidence.canvas, support: 'captured', fields: { toDataURL: 'captured' } } } }));
@@ -45,7 +45,7 @@ test('captured fingerprint constants do not satisfy complete rendering requireme
 });
 
 test('custom Features keep compatibility without implicit behavior claims', async () => {
-  const imported = await new LegacyProfiles('profiles').load('chrome-mac');
+  const imported = await new FixtureProfiles().load('chrome-mac');
   const bare = features.map(({ describe: _describe, ...feature }) => feature);
   const input = { profile: imported.profile, job: { kind: 'run' as const, code: '42' },
     catalog: Catalog.create('test', [imported.shape], bare), engine: jsdomManifest(), drivers: driverIds };
@@ -58,14 +58,14 @@ test('custom Features keep compatibility without implicit behavior claims', asyn
 });
 
 test('disabled modes retain none coverage rather than inheriting enabled behavior', async () => {
-  const planner = createNodePlanner();
+  const planner = createNodePlanner({ profiles: new FixtureProfiles() });
   const run = await planner.inspect({ profile: 'chrome-mac', job: { kind: 'run', code: '1' } });
   const capture = await planner.inspect({ profile: 'chrome-mac', job: { kind: 'capture', code: '1', trace: true } });
   assert.equal(run.capabilities.entries['net.capture']?.coverage, 'none');
   assert.equal(run.capabilities.entries['trace.capture']?.coverage, 'none');
   assert.equal(capture.capabilities.entries['net.forward']?.coverage, 'none');
   assert.equal(capture.capabilities.entries['trace.capture']?.coverage, 'partial');
-  const older = await planner.inspect({ profile: 'android-webview', job: { kind: 'run', code: '1' } });
+  const older = await planner.inspect({ profile: 'android-webview-v138', job: { kind: 'run', code: '1' } });
   assert.ok(!older.plan.features.includes('chrome'));
   assert.equal(older.capabilities.entries['window.secure-context']?.coverage, 'constant');
 });

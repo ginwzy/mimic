@@ -10,7 +10,7 @@ import { shapeForTarget } from '../src/profiles/shapes.js';
 import type { NormalizationInput } from '../src/profiles/types.js';
 
 async function facts(): Promise<NormalizationInput> {
-  const raw = JSON.parse(await readFile('profiles/macos-chrome-v148.json', 'utf8')) as Record<string, Data>;
+  const raw = JSON.parse(await readFile('test/fixtures/collect-macos-identity.json', 'utf8')) as Record<string, Data>;
   const navigator = { ...raw.navigator! };
   delete navigator.connection;
   const screen = raw.screen!;

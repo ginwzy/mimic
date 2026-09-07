@@ -156,27 +156,30 @@ function captureOf(result: Result): CaptureObservation {
   };
 }
 
-export async function collectApplicationOracle(application: Application): Promise<ApplicationOracle> {
+export async function collectApplicationOracle(
+  application: Application,
+  profiles: { chrome: string; webview: string },
+): Promise<ApplicationOracle> {
   const [chrome, webview] = await Promise.all([
-    identity(application, 'chrome-mac'),
-    identity(application, 'android-webview-v138'),
+    identity(application, profiles.chrome),
+    identity(application, profiles.webview),
   ]);
-  const run = await application.execute({ profile: 'chrome-mac', job: { kind: 'run', code: '1 + 1' } });
+  const run = await application.execute({ profile: profiles.chrome, job: { kind: 'run', code: '1 + 1' } });
   const thrown = await application.execute({
-    profile: 'chrome-mac',
+    profile: profiles.chrome,
     job: { kind: 'run', code: 'throw new Error("oracle boom")' },
   });
   const timeout = await application.execute({
-    profile: 'chrome-mac',
+    profile: profiles.chrome,
     job: { kind: 'run', code: 'while (true) {}', timeout: 10 },
   });
   const traced = await application.execute({
-    profile: 'chrome-mac',
+    profile: profiles.chrome,
     job: { kind: 'diagnose', code: `eval('1 + 2'); OracleMissing.value` },
   });
-  const encoded = await application.execute({ profile: 'chrome-mac', job: { kind: 'run', code: 'window' } });
+  const encoded = await application.execute({ profile: profiles.chrome, job: { kind: 'run', code: 'window' } });
   const captured = await application.execute({
-    profile: 'chrome-mac',
+    profile: profiles.chrome,
     job: {
       kind: 'capture',
       code: CAPTURE_CODE,
@@ -226,13 +229,16 @@ if (direct) {
   const profilesRoot = flag('profiles-root');
   const probePath = flag('probe-path');
   try {
+    const chrome = flag('chrome-profile');
+    const webview = flag('webview-profile');
+    if (!chrome || !webview) throw new TypeError('oracle requires --chrome-profile and --webview-profile fp-env IDs');
     const expected = JSON.parse(await readFile(baseline, 'utf8')) as V1Oracle;
     const application = createNodeApplication({
       ...(profilesRoot === undefined ? {} : { profilesRoot }),
       ...(probePath === undefined ? {} : { probePath }),
       capture: { deadlineMs: 1_000, pollMs: 5, maxPosts: 5 },
     });
-    const observation = await collectApplicationOracle(application);
+    const observation = await collectApplicationOracle(application, { chrome, webview });
     const gate = evaluateGoldenOracle(expected, observation);
     console.log(JSON.stringify({
       schema: 2,

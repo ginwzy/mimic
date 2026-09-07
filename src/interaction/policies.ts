@@ -1,29 +1,46 @@
 import type { InteractionAdapter } from '../core/types.js';
+import { sampleSwipeGap, type InteractionSession } from './synthesize.js';
 import type { InteractionPolicy } from './types.js';
+
+const FOLLOW_UP_LIMIT_MS = 2_700;
+// Tap remains an engineering recipe, with room for its maximum 130ms contact.
+const TAP_LEAD_MS = 200;
 
 const NONE: InteractionPolicy = Object.freeze({
   next: () => null,
   isExhausted: () => true,
 });
 
-function createAkamaiSensorPolicy(): InteractionPolicy {
-  let initialSwipeDispatched = false;
+function createAkamaiSensorPolicy(session: InteractionSession): InteractionPolicy {
+  let initialSwipeAt: number | undefined;
+  let followUpAt: number | undefined;
   let tapDispatched = false;
   let followUpDispatched = false;
   return {
-    next: (elapsedMs, postCount) => {
-      if (!initialSwipeDispatched && (postCount > 0 || elapsedMs >= 120)) {
-        initialSwipeDispatched = true;
+    next: (elapsedMs, postCount, latestInteractionEndAt = 0, plannedInteractionEndAt = latestInteractionEndAt) => {
+      if (initialSwipeAt === undefined) {
+        const canStart = postCount > 0 || elapsedMs >= 120;
+        if (!canStart) return null;
+        initialSwipeAt = 120;
         return { recipe: 'swipe', plannedAtMs: 120 };
       }
-      // Calibrated sensor lead can delay touch by 150ms; keep contacts from overlapping.
-      if (!tapDispatched && initialSwipeDispatched && elapsedMs >= 2_500) {
-        tapDispatched = true;
-        return { recipe: 'tap', plannedAtMs: 2_500 };
+      if (followUpAt === undefined) {
+        const gap = sampleSwipeGap(
+          session,
+          plannedInteractionEndAt - initialSwipeAt + TAP_LEAD_MS,
+          FOLLOW_UP_LIMIT_MS - initialSwipeAt,
+        );
+        // An empty source window retains the old engineering schedule, without clipping source gaps.
+        followUpAt = gap === null ? FOLLOW_UP_LIMIT_MS : initialSwipeAt + gap;
       }
-      if (!followUpDispatched && tapDispatched && elapsedMs >= 2_700) {
+      if (elapsedMs < latestInteractionEndAt) return null;
+      if (!tapDispatched && elapsedMs >= followUpAt - TAP_LEAD_MS) {
+        tapDispatched = true;
+        return { recipe: 'tap', plannedAtMs: followUpAt - TAP_LEAD_MS };
+      }
+      if (!followUpDispatched && elapsedMs >= followUpAt) {
         followUpDispatched = true;
-        return { recipe: 'swipe', plannedAtMs: 2_700 };
+        return { recipe: 'swipe', plannedAtMs: followUpAt };
       }
       return null;
     },
@@ -31,9 +48,9 @@ function createAkamaiSensorPolicy(): InteractionPolicy {
   };
 }
 
-export function createInteractionPolicy(adapter: InteractionAdapter): InteractionPolicy {
+export function createInteractionPolicy(adapter: InteractionAdapter, session: InteractionSession): InteractionPolicy {
   if (adapter === 'none') return NONE;
-  if (adapter === 'akamai-sensor') return createAkamaiSensorPolicy();
+  if (adapter === 'akamai-sensor') return createAkamaiSensorPolicy(session);
   const unreachable: never = adapter;
   throw new TypeError(`Unknown interaction adapter:${String(unreachable)}`);
 }

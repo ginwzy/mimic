@@ -10,8 +10,6 @@ import { WorkerExecutor } from '../executor/pool.js';
 import { drivers } from '../features/drivers.js';
 import { createNodeApplication } from '../node/app.js';
 
-const DEFAULT_PROFILES = ['chrome-mac', 'android-webview-v138'] as const;
-
 export interface MachineFingerprint {
   platform: NodeJS.Platform;
   arch: string;
@@ -292,7 +290,7 @@ export async function benchmarkRuntime(options: BenchmarkOptions = {}): Promise<
   const warmup = nonNegative(options.warmup, 5, 'warmup');
   const rounds = positive(options.rounds, 3, 'rounds');
   const poolSize = positive(options.poolSize, Math.max(1, Math.min(4, os.cpus().length - 1)), 'poolSize');
-  const profiles = options.profiles === undefined ? [...DEFAULT_PROFILES] : [...options.profiles];
+  const profiles = [...(options.profiles ?? [])];
   if (profiles.length === 0 || profiles.some((profile) => typeof profile !== 'string' || profile.length === 0)) {
     throw new TypeError('profiles must contain at least one non-empty profile id');
   }
@@ -329,7 +327,7 @@ if (direct) {
       warmup: nonNegative(warmup, 5, 'warmup'),
       rounds: positive(rounds, 3, 'rounds'),
       poolSize: positive(poolSize, Math.max(1, Math.min(4, os.cpus().length - 1)), 'poolSize'),
-      profiles: profiles === undefined ? [...DEFAULT_PROFILES] : profiles,
+      profiles: profiles ?? [],
     };
     const measured = await measureRuntimeInProcess(config.profiles, config, {
       profilesRoot: path.resolve(flag('profiles-root') ?? path.join(root, 'profiles')),
@@ -339,6 +337,7 @@ if (direct) {
     process.exit(0);
   }
   const report = await benchmarkRuntime({
+    ...(flag('profiles-root') === undefined ? {} : { profilesRoot: flag('profiles-root')! }),
     ...(iterations === undefined ? {} : { iterations }),
     ...(warmup === undefined ? {} : { warmup }),
     ...(rounds === undefined ? {} : { rounds }),

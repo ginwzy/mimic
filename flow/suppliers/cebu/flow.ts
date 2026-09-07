@@ -1,12 +1,13 @@
 import { randomBytes, randomInt } from 'node:crypto';
-import { captureBodies, listAndroidChromeProfiles } from '../../capture.js';
+import { parseEnvironment } from '../../../src/core/environment.js';
+import type { ResolvedEnvironment } from '../../../src/core/types.js';
+import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
 import { CEBU_SELECT_URL, createCebuRequest } from './request.js';
 import type { CebuCredentials, CebuSearchResult } from './request.js';
 
-const DEFAULT_PROFILE = 'android-chrome/2201116sg-v145-10025';
-
 export interface CebuFlowOptions {
+  capturePool?: CapturePool;
   proxy?: string;
   proxyHeaders?: HeadersInit;
   profile?: string;
@@ -21,6 +22,7 @@ export interface CebuFlowOptions {
 
 export interface CebuFlowResult {
   profile: string;
+  environment: ResolvedEnvironment;
   interactionSeed: string;
   cookies: string;
   abckBodyCount: number;
@@ -62,14 +64,18 @@ async function resolveProfile(explicit: string | undefined, profilesRoot: string
     if (!profiles.includes(explicit)) throw new Error(`profile not found: ${explicit}`);
     return explicit;
   }
-  return profiles.length === 0 ? DEFAULT_PROFILE : profiles[randomInt(profiles.length)] as string;
+  if (profiles.length === 0) throw new Error('no Android Chrome fp-env records; configure profilesRoot and download data first');
+  return profiles[randomInt(profiles.length)] as string;
 }
 
 export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFlowResult> {
+  const environment = parseEnvironment({ regional: { random: true, countries: ['JP', 'GB', 'DE'] } });
   const log = options.log ?? (() => {});
+  log(`regional environment=${JSON.stringify(environment)}`);
   const interactionSeed = options.interactionSeed ?? randomBytes(16).toString('hex');
   const profile = await resolveProfile(options.profile, options.profilesRoot);
   const request = await createCebuRequest({
+    environment,
     ...(options.proxy === undefined ? {} : { proxy: options.proxy }),
     ...(options.proxyHeaders === undefined ? {} : { proxyHeaders: options.proxyHeaders }),
     timeoutMs: 60_000,
@@ -92,13 +98,14 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
       scriptSource: abckSource,
       cookies: splitCookies(request.cookies()),
       profile,
+      environment,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 8_000,
       scriptTimeoutMs: 16_000,
       maxPosts: 14,
       mode: 'abck',
       interactionSeed,
-    });
+    }, options.capturePool);
     if (abckCapture.bodies.length === 0) throw new Error('no _abck bodies captured');
 
     const bodiesToPost = selectBodies(abckCapture.bodies, options.postCount);
@@ -119,12 +126,13 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
         scriptSource: bmsSource,
         cookies: splitCookies(request.cookies()),
         profile,
+        environment,
         ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
         deadlineMs: 7_000,
         scriptTimeoutMs: 16_000,
         maxPosts: 1,
         mode: 'bms',
-      });
+      }, options.capturePool);
       if (bmsCapture.bodies[0] !== undefined) {
         await request.postBms(scripts.bms, bmsCapture.bodies[0]);
         bmsPosted = true;
@@ -136,6 +144,7 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
     const search = options.search === true ? await request.search(options.searchBody) : undefined;
     return {
       profile,
+      environment,
       interactionSeed,
       cookies,
       abckBodyCount: abckCapture.bodies.length,

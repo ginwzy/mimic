@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal,
+  Catalog, compile, JsdomEngine, parseJob, parseProfile, parseShape, seal,
   type Driver, type Feature,
 } from '../src/index.js';
 import { canvasContext, canvasFeature, canvasFingerprintHex } from '../src/features/canvas.compile.js';
@@ -31,7 +31,7 @@ import { uaFeature } from '../src/features/ua.compile.js';
 import { viewDriver } from '../src/features/view.driver.js';
 import { viewFeature } from '../src/features/view.compile.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 const features = [
   viewFeature, screenFeature, chromeFeature, touchFeature, navFeature, uaFeature,
   pluginsFeature, globalsFeature, domFeature, netFeature, canvasFeature,
@@ -468,3 +468,4 @@ test('canvas context registry composes an independent provider without replacing
   }
   assert.equal(engine.active, 0);
 });
+import { FixtureProfiles } from './fixtures.js';

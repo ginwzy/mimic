@@ -57,17 +57,20 @@ export class CaptureSession {
     const started = Date.now();
     let current = captureReport(runtime.report());
     const adapter = policy.interaction.adapter;
-    const interaction = createInteractionPolicy(adapter);
     const interactionSession = createInteractionSession(policy.interaction.seed);
+    const interaction = createInteractionPolicy(adapter, interactionSession);
     let interactionSequence = 0;
     let pageOffsetYRatio = 0;
     let postCount = nonEmptyPostCount(current);
     let lastPostObservedAt = 0;
     let latestInteractionEndAt = 0;
+    let plannedInteractionEndAt = 0;
     while (Date.now() - started < policy.deadlineMs
       && (postCount < policy.maxPosts || (current.pending ?? 0) > 0)) {
       const elapsed = Date.now() - started;
-      const action = postCount < policy.maxPosts ? interaction.next(elapsed, postCount) : null;
+      const action = postCount < policy.maxPosts
+        ? interaction.next(elapsed, postCount, latestInteractionEndAt, plannedInteractionEndAt)
+        : null;
       if (action !== null) {
         const frames = synthesizeInteraction(action.recipe, interactionSession, interactionSequence++, action.plannedAtMs);
         const dispatchResult = runtime.run(
@@ -86,6 +89,7 @@ export class CaptureSession {
           latestInteractionEndAt,
           Date.now() - started + frames.at(-1)!.at,
         );
+        plannedInteractionEndAt = action.plannedAtMs + frames.at(-1)!.at;
         if (action.recipe === 'swipe' && !runtime.plan.boot.layout) {
           // Track planned upward displacement for subsequent recipes.
           const touchFrames = frames.filter((frame) => frame.kind === 'touch');

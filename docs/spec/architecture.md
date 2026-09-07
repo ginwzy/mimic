@@ -137,13 +137,12 @@ R3 只改变代码组织;当时 Feature revision、Engine ABI 和数据 schema �
 
 ## 4. 数据边界
 
-三个输入适配器分别处理格式事实,再进入同一规范化核心:
+两个输入适配器分别处理格式事实,再进入同一规范化核心:
 
 ```text
-legacy/profiles.ts       名称、继承、原文件哈希与字段来源
 profiles/fp-env.ts       HighEntropyValues、字段投影与采集缺省标记
 collect/normalize.ts     identity/probe 会话关联、采集 ID 与结构证据
-           |                         |                         |
+           |                         |
            +------ profiles/normalize.ts: normalizeIdentity ---+
                               |
                        Profile + Page + Shape
@@ -159,13 +158,14 @@ collect/normalize.ts     identity/probe 会话关联、采集 ID 与结构证据
 公开 `MigrationReport` 类型继续可用;`FpEnvProfiles` 和 `normalizeFpEnv` 的公开导出不变。
 `legacy-shape-v1` 来源标识及已有 `LEGACY_*` 错误码保留,避免结构重构引起身份或错误契约变化。
 
-Legacy 适配器仍在导入时完全展开 `extends`,随后拆分:
+Node 默认使用 `FpEnvProfiles`,只从 `profiles/_fp-env` 原始缓存建立索引。运行与规划须显式提供
+fp-env ID,不再默认选择 chrome-mac。Legacy 文件导入器、extends 展开和仓库内生成身份文件已移除;
+旧采集字段的投影保留在 `collect/identity.ts`,不重新引入 Legacy 模块依赖。测试使用独立夹具,
+不能把夹具验证或空生产目录的数据检查称为完整原始缓存验证。
 
-- `navigator/screen/window/timezone/webgl/canvas/audio/fonts` -> `Profile`
-- `location` -> `Page.url`
-- `timing` -> `Page.clock`
-- `meta.traits` -> Capture 证据;Profile 的平台事实与 Shape 引用重新推导
-- `meta.source/fidelity/hygiene` -> 字段来源和 Support
+`TaskRequest.environment` 由 Planner 在编译前解析和应用,不修改源 Profile。区域设置同时决定
+Navigator 语言、Intl locale 和时区;flow 使用相同设置构造 HTTP 语言头。Time Feature revision 为 2,
+旧 Time 绑定缺少 locale 时仍保留原有缺省语义。
 
 Profile 的指纹段绑定同一个 capture ID。默认由 Profile 选择 Shape;手工组合不一致 Shape 必须显式启用
 `synthetic`,并在 Result 中永久标记。
@@ -229,7 +229,7 @@ TDD 只从以下已确认接缝观察行为:
 
 1. SDK `run/capture/plan/list`。
 2. CLI `run/capture/collect/probe/diff/plan/list/serve`。
-3. Legacy Profile 导入器。
+3. fp-env 导入与 Collect 规范化入口。
 4. 冻结行为 Oracle、真机基线与当前 Runtime 对同一 Probe 和代表脚本的差分结果。
 5. HTTP/worker 的统一 Job/Result 协议。
 

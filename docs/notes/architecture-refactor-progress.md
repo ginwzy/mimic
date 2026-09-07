@@ -14,6 +14,36 @@ Contract: [architecture-refactor.md](../spec/architecture-refactor.md)
 | R5: Contracts/policies | Complete | 256/256 tests; typed capture/session/policy; 22 Results and 2026 Plans unchanged. |
 | R6: Capabilities/gates | Complete | 263/263 tests; 2026-Plan capability gate; explicit ABI migration; RSS remains unresolved. |
 
+## Remote Integration
+
+Integrated local checkpoint `16f56b0` with upstream `af48817` on
+`refactor/simplify`. The stage evidence below is historical, not a claim about
+the newly selected production corpus.
+
+- Preserved Planner/TaskRunner, independent normalization, capability reporting,
+  closed-loop networking and finite layout replay. Regional environment handling
+  belongs to Planner; fp-env indexing/caching stays in `profiles/fp-env.ts`.
+- Accepted upstream's raw fp-env-only identity strategy. Removed the Legacy file
+  adapter and generated production identities; tasks require explicit fp-env IDs.
+  Identity and import regression tests now use the upstream fixtures.
+- Offline captures reuse executors through CapturePool. Closed-loop captures use
+  separate executors so cookie snapshots and host callbacks cannot leak across
+  captures; every execution still owns a fresh Realm.
+- Gesture sampling retains planned timestamps and uses upstream source gap,
+  joint pose and duration-normalized angular-rate data. Actual dispatch waits for
+  the previous contact to end. Nominal first swipe remains 120ms; tap is 200ms
+  before the sampled follow-up, with the old 2500/2700ms fallback for an empty
+  source window. This intentionally changes historical synthesized values.
+- Time Feature is revision 2. Existing bindings without locale retain their
+  earlier defaults; direct installation/execution is covered. Engine ABI remains
+  v2.12; new Catalog content can still change Plan IDs and default seeds.
+- Verification: 319/319 tests, type/build/data checks, unchanged 13 Shape artifacts,
+  production worker layout replay, and resource cleanup passed. Capability checks
+  covered 9 identity fixtures, 18 Plans and 1416 declarations. The production cache
+  is empty locally, so the zero-Profile data check is not full-corpus validation.
+  Runtime and worker counts returned to zero; RSS still grew by about 623 MiB in
+  the resource workload. No online ANA or memory-stability acceptance is claimed.
+
 ## Baseline Evidence
 
 Previous analysis on Node 24.12.0: check passed; tests 233/237 passed.

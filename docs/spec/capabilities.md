@@ -58,7 +58,7 @@ import { createNodeApplication } from 'mimic/advanced';
 
 const app = createNodeApplication();
 const request = {
-  profile: 'chrome-mac',
+  profile: '<fp-env-id>',
   job: { kind: 'run' as const, code: 'document.createElement("canvas").toDataURL()' },
 };
 const { plan, capabilities } = await app.inspect(request, {
@@ -93,13 +93,17 @@ the same, but full execution identity is still not represented by Plan ID alone.
 npm test
 npm run check
 npm run gate:capabilities
-npm run gate:leak
-npm run gate:memory
+npm run gate:leak -- '{"profile":"<fp-env-id>"}'
+npm run gate:memory -- '{"profile":"<fp-env-id>"}'
 ```
 
 The capability gate checks both job modes across the full corpus: every built-in
 behavior is classified and legacy projection is unchanged. It does not prove
 browser fidelity; execution/oracle tests remain separate.
+
+Replace `<fp-env-id>` with an ID listed from the local raw fp-env cache. Generated
+Legacy Profiles are no longer distributed. An empty production cache makes the
+capability gate fail; a data syntax check with zero Profiles is not corpus evidence.
 
 The resource gate uses the production executor to check cleanup and natural child
 exit. The memory observer runs separate local and worker child processes with
@@ -119,7 +123,7 @@ sampled post-warmup growth, independently for RSS and each isolate's heapUsed:
 
 ```sh
 # Diagnostic enforcement example: zero growth is expected to fail, not a recommended budget.
-node dist/src/quality/memory.js '{"tasks":20,"warmup":5,"sampleEvery":10,"rssBudgetMiB":0,"heapBudgetMiB":0}'
+node dist/src/quality/memory.js '{"profile":"<fp-env-id>","tasks":20,"warmup":5,"sampleEvery":10,"rssBudgetMiB":0,"heapBudgetMiB":0}'
 ```
 
 A budget failure returns JSON with failed checks and exits nonzero. Unknown options,

@@ -1,10 +1,10 @@
 # mimic
 
-基于 **jsdom** 的 Chromium 可观察环境回放框架。mimic 用真机采集的 `Profile` 与 `Shape` 编译不可变
+基于 **jsdom** 的 Chromium 可观察环境回放框架。mimic 将本地 fp_env 归一化为 `Profile`,结合 `Shape` 编译不可变
 `Plan`,在一次性的隔离 Realm 中执行 JavaScript,面向浏览器环境复现、请求体捕获和反检测差分。
 
 ```text
-Capture -> Profile
+fp_env  -> Profile + Page
 Probe   -> Shape
 
 Profile + Shape + Page + Job -> Plan -> Engine -> Runtime -> Result
@@ -20,10 +20,18 @@ Profile + Shape + Page + Job -> Plan -> Engine -> Runtime -> Result
 npm install mimic
 ```
 
+运行时只读取本地 fp_env,不附带设备库、不联网下载。将原始 `z__env_<id>.json` 放在
+`./profiles/_fp-env/` 或其子目录中,再通过 `mimic list profiles --profiles ./profiles` 选择 ID。
+仓库开发者可用 `node profiles/generate.mjs --startAfterId <id> --limit 100` 下载并校验数据。
+下面的 ID 仅为示例,执行前必须存在对应的本地记录。
+
 ```js
 import { createMimic } from 'mimic';
 
-const mimic = createMimic({ profile: 'chrome-mac' });
+const mimic = createMimic({
+  profilesRoot: './profiles',
+  profile: 'android-chrome/23049pcd8g-v148-1589412',
+});
 
 try {
   const result = await mimic.run({
@@ -40,14 +48,14 @@ try {
 
 ```bash
 # 在目标环境中执行脚本
-mimic run script.js --profile chrome-mac
+mimic run script.js --profile android-chrome/23049pcd8g-v148-1589412
 
 # 捕获脚本通过 fetch/XHR/sendBeacon 提交的请求体
-mimic capture script.js --profile chrome-mac
+mimic capture script.js --profile android-chrome/23049pcd8g-v148-1589412
 
-# 生成 Plan、运行结构探针、列出内置数据
-mimic plan script.js --profile chrome-mac
-mimic probe --profile chrome-mac
+# 生成 Plan、运行结构探针、列出本地数据
+mimic plan script.js --profile android-chrome/23049pcd8g-v148-1589412
+mimic probe --profile android-chrome/23049pcd8g-v148-1589412
 mimic list profiles
 
 # 执行 HTTP API,默认仅监听 127.0.0.1:3000
@@ -100,8 +108,8 @@ npm test
 npm run typecheck
 npm run check
 npm run build
-npm run bench
-npm run gate:leak
+npm run bench -- --profiles android-chrome/23049pcd8g-v148-1589412 --profiles-root ./profiles
+npm run gate:leak -- --profile android-chrome/23049pcd8g-v148-1589412 --profiles-root ./profiles
 ```
 
 ## 目录
@@ -109,7 +117,7 @@ npm run gate:leak
 ```text
 src/          领域、编译器、Engine、SDK、CLI、HTTP 与采集实现
 schemas/v2/   Profile/Shape/Page/Job/Plan/Result/Collect JSON Schema
-profiles/     设备身份源语料,由数据导入器规范化
+profiles/     下载脚本与本地 _fp-env 缓存,不随 npm 包发布
 resources/    Shape、结构探针、真机基线与冻结行为 Oracle
 scripts/      构建、数据校验与 Shape 生成工具
 test/         单元、集成、安全、性能与发布包契约测试

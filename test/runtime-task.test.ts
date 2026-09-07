@@ -9,9 +9,11 @@ import type { Engine } from '../src/engine/types.js';
 import { createInteractionSource } from '../src/interaction/dispatch.js';
 import { createInteractionSession, synthesizeInteraction } from '../src/interaction/synthesize.js';
 import { prepareExecution } from '../src/runtime/task.js';
+import { createInteractionPolicy } from '../src/interaction/policies.js';
+import { FixtureProfiles } from './fixtures.js';
 
 test('prepared execution separates installation identity from Job and effective capture policy', async () => {
-  const planner = createNodePlanner();
+  const planner = createNodePlanner({ profiles: new FixtureProfiles() });
   const job = { kind: 'capture' as const, code: 'void 0', interaction: { adapter: 'akamai-sensor' as const, seed: 'first' } };
   const plan = await planner.plan({ profile: 'chrome-mac', job });
   const first = prepareExecution(job, plan);
@@ -38,7 +40,7 @@ test('prepared execution separates installation identity from Job and effective 
 });
 
 test('TaskRunner applies the prepared policy, not its constructor defaults, and disposes failed captures', async () => {
-  const planner = createNodePlanner();
+  const planner = createNodePlanner({ profiles: new FixtureProfiles() });
   const engine = new JsdomEngine();
   const runner = createNodeRuntime({ engine, capture: { lifecycle: 'none', deadlineMs: 1_000 } });
   const job = { kind: 'capture' as const, code: 'navigator.sendBeacon("/x",document.readyState+":"+document.hasFocus())' };
@@ -57,7 +59,7 @@ test('TaskRunner applies the prepared policy, not its constructor defaults, and 
 });
 
 test('prepared script policy preserves absent versus explicit currentScript URL', async () => {
-  const planner = createNodePlanner();
+  const planner = createNodePlanner({ profiles: new FixtureProfiles() });
   const engine = new JsdomEngine();
   const runner = createNodeRuntime({ engine });
   const job = { kind: 'run' as const, code: 'document.currentScript ? document.currentScript.src : null' };
@@ -86,7 +88,7 @@ test('typed capture Result retains v2 fields and rejects malformed successful pa
 });
 
 test('capture synthesis and Realm values survive different polling delays', async () => {
-  const planner = createNodePlanner();
+  const planner = createNodePlanner({ profiles: new FixtureProfiles() });
   const job = {
     kind: 'capture' as const,
     interaction: { adapter: 'akamai-sensor' as const, seed: 'replay-clock-probe' },
@@ -112,13 +114,15 @@ test('capture synthesis and Realm values survive different polling delays', asyn
   const plan = await planner.plan({ profile: 'android-webview-v138', job });
   const reference = prepareExecution(job, plan);
   const session = createInteractionSession(reference.policy.capture!.interaction.seed);
+  const policy = createInteractionPolicy('akamai-sensor', session);
   const expectedSources: string[] = [];
   let pageOffsetYRatio = 0;
-  for (const [sequence, action] of [
-    { recipe: 'swipe', at: 120 }, { recipe: 'tap', at: 2_500 }, { recipe: 'swipe', at: 2_700 },
-  ].entries()) {
-    assert.ok(action.recipe === 'swipe' || action.recipe === 'tap');
-    const frames = synthesizeInteraction(action.recipe, session, sequence, action.at);
+  let plannedEndAt = 0;
+  for (const [sequence, elapsed] of [120, 2_500, 2_700].entries()) {
+    const action = policy.next(elapsed, 1, 0, plannedEndAt);
+    assert.ok(action);
+    const frames = synthesizeInteraction(action.recipe, session, sequence, action.plannedAtMs);
+    plannedEndAt = action.plannedAtMs + frames.at(-1)!.at;
     expectedSources.push(createInteractionSource(frames, pageOffsetYRatio));
     if (action.recipe === 'swipe') {
       const touches = frames.filter(frame => frame.kind === 'touch');

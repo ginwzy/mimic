@@ -6,7 +6,8 @@ import { checkLayout } from '../src/core/layout.js';
 import { parsePage } from '../src/core/parse.js';
 import { parsePlan } from '../src/compile/parse.js';
 import { digest, seal } from '../src/core/seal.js';
-import { createNodePlanner, nodeProfiles } from '../src/node/planner.js';
+import { createNodePlanner } from '../src/node/planner.js';
+import { FixtureProfiles } from './fixtures.js';
 import { createNodeRuntime } from '../src/node/runtime.js';
 import { JsdomEngine } from '../src/engine/jsdom.js';
 import type { Port, Runtime } from '../src/engine/types.js';
@@ -17,7 +18,7 @@ import { drivers } from '../src/features/drivers.js';
 
 const profile = 'android-webview-v138';
 const job = { kind: 'run' as const, code: '0' };
-const planner = createNodePlanner();
+const planner = createNodePlanner({ profiles: new FixtureProfiles() });
 type Snapshot = typeof fixture.records[number]['before'];
 type Row = Snapshot & {
   type: string; target: string; trusted: boolean;
@@ -42,7 +43,7 @@ const touch = (phase: 'start' | 'move' | 'end', at: number, y: number): Interact
 });
 
 test('Page overlay inherits layout only while HTML and URL remain unchanged', async () => {
-  const profiles = nodeProfiles();
+  const profiles = new FixtureProfiles();
   const inherited = page('root');
   const inheritedPlanner = createNodePlanner({ profiles: {
     list: () => profiles.list(),

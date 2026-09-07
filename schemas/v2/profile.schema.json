@@ -16,6 +16,7 @@
     "screen": { "$ref": "#/definitions/screen" },
     "window": { "$ref": "#/definitions/window" },
     "timezone": { "$ref": "#/definitions/timezone" },
+    "locale": { "type": "string", "minLength": 1 },
     "webgl": { "$ref": "#/definitions/webgl" },
     "audio": { "$ref": "#/definitions/audio" },
     "systemColors": { "$ref": "#/definitions/systemColors" },

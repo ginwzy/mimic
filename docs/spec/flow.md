@@ -10,7 +10,7 @@ Python 与 Node subprocess 桥接。
 ```text
 supplier flow
     +-- supplier request -> RequestClient -> @zionsssx/freq-js
-    +-- captureBodies()  -> createMimic().capture()
+    +-- captureBodies()  -> CapturePool -> WorkerExecutor
 ```
 
 真实网络只发生在 host。默认离线 capture 不让页面脚本发送真实请求；显式闭环模式通过任务级
@@ -69,16 +69,17 @@ Transport 上，只发送给代理，不转发到目标站。
 
 ### Capture
 
-`capture.ts` 构造临时 Page，调用 `createMimic().capture()`，提取非空 POST body，并在 `finally` 中关闭
-Mimic client。
+`capture.ts` 构造临时 Page，通过 `CapturePool` 执行 worker capture，并提取非空 POST body。
+未传入共享池时，`captureBodies` 创建临时池并在 `finally` 中关闭。
 
 - ABCK 必须提供 `interactionSeed`，并使用 `akamai-sensor` adapter。
 - BMS 使用原始脚本，不传 interaction seed。
-- Profile 列表通过 mimic SDK 获取，不直接扫描 profile 文件。
+- Profile 列表通过 `FpEnvProfiles` 获取，身份来自原始 fp-env 缓存。
 - assignment probe 属于旧 bridge 的诊断逻辑，不进入正式模块。
 
-每次 capture 创建独立 Mimic client。Page、deadline 和 maxPosts 都是该次 capture 的固定配置，不为复用
-worker 修改核心 SDK。
+共享池按执行配置缓存离线 executor，Page 和区域环境仍按任务规划，每次 capture 创建独立 Realm。
+闭环 executor 不进入缓存，避免跨捕获复用 cookie 快照和宿主回调；关闭池会回收两种 executor。
+区域环境由 supplier 一次解析，并同时用于 wire headers 与 JavaScript 身份。
 
 `captureBodies` 可显式接收 `network`。允许地址、响应回灌、取消和支持边界见
 [闭环捕获规范](network-capture.md)。默认不启用；ABCK 与 BMS 仍是独立 Realm。

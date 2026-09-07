@@ -5,6 +5,8 @@ import {
   type RequestOptions,
   type TextResponse,
 } from '../../client.js';
+import { environmentAcceptLanguage, parseEnvironment } from '../../../src/core/environment.js';
+import type { EnvironmentOptions } from '../../../src/core/types.js';
 
 export const CEBU_SITE = 'https://www.cebupacificair.com';
 export const CEBU_SELECT_URL = `${CEBU_SITE}/en-PH/booking/select-flight`;
@@ -44,6 +46,7 @@ export const CEBU_DEFAULT_CREDENTIALS: CebuCredentials = {
 export const CEBU_DEFAULT_SEARCH_BODY = '{"content":"U2FsdGVkX1++rgeTvC4KykMJNXMS9no1//kQGagNJcFIBev2I3hvbq9PYpRS3P0rheYkpM29yAljeQkee4+GW26MTrimeyjvmZ5cParoSzDOWoLEFGdLkqqH0OOVTx8CgN9xmIfXmuGva4E5u0AprbAQn+y53Slw3HoN4+r3pSoruQ55c27Fhd+5S1r755eAlHmixHDOoZnlFYlil2uCMi8HogrewoYw53VBdMNRv0mjQg+3Quvmmpoukqd+a2owfVmXv1x32Gc39VfQg7599qBfW4IB0VlTZjmt00ZNo6arsAcPVe2c+f52IrWtVyAcOxBzEYwlD9L48vKFNa91IdWtQ837bd9b7a6U2FsdGVkX1+v2jUFaYmhWijDL3pyl5Fa0cAtWT4qTfyTcDmYs3UktAk/6Xip/co7QmhmOZscQ/n9FmOGKotA1WSFd6Uo1Hbyr+4TyDl3d26NnQ7HP/n7UtMV/PQBCuFGbgv192DfK+LxsiIQRDmcnInOzkUvFRFmG9BHwpyUYE8131ZItFKgqHcgHIT2oeKR5JZ3urZGfX4QQQpH7O0Tt9QJuvWsI6yY7AyEG2/pVYFgW4D8BVLLW0+7Mryt8p7JUGOEqdX7wIf24xU9rXxh/VjWTbzOBFKPVGSJfVU4HGg=00bl1Uu+EOl6trV9nAcSttyCdCzJB/8UCj08cg5r95tPNKliv9hJy1u+tSxBpbTHBPWoCCEB1LSIr2fexlzMZDHjUD3wCUEP57HSoxqBs+M0yTCTeKiZUPMJFxNGKff020ca4a2a0MoV5doJAgndROj90LA3trQleGEMtLONGsOToHbcI3p6LXJLelHon55uDE0fgHNe2NtohsHawwRsHJ66rWfGaMbAapGPJTw/VvGefYB7ON6EnENwLZtR/36t/FpsC0dWx050fa2ZPsTNIhYCeUh+ul0Xk8/zKIfePfbWLENpKsSurlUGXbj1FaCc8doXtiqK/EVEO"}';
 
 export interface CebuRequestOptions {
+  environment?: EnvironmentOptions;
   proxy?: string;
   proxyHeaders?: HeadersInit;
   timeoutMs?: number;
@@ -88,6 +91,7 @@ class CebuRequestClient implements CebuRequest {
     private readonly client: RequestClient,
     private readonly credentials: CebuCredentials,
     private readonly log: (message: string) => void,
+    private readonly acceptLanguage?: string,
   ) {}
 
   async getLanding(): Promise<string> {
@@ -226,6 +230,7 @@ class CebuRequestClient implements CebuRequest {
   }
 
   private async get(url: string, headers: Record<string, string>, label: string): Promise<TextResponse> {
+    if (this.acceptLanguage !== undefined) headers['accept-language'] = this.acceptLanguage;
     this.log(`GET ${url}`);
     const response = await this.client.get(url, headers);
     this.log(`${label} HTTP ${response.status} body=${response.body.length}B`);
@@ -239,6 +244,7 @@ class CebuRequestClient implements CebuRequest {
     label: string,
     options?: RequestOptions,
   ): Promise<TextResponse> {
+    if (this.acceptLanguage !== undefined) headers['accept-language'] = this.acceptLanguage;
     this.log(`${label} ${url} body=${body.length}B`);
     const response = await this.client.post(url, body, headers, options);
     this.log(`${label} HTTP ${response.status} resp=${response.body.length}B`);
@@ -247,6 +253,8 @@ class CebuRequestClient implements CebuRequest {
 }
 
 export async function createCebuRequest(options: CebuRequestOptions = {}): Promise<CebuRequest> {
+  const acceptLanguage = options.environment === undefined ? undefined
+    : environmentAcceptLanguage(parseEnvironment(options.environment));
   const client = await createRequestClient({
     browser: 'chrome_145',
     os: 'android',
@@ -259,5 +267,6 @@ export async function createCebuRequest(options: CebuRequestOptions = {}): Promi
     client,
     options.credentials ?? CEBU_DEFAULT_CREDENTIALS,
     options.log ?? (() => {}),
+    acceptLanguage,
   );
 }

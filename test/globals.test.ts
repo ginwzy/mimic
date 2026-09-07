@@ -1,8 +1,7 @@
 import { synthesizeSystemColors } from '../src/environment/identity.js';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
-import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal } from '../src/index.js';
+import { Catalog, compile, JsdomEngine, parseJob, parseProfile, parseShape, seal } from '../src/index.js';
 import { chromeDriver } from '../src/features/chrome.driver.js';
 import { chromeFeature } from '../src/features/chrome.compile.js';
 import { touchDriver } from '../src/features/touch.driver.js';
@@ -26,7 +25,7 @@ import { uaFeature } from '../src/features/ua.compile.js';
 import { viewDriver } from '../src/features/view.driver.js';
 import { viewFeature } from '../src/features/view.compile.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 const features = [
   viewFeature, screenFeature, chromeFeature, touchFeature, navFeature, uaFeature, pluginsFeature, globalsFeature,
 ];
@@ -344,3 +343,4 @@ test('globals matchMedia reports coarse/none for Android maxTouchPoints>0', asyn
   }
   assert.equal(engine.active, 0);
 });
+import { FixtureProfiles } from './fixtures.js';

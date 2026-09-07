@@ -1,13 +1,13 @@
+import { FixtureProfiles } from './fixtures.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import path from 'node:path';
 import test from 'node:test';
-import { Catalog, compile, explain, LegacyProfiles, MimicError, parseJob, parsePlan, parseProfile, parseShape, seal, type CompileInput, type Feature, type JsonValue, type Profile, type Shape } from '../src/index.js';
+import { Catalog, compile, explain, MimicError, parseJob, parsePlan, parseProfile, parseShape, seal, type CompileInput, type Feature, type JsonValue, type Profile, type Shape } from '../src/index.js';
 import { canonical } from '../src/core/canonical.js';
 import { drivers as builtDrivers } from '../src/features/drivers.js';
 import { features as builtFeatures } from '../src/features/compile.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 
 function shapeFor(
   shape: Shape,
@@ -600,7 +600,7 @@ test('compile contains Feature identity mutation and foreign error phases', asyn
   }
 });
 
-test('compile produces a unique base Plan for every migrated Profile', async () => {
+test('compile produces a unique base Plan for every identity fixture', async () => {
   const ids = await store.list();
   const plans = new Set<string>();
   const catalogs = new Map<string, Catalog>();
@@ -623,5 +623,6 @@ test('compile produces a unique base Plan for every migrated Profile', async () 
     assert.equal(Object.hasOwn(plan, 'synthetic'), false, id);
     assert.doesNotThrow(() => JSON.stringify(plan), id);
   }
+  assert.ok(ids.length > 0);
   assert.equal(plans.size, ids.length);
 });

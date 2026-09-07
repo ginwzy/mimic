@@ -65,7 +65,9 @@ function config(options: MemoryOptions): Config {
     || Object.keys(options).some(key => !['tasks', 'warmup', 'sampleEvery', 'profile', 'timeoutMs', 'rssBudgetMiB', 'heapBudgetMiB'].includes(key))) {
     throw new TypeError('Invalid memory options');
   }
-  const output = { tasks: 300, warmup: 20, sampleEvery: 50, profile: 'android-webview-v138', timeoutMs: 120_000, ...options };
+  const profile = options.profile;
+  if (typeof profile !== 'string' || !profile) throw new TypeError('profile must be an explicit fp-env id');
+  const output = { tasks: 300, warmup: 20, sampleEvery: 50, timeoutMs: 120_000, ...options, profile };
   for (const key of ['tasks', 'sampleEvery', 'timeoutMs', 'warmup'] as const) {
     if (!Number.isSafeInteger(output[key]) || output[key] < (key === 'warmup' ? 0 : 1)) throw new TypeError(`Invalid ${key}`);
   }
@@ -73,7 +75,6 @@ function config(options: MemoryOptions): Config {
     const value = output[key];
     if (value !== undefined && (!Number.isFinite(value) || value < 0)) throw new TypeError(`Invalid ${key}`);
   }
-  if (typeof output.profile !== 'string' || !output.profile) throw new TypeError('Invalid profile');
   return output;
 }
 

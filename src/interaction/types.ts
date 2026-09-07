@@ -38,6 +38,6 @@ export interface InteractionAction {
 }
 
 export interface InteractionPolicy {
-  next(elapsedMs: number, postCount: number): InteractionAction | null;
+  next(elapsedMs: number, postCount: number, latestInteractionEndAt?: number, plannedInteractionEndAt?: number): InteractionAction | null;
   isExhausted(): boolean;
 }

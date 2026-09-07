@@ -1,15 +1,14 @@
 import { synthesizeAudioFingerprint } from '../src/environment/identity.js';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
 import {
-  Catalog, compile, JsdomEngine, LegacyProfiles, parseJob,
+  Catalog, compile, JsdomEngine, parseJob,
 } from '../src/index.js';
 import { audioBo39, audioFingerprintHex } from '../src/features/audio.compile.js';
 import { drivers } from '../src/features/drivers.js';
 import { features } from '../src/features/compile.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 
 /** Use baked shape + full feature set (production path). Rebuilds via audioShape hit chrome/dom WRITE_CONFLICT on hasPrivateToken. */
 async function open(id: string) {
@@ -410,3 +409,4 @@ test('audio fingerprint differs across profiles', async () => {
     second.runtime.dispose();
   }
 });
+import { FixtureProfiles } from './fixtures.js';

@@ -1,13 +1,16 @@
 import { randomBytes, randomInt } from 'node:crypto';
-import { captureBodies, listAndroidChromeProfiles } from '../../capture.js';
+import { parseEnvironment } from '../../../src/core/environment.js';
+import type { ResolvedEnvironment } from '../../../src/core/types.js';
+import { DEFAULT_PROFILES_ROOT } from '../../../src/node/assets.js';
+import { FpEnvProfiles } from '../../../src/profiles/fp-env.js';
+import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
 import { ANA_SELECT_URL, createAnaRequest } from './request.js';
 import type { AnaCredentials, AnaVerifyResult } from './request.js';
 import type { CaptureNetworkOptions } from '../../../src/network/types.js';
 
-const DEFAULT_PROFILE = 'android-chrome/2201116sg-v145-10025';
-
 export interface AnaFlowOptions {
+  capturePool?: CapturePool;
   proxy?: string;
   proxyHeaders?: HeadersInit;
   profile?: string;
@@ -23,6 +26,7 @@ export interface AnaFlowOptions {
 
 export interface AnaFlowResult {
   profile: string;
+  environment: ResolvedEnvironment;
   interactionSeed: string;
   cookies: string;
   abckBodyCount: number;
@@ -62,7 +66,8 @@ async function resolveProfile(explicit: string | undefined, profilesRoot: string
     if (!profiles.includes(explicit)) throw new Error(`profile not found: ${explicit}`);
     return explicit;
   }
-  return profiles.length === 0 ? DEFAULT_PROFILE : profiles[randomInt(profiles.length)] as string;
+  if (profiles.length === 0) throw new Error('no Android Chrome fp-env records; configure profilesRoot and download data first');
+  return profiles[randomInt(profiles.length)] as string;
 }
 
 export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowResult> {
@@ -71,10 +76,15 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
   if (networkMode === 'closed-loop' && options.postCount !== undefined) {
     throw new TypeError('postCount is only supported in offline ANA mode');
   }
+  const environment = parseEnvironment({ regional: { random: true} });
   const log = options.log ?? (() => {});
+  log(`regional environment=${JSON.stringify(environment)}`);
   const interactionSeed = options.interactionSeed ?? randomBytes(16).toString('hex');
   const profile = await resolveProfile(options.profile, options.profilesRoot);
+  const { profile: browserProfile } = await new FpEnvProfiles(options.profilesRoot ?? DEFAULT_PROFILES_ROOT).load(profile);
   const request = await createAnaRequest({
+    profile: browserProfile,
+    environment,
     ...(options.proxy === undefined ? {} : { proxy: options.proxy }),
     ...(options.proxyHeaders === undefined ? {} : { proxyHeaders: options.proxyHeaders }),
     timeoutMs: 60_000,
@@ -111,13 +121,14 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       cookies: networkMode === 'offline' ? splitCookies(request.cookies()) : [],
       ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.abck, () => abckPostCount++) } : {}),
       profile,
+      environment,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 8_000,
       scriptTimeoutMs: 16_000,
       maxPosts: 14,
       mode: 'abck',
       interactionSeed,
-    });
+    }, options.capturePool);
     if (abckCapture.bodies.length === 0) throw new Error('no _abck bodies captured');
 
     if (networkMode === 'offline') {
@@ -143,12 +154,13 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       cookies: networkMode === 'offline' ? splitCookies(request.cookies()) : [],
       ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.bms, () => { bmsPosted = true; }) } : {}),
       profile,
+      environment,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 7_000,
       scriptTimeoutMs: 16_000,
       maxPosts: 1,
       mode: 'bms',
-    });
+    }, options.capturePool);
     if (networkMode === 'offline' && bmsCapture.bodies[0] !== undefined) {
       await request.postBms(scripts.bms, bmsCapture.bodies[0]);
       bmsPosted = true;
@@ -160,6 +172,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
     const verify = options.verify === true ? await request.verify(options.verifyBody) : undefined;
     return {
       profile,
+      environment,
       interactionSeed,
       cookies,
       abckBodyCount: abckCapture.bodies.length,

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { createMimic } from '../dist/src/sdk.js';
 import { digest, seal } from '../dist/src/core/seal.js';
 
@@ -7,7 +8,9 @@ const fixture = JSON.parse(await readFile(process.argv[2] || new URL('../test/fi
 const records = [];
 for (const record of fixture.records) {
   const client = createMimic({
-    profile: 'android-webview-v138', size: 1, timeoutMs: 15_000,
+    profile: 'android-webview/unknown-v138-1',
+    profilesRoot: fileURLToPath(new URL('../test/fixtures/fp-env', import.meta.url)),
+    size: 1, timeoutMs: 15_000,
     page: seal({ schema: 2, id: 'layout-probe', source: { kind: 'manual', hash: digest(record.html) },
       url: 'https://layout.test/', html: record.html, layout: record.layout }),
     capture: { deadlineMs: 9_000, pollMs: 10, maxPosts: 5 },

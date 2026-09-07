@@ -48,7 +48,7 @@ test('production and test builds stay isolated', async () => {
 
   assert.ok(productionFiles.includes('src/index.js'));
   assert.notEqual((await fs.stat(path.join(production, 'src/cli.js'))).mode & 0o111, 0);
-  assert.ok(productionFiles.includes('assets/profiles/chrome-mac.json'));
+  assert.equal(productionFiles.some((file) => file.startsWith('assets/profiles/')), false);
   assert.ok(productionFiles.includes('assets/shapes/chromium/chrome/macos/desktop/148.json'));
   assert.ok(productionFiles.includes('assets/baselines/macos-chrome-v148.json'));
   assert.ok(productionFiles.includes('assets/probe.js'));

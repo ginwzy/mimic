@@ -4,10 +4,10 @@ import test from 'node:test';
 import { parseResult } from '../src/index.js';
 import { QueueFullError, WorkerExecutor } from '../src/executor/pool.js';
 
-const profilesRoot = path.resolve('profiles');
+const profilesRoot = path.resolve('test/fixtures/fp-env');
 const probePath = path.resolve('resources/probe.js');
 const request = (code: string, timeout?: number) => ({
-  profile: 'android-webview-v138',
+  profile: 'android-webview/unknown-v138-1',
   job: { kind: 'run' as const, code, ...(timeout === undefined ? {} : { timeout }) },
 });
 
@@ -64,7 +64,7 @@ test('WorkerExecutor runs capture interaction policies in the execute-only worke
   });
   try {
     const result = await pool.run({
-      profile: 'android-webview-v138',
+      profile: 'android-webview/unknown-v138-1',
       job: {
         kind: 'capture',
         interaction: { adapter: 'akamai-sensor', seed: 'worker-seed' },

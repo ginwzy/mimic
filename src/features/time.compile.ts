@@ -2,6 +2,7 @@ import { describeCoverage } from './capabilities.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { fnShape, refProp } from './ops.js';
 import {
+  CANONICAL_LOCALES,
   DATE_TEXT,
   DATE,
   DATE_NOW,
@@ -23,6 +24,14 @@ const DATE_LOCALE = 'window.Date.prototype.toLocaleString';
 const DATE_LOCALE_DATE = 'window.Date.prototype.toLocaleDateString';
 const DATE_LOCALE_TIME = 'window.Date.prototype.toLocaleTimeString';
 const FORMAT_LOCALES = 'window.Intl.DateTimeFormat.supportedLocalesOf';
+const INTL_NAMES = ['NumberFormat', 'Collator', 'PluralRules', 'RelativeTimeFormat', 'ListFormat', 'DisplayNames', 'Segmenter'] as const;
+const LOCALE_METHODS = [
+  { owner: 'Number', key: 'toLocaleString', length: 0, index: 0 },
+  { owner: 'BigInt', key: 'toLocaleString', length: 0, index: 0 },
+  { owner: 'String', key: 'localeCompare', length: 1, index: 1 },
+  { owner: 'String', key: 'toLocaleLowerCase', length: 0, index: 0 },
+  { owner: 'String', key: 'toLocaleUpperCase', length: 0, index: 0 },
+] as const;
 const DATE_ZONE_METHODS = [
   { key: 'getTimezoneOffset', id: 'time.date.offset', slot: 'time.date.offset', mode: 'offset', path: DATE_OFFSET, length: 0 },
   { key: 'getFullYear', id: 'time.date.full-year', slot: 'time.date.full-year', mode: 'full-year', path: 'window.Date.prototype.getFullYear', length: 0 },
@@ -87,6 +96,25 @@ export function operations(): DraftOp[] {
     refProp(format, 'supportedLocalesOf', 'time.format.locales'),
     { op: 'order', target: date, keys: ['length', 'name', 'prototype', 'now', 'parse', 'UTC'] },
     { op: 'order', target: format, keys: ['length', 'name', 'prototype', 'supportedLocalesOf'] },
+    ...INTL_NAMES.flatMap<DraftOp>((name) => {
+      const id = `time.intl.${name}`;
+      const prototype = { path: `window.Intl.${name}.prototype` };
+      return [
+        { op: 'alloc', id, kind: 'function', slot: id, prototype, shape: fnShape(name, 0, true, true) },
+        { op: 'alloc', id: `${id}.locales`, kind: 'function', slot: `${id}.locales`, shape: fnShape('supportedLocalesOf', 1) },
+        refProp({ path: 'window.Intl' }, name, id),
+        refProp(prototype, 'constructor', id),
+        refProp({ node: id }, 'supportedLocalesOf', `${id}.locales`),
+        { op: 'order', target: { node: id }, keys: ['length', 'name', 'prototype', 'supportedLocalesOf'] },
+      ];
+    }),
+    ...LOCALE_METHODS.flatMap<DraftOp>(({ owner, key, length }) => {
+      const id = `time.locale.${owner}.${key}`;
+      return [
+        { op: 'alloc', id, kind: 'function', slot: id, shape: fnShape(key, length) },
+        refProp({ path: `window.${owner}.prototype` }, key, id),
+      ];
+    }),
   ];
 }
 
@@ -97,11 +125,13 @@ export const timeFeature: Feature = {
     'time.clock': 'partial',
     'time.random': 'partial',
     'time.timezone': 'partial',
+    'time.locale': 'partial',
   }),
-  rev: '1',
+  rev: '2',
   build: ({ profile, page }) => {
     const now = page?.clock?.now ?? null;
     const timeZone = profile.timezone?.timeZone ?? null;
+    const locale = profile.locale ?? null;
     return {
       binds: [
         {
@@ -125,8 +155,8 @@ export const timeFeature: Feature = {
           sources: [RANDOM],
         },
         {
-          slot: 'time.format', driver: 'time', config: { op: 'format', timeZone },
-          sources: [FORMAT],
+          slot: 'time.format', driver: 'time', config: { op: 'format', timeZone, locale },
+          sources: [FORMAT, CANONICAL_LOCALES],
         },
         {
           slot: 'time.format.locales', driver: 'time', config: { op: 'apply', path: FORMAT_LOCALES },
@@ -136,17 +166,34 @@ export const timeFeature: Feature = {
           slot,
           driver: 'time',
           config: mode === 'locale'
-            ? { op: 'locale', path, timeZone }
+            ? { op: 'locale', path, timeZone, locale }
             : { op: 'timezone', method: mode, path, timeZone },
           sources: mode === 'locale'
-            ? [path]
+            ? [path, CANONICAL_LOCALES]
             : [path, DATE, DATE_GET_TIME, DATE_SET_TIME, DATE_UTC, DATE_UTC_DAY, DATE_UTC_MILLISECONDS, FORMAT, FORMAT_PARTS],
+        })),
+        ...INTL_NAMES.flatMap((name) => {
+          const slot = `time.intl.${name}`;
+          const path = `window.Intl.${name}`;
+          return [
+            { slot, driver: 'time', config: { op: 'intl', path, locale }, sources: [path, CANONICAL_LOCALES] },
+            {
+              slot: `${slot}.locales`, driver: 'time',
+              config: { op: 'apply', path: `${path}.supportedLocalesOf` }, sources: [`${path}.supportedLocalesOf`],
+            },
+          ];
+        }),
+        ...LOCALE_METHODS.map(({ owner, key, index }) => ({
+          slot: `time.locale.${owner}.${key}`, driver: 'time',
+          config: { op: 'locale-method', path: `window.${owner}.prototype.${key}`, index, locale },
+          sources: [`window.${owner}.prototype.${key}`, CANONICAL_LOCALES],
         })),
       ],
       support: {
         'time.clock': page?.clock ? 'emulated' : 'unsupported',
         'time.random': page?.clock ? 'emulated' : 'unsupported',
         'time.timezone': profile.timezone ? profile.evidence.timezone.support : 'unsupported',
+        'time.locale': profile.locale === undefined ? 'unsupported' : 'emulated',
       },
     };
   },

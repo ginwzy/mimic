@@ -1,0 +1,2734 @@
+{
+  "chrome-mac": {
+    "profile": {
+      "schema": 2,
+      "id": "chrome-mac",
+      "target": {
+        "engine": "chromium",
+        "host": "chrome",
+        "platform": "macos",
+        "form": "desktop",
+        "version": 131
+      },
+      "shape": {
+        "id": "chromium/chrome/macos/desktop/131",
+        "hash": "5a63c237beaa572472b6163a8eb97a8c1722272bf57f509f804f580701dce50b"
+      },
+      "source": {
+        "kind": "manual",
+        "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+        "file": "profiles/chrome-mac.json"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "platform": "MacIntel",
+        "vendor": "Google Inc.",
+        "language": "zh-CN",
+        "languages": [
+          "zh-CN",
+          "zh",
+          "en"
+        ],
+        "hardwareConcurrency": 8,
+        "deviceMemory": 8,
+        "maxTouchPoints": 0,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Chromium",
+              "version": "131"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "131"
+            },
+            {
+              "brand": "Not_A Brand",
+              "version": "24"
+            }
+          ],
+          "mobile": false,
+          "platform": "macOS",
+          "architecture": "x86",
+          "bitness": "64",
+          "fullVersionList": [
+            {
+              "brand": "Chromium",
+              "version": "131.0.0.0"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "131.0.0.0"
+            },
+            {
+              "brand": "Not_A Brand",
+              "version": "24.0.0.0"
+            }
+          ],
+          "model": "",
+          "platformVersion": "",
+          "uaFullVersion": "131.0.0.0",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 1920,
+        "height": 1080,
+        "availWidth": 1920,
+        "availHeight": 1055,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 30,
+        "pixelDepth": 30,
+        "orientation": {
+          "type": "landscape-primary",
+          "angle": 0
+        }
+      },
+      "evidence": {
+        "navigator": {
+          "support": "derived",
+          "fields": {
+            "userAgent": "derived",
+            "appVersion": "derived",
+            "platform": "derived",
+            "vendor": "derived",
+            "language": "derived",
+            "languages": "derived",
+            "hardwareConcurrency": "derived",
+            "deviceMemory": "derived",
+            "maxTouchPoints": "derived",
+            "cookieEnabled": "derived",
+            "userAgentData.brands": "derived",
+            "userAgentData.mobile": "derived",
+            "userAgentData.platform": "derived",
+            "userAgentData.architecture": "derived",
+            "userAgentData.bitness": "derived",
+            "userAgentData.fullVersionList": "derived",
+            "userAgentData.model": "derived",
+            "userAgentData.platformVersion": "derived",
+            "userAgentData.uaFullVersion": "derived",
+            "userAgentData.wow64": "derived"
+          },
+          "source": {
+            "kind": "manual",
+            "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+            "file": "profiles/chrome-mac.json"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "derived",
+            "height": "derived",
+            "availWidth": "derived",
+            "availHeight": "derived",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "derived",
+            "pixelDepth": "derived",
+            "orientation.type": "derived",
+            "orientation.angle": "derived"
+          },
+          "source": {
+            "kind": "manual",
+            "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+            "file": "profiles/chrome-mac.json"
+          }
+        },
+        "window": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+            "file": "profiles/chrome-mac.json"
+          }
+        },
+        "timezone": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+            "file": "profiles/chrome-mac.json"
+          }
+        },
+        "webgl": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+            "file": "profiles/chrome-mac.json"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+            "file": "profiles/chrome-mac.json"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+            "file": "profiles/chrome-mac.json"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+            "file": "profiles/chrome-mac.json"
+          }
+        }
+      },
+      "hash": "c95ac4722f347896a889e442857d84ed052b9cf51ea2bcac77312e684665ce2c"
+    },
+    "page": {
+      "schema": 2,
+      "id": "chrome-mac:default",
+      "source": {
+        "kind": "manual",
+        "hash": "bd165ed503e75ee924fa0f66bb7e61972630fe8c00d41ab9decc1b172e5e379d",
+        "file": "profiles/chrome-mac.json"
+      },
+      "url": "https://example.com/",
+      "connection": {
+        "effectiveType": "4g",
+        "downlink": 10,
+        "rtt": 50,
+        "saveData": false
+      },
+      "clock": {
+        "now": 1735689600000,
+        "seed": 305419896
+      },
+      "hash": "50aac47e0a3e576a70a130ca4885229021e974cb74b3c8a27eae2941ea911e80"
+    }
+  },
+  "linux-chrome": {
+    "profile": {
+      "schema": 2,
+      "id": "linux-chrome",
+      "target": {
+        "engine": "chromium",
+        "host": "chrome",
+        "platform": "linux",
+        "form": "desktop",
+        "version": 143
+      },
+      "shape": {
+        "id": "chromium/chrome/linux/desktop/143",
+        "hash": "b908e3532db5e2b30fb3def48bb75cb372a400553d1a262db0d5e9b9319d444a"
+      },
+      "source": {
+        "kind": "manual",
+        "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+        "file": "profiles/linux-chrome.json"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+        "appVersion": "5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+        "platform": "Linux x86_64",
+        "vendor": "Google Inc.",
+        "language": "zh-CN",
+        "languages": [
+          "zh-CN",
+          "zh",
+          "en"
+        ],
+        "hardwareConcurrency": 8,
+        "deviceMemory": 8,
+        "maxTouchPoints": 0,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Chromium",
+              "version": "143"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "143"
+            },
+            {
+              "brand": "Not_A Brand",
+              "version": "24"
+            }
+          ],
+          "mobile": false,
+          "platform": "Linux",
+          "architecture": "x86",
+          "bitness": "64",
+          "fullVersionList": [
+            {
+              "brand": "Chromium",
+              "version": "143.0.0.0"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "143.0.0.0"
+            },
+            {
+              "brand": "Not_A Brand",
+              "version": "24.0.0.0"
+            }
+          ],
+          "model": "",
+          "platformVersion": "",
+          "uaFullVersion": "143.0.0.0",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 1920,
+        "height": 1080,
+        "availWidth": 1920,
+        "availHeight": 1053,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "orientation": {
+          "type": "landscape-primary",
+          "angle": 0
+        }
+      },
+      "evidence": {
+        "navigator": {
+          "support": "derived",
+          "fields": {
+            "userAgent": "derived",
+            "appVersion": "derived",
+            "platform": "derived",
+            "vendor": "derived",
+            "language": "derived",
+            "languages": "derived",
+            "hardwareConcurrency": "derived",
+            "deviceMemory": "derived",
+            "maxTouchPoints": "derived",
+            "cookieEnabled": "derived",
+            "userAgentData.brands": "derived",
+            "userAgentData.mobile": "derived",
+            "userAgentData.platform": "derived",
+            "userAgentData.architecture": "derived",
+            "userAgentData.bitness": "derived",
+            "userAgentData.fullVersionList": "derived",
+            "userAgentData.model": "derived",
+            "userAgentData.platformVersion": "derived",
+            "userAgentData.uaFullVersion": "derived",
+            "userAgentData.wow64": "derived"
+          },
+          "source": {
+            "kind": "manual",
+            "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+            "file": "profiles/linux-chrome.json"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "derived",
+            "height": "derived",
+            "availWidth": "derived",
+            "availHeight": "derived",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "derived",
+            "pixelDepth": "derived",
+            "orientation.type": "derived",
+            "orientation.angle": "derived"
+          },
+          "source": {
+            "kind": "manual",
+            "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+            "file": "profiles/linux-chrome.json"
+          }
+        },
+        "window": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+            "file": "profiles/linux-chrome.json"
+          }
+        },
+        "timezone": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+            "file": "profiles/linux-chrome.json"
+          }
+        },
+        "webgl": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+            "file": "profiles/linux-chrome.json"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+            "file": "profiles/linux-chrome.json"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+            "file": "profiles/linux-chrome.json"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "manual",
+            "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+            "file": "profiles/linux-chrome.json"
+          }
+        }
+      },
+      "hash": "33d03b15fcbad0d2ab624b25ea72f1d20ca7db565973cd7c4641a5a321a75bcf"
+    },
+    "page": {
+      "schema": 2,
+      "id": "linux-chrome:default",
+      "source": {
+        "kind": "manual",
+        "hash": "851ba5dc0697b69c7b665725e3d6146db7b5fc8f58579701b1139149eb476aa8",
+        "file": "profiles/linux-chrome.json"
+      },
+      "url": "https://example.com/",
+      "connection": {
+        "effectiveType": "4g",
+        "downlink": 10,
+        "rtt": 50,
+        "saveData": false
+      },
+      "clock": {
+        "now": 1735689600000,
+        "seed": 1432778632
+      },
+      "hash": "78e41a9327285a766635ecc7367a6f7cd2ce44e389da6cc8663b6fcdd929d981"
+    }
+  },
+  "macos-chrome-v148": {
+    "profile": {
+      "schema": 2,
+      "id": "macos-chrome-v148",
+      "target": {
+        "engine": "chromium",
+        "host": "chrome",
+        "platform": "macos",
+        "form": "desktop",
+        "version": 148
+      },
+      "shape": {
+        "id": "chromium/chrome/macos/desktop/148",
+        "hash": "31c382b71dea539202ab62cb87149be222ae364954c22c2046f159ae1f3a2d90"
+      },
+      "source": {
+        "kind": "capture",
+        "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+        "file": "profiles/macos-chrome-v148.json"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "platform": "MacIntel",
+        "vendor": "Google Inc.",
+        "language": "en",
+        "languages": [
+          "en",
+          "en-US",
+          "zh-CN"
+        ],
+        "hardwareConcurrency": 10,
+        "deviceMemory": 32,
+        "maxTouchPoints": 0,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Chromium",
+              "version": "148"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "148"
+            },
+            {
+              "brand": "Not/A)Brand",
+              "version": "99"
+            }
+          ],
+          "mobile": false,
+          "platform": "macOS",
+          "architecture": "arm",
+          "bitness": "64",
+          "fullVersionList": [
+            {
+              "brand": "Chromium",
+              "version": "148.0.7778.216"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "148.0.7778.216"
+            },
+            {
+              "brand": "Not/A)Brand",
+              "version": "99.0.0.0"
+            }
+          ],
+          "model": "",
+          "platformVersion": "26.3.1",
+          "uaFullVersion": "148.0.7778.216",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 2560,
+        "height": 1440,
+        "availWidth": 2501,
+        "availHeight": 1410,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "orientation": {
+          "type": "landscape-primary",
+          "angle": 0
+        }
+      },
+      "window": {
+        "innerWidth": 2501,
+        "innerHeight": 1289,
+        "outerWidth": 2501,
+        "outerHeight": 1410,
+        "devicePixelRatio": 2
+      },
+      "timezone": {
+        "timeZone": "Asia/Shanghai",
+        "offset": -480
+      },
+      "webgl": {
+        "parameters": {
+          "3379": 16384,
+          "3386": [
+            16384,
+            16384
+          ],
+          "7936": "WebKit",
+          "7937": "WebKit WebGL",
+          "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "33901": [
+            1,
+            511
+          ],
+          "33902": [
+            1,
+            1
+          ],
+          "34024": 16384,
+          "34076": 16384,
+          "34921": 16,
+          "34930": 16,
+          "35661": 32,
+          "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+          "36347": 1024,
+          "36348": 30,
+          "36349": 1024,
+          "37445": "Google Inc. (Apple)",
+          "37446": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+        },
+        "extensions": [
+          "EXT_clip_control",
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_conservative_depth",
+          "EXT_depth_clamp",
+          "EXT_disjoint_timer_query_webgl2",
+          "EXT_float_blend",
+          "EXT_polygon_offset_clamp",
+          "EXT_render_snorm",
+          "EXT_texture_compression_bptc",
+          "EXT_texture_compression_rgtc",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_mirror_clamp_to_edge",
+          "EXT_texture_norm16",
+          "KHR_parallel_shader_compile",
+          "NV_shader_noperspective_interpolation",
+          "OES_draw_buffers_indexed",
+          "OES_sample_variables",
+          "OES_shader_multisample_interpolation",
+          "OES_texture_float_linear",
+          "WEBGL_blend_func_extended",
+          "WEBGL_clip_cull_distance",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_compressed_texture_pvrtc",
+          "WEBGL_compressed_texture_s3tc",
+          "WEBGL_compressed_texture_s3tc_srgb",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw",
+          "WEBGL_polygon_mode",
+          "WEBGL_provoking_vertex",
+          "WEBGL_render_shared_exponent",
+          "WEBGL_stencil_texturing"
+        ],
+        "unmaskedVendor": "Google Inc. (Apple)",
+        "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+      },
+      "evidence": {
+        "navigator": {
+          "support": "derived",
+          "fields": {
+            "userAgent": "captured",
+            "appVersion": "captured",
+            "platform": "captured",
+            "vendor": "captured",
+            "language": "captured",
+            "languages": "captured",
+            "hardwareConcurrency": "captured",
+            "deviceMemory": "captured",
+            "maxTouchPoints": "captured",
+            "cookieEnabled": "captured",
+            "userAgentData.brands": "captured",
+            "userAgentData.mobile": "captured",
+            "userAgentData.platform": "captured",
+            "userAgentData.architecture": "captured",
+            "userAgentData.bitness": "captured",
+            "userAgentData.fullVersionList": "captured",
+            "userAgentData.model": "captured",
+            "userAgentData.platformVersion": "captured",
+            "userAgentData.uaFullVersion": "captured",
+            "userAgentData.wow64": "derived"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+            "file": "profiles/macos-chrome-v148.json"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "captured",
+            "height": "captured",
+            "availWidth": "captured",
+            "availHeight": "captured",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "captured",
+            "pixelDepth": "captured",
+            "orientation.type": "captured",
+            "orientation.angle": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+            "file": "profiles/macos-chrome-v148.json"
+          }
+        },
+        "window": {
+          "support": "captured",
+          "fields": {
+            "innerWidth": "captured",
+            "innerHeight": "captured",
+            "outerWidth": "captured",
+            "outerHeight": "captured",
+            "devicePixelRatio": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+            "file": "profiles/macos-chrome-v148.json"
+          }
+        },
+        "timezone": {
+          "support": "captured",
+          "fields": {
+            "timeZone": "captured",
+            "offset": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+            "file": "profiles/macos-chrome-v148.json"
+          }
+        },
+        "webgl": {
+          "support": "captured",
+          "fields": {
+            "parameters.3379": "captured",
+            "parameters.3386": "captured",
+            "parameters.7936": "captured",
+            "parameters.7937": "captured",
+            "parameters.7938": "captured",
+            "parameters.33901": "captured",
+            "parameters.33902": "captured",
+            "parameters.34024": "captured",
+            "parameters.34076": "captured",
+            "parameters.34921": "captured",
+            "parameters.34930": "captured",
+            "parameters.35661": "captured",
+            "parameters.35724": "captured",
+            "parameters.36347": "captured",
+            "parameters.36348": "captured",
+            "parameters.36349": "captured",
+            "parameters.37445": "captured",
+            "parameters.37446": "captured",
+            "extensions": "captured",
+            "unmaskedVendor": "captured",
+            "unmaskedRenderer": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+            "file": "profiles/macos-chrome-v148.json"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+            "file": "profiles/macos-chrome-v148.json"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+            "file": "profiles/macos-chrome-v148.json"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+            "file": "profiles/macos-chrome-v148.json"
+          }
+        }
+      },
+      "hash": "e1f7c6201b70800a2811a2ab83027738d6f8835055b636e63d3c6abb60fd4b83"
+    },
+    "page": {
+      "schema": 2,
+      "id": "macos-chrome-v148:default",
+      "source": {
+        "kind": "capture",
+        "hash": "d942b5fbb5223be5a15116d249c6adf0c5f4ab09561bd762f46f1b5b17a1f54c",
+        "file": "profiles/macos-chrome-v148.json"
+      },
+      "connection": {
+        "effectiveType": "4g",
+        "downlink": 1.4,
+        "rtt": 150,
+        "saveData": false
+      },
+      "hash": "4b0f45103c377e574f5bba4123c7c7b79caad7d44b295fd695d05c0deae0d4e7"
+    }
+  },
+  "macos-chrome-v149": {
+    "profile": {
+      "schema": 2,
+      "id": "macos-chrome-v149",
+      "target": {
+        "engine": "chromium",
+        "host": "chrome",
+        "platform": "macos",
+        "form": "desktop",
+        "version": 149
+      },
+      "shape": {
+        "id": "chromium/chrome/macos/desktop/149",
+        "hash": "e4a670609f3d1f7e9f7db17fdcede4a3cf381cd049ff9a935e630ee2ba7dac5d"
+      },
+      "source": {
+        "kind": "capture",
+        "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+        "file": "profiles/macos-chrome-v149.json"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "MacIntel",
+        "vendor": "Google Inc.",
+        "language": "en",
+        "languages": [
+          "en",
+          "en-US",
+          "zh-CN"
+        ],
+        "hardwareConcurrency": 10,
+        "deviceMemory": 32,
+        "maxTouchPoints": 0,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Google Chrome",
+              "version": "149"
+            },
+            {
+              "brand": "Chromium",
+              "version": "149"
+            },
+            {
+              "brand": "Not)A;Brand",
+              "version": "24"
+            }
+          ],
+          "mobile": false,
+          "platform": "macOS",
+          "architecture": "arm",
+          "bitness": "64",
+          "fullVersionList": [
+            {
+              "brand": "Google Chrome",
+              "version": "149.0.7827.197"
+            },
+            {
+              "brand": "Chromium",
+              "version": "149.0.7827.197"
+            },
+            {
+              "brand": "Not)A;Brand",
+              "version": "24.0.0.0"
+            }
+          ],
+          "model": "",
+          "platformVersion": "26.3.1",
+          "uaFullVersion": "149.0.7827.197",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 2560,
+        "height": 1440,
+        "availWidth": 2501,
+        "availHeight": 1410,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "orientation": {
+          "type": "landscape-primary",
+          "angle": 0
+        }
+      },
+      "window": {
+        "innerWidth": 2501,
+        "innerHeight": 1289,
+        "outerWidth": 2501,
+        "outerHeight": 1410,
+        "devicePixelRatio": 2
+      },
+      "timezone": {
+        "timeZone": "Asia/Shanghai",
+        "offset": -480
+      },
+      "webgl": {
+        "parameters": {
+          "3379": 16384,
+          "3386": [
+            16384,
+            16384
+          ],
+          "7936": "WebKit",
+          "7937": "WebKit WebGL",
+          "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "33901": [
+            1,
+            511
+          ],
+          "33902": [
+            1,
+            1
+          ],
+          "34024": 16384,
+          "34076": 16384,
+          "34921": 16,
+          "34930": 16,
+          "35661": 32,
+          "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+          "36347": 1024,
+          "36348": 30,
+          "36349": 1024,
+          "37445": "Google Inc. (Apple)",
+          "37446": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+        },
+        "extensions": [
+          "EXT_clip_control",
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_conservative_depth",
+          "EXT_depth_clamp",
+          "EXT_disjoint_timer_query_webgl2",
+          "EXT_float_blend",
+          "EXT_polygon_offset_clamp",
+          "EXT_render_snorm",
+          "EXT_texture_compression_bptc",
+          "EXT_texture_compression_rgtc",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_mirror_clamp_to_edge",
+          "EXT_texture_norm16",
+          "KHR_parallel_shader_compile",
+          "NV_shader_noperspective_interpolation",
+          "OES_draw_buffers_indexed",
+          "OES_sample_variables",
+          "OES_shader_multisample_interpolation",
+          "OES_texture_float_linear",
+          "WEBGL_blend_func_extended",
+          "WEBGL_clip_cull_distance",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_compressed_texture_pvrtc",
+          "WEBGL_compressed_texture_s3tc",
+          "WEBGL_compressed_texture_s3tc_srgb",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw",
+          "WEBGL_polygon_mode",
+          "WEBGL_provoking_vertex",
+          "WEBGL_render_shared_exponent",
+          "WEBGL_stencil_texturing"
+        ],
+        "unmaskedVendor": "Google Inc. (Apple)",
+        "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+      },
+      "evidence": {
+        "navigator": {
+          "support": "derived",
+          "fields": {
+            "userAgent": "captured",
+            "appVersion": "captured",
+            "platform": "captured",
+            "vendor": "captured",
+            "language": "captured",
+            "languages": "captured",
+            "hardwareConcurrency": "captured",
+            "deviceMemory": "captured",
+            "maxTouchPoints": "captured",
+            "cookieEnabled": "captured",
+            "userAgentData.brands": "captured",
+            "userAgentData.mobile": "captured",
+            "userAgentData.platform": "captured",
+            "userAgentData.architecture": "captured",
+            "userAgentData.bitness": "captured",
+            "userAgentData.fullVersionList": "captured",
+            "userAgentData.model": "captured",
+            "userAgentData.platformVersion": "captured",
+            "userAgentData.uaFullVersion": "captured",
+            "userAgentData.wow64": "derived"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+            "file": "profiles/macos-chrome-v149.json"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "captured",
+            "height": "captured",
+            "availWidth": "captured",
+            "availHeight": "captured",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "captured",
+            "pixelDepth": "captured",
+            "orientation.type": "captured",
+            "orientation.angle": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+            "file": "profiles/macos-chrome-v149.json"
+          }
+        },
+        "window": {
+          "support": "captured",
+          "fields": {
+            "innerWidth": "captured",
+            "innerHeight": "captured",
+            "outerWidth": "captured",
+            "outerHeight": "captured",
+            "devicePixelRatio": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+            "file": "profiles/macos-chrome-v149.json"
+          }
+        },
+        "timezone": {
+          "support": "captured",
+          "fields": {
+            "timeZone": "captured",
+            "offset": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+            "file": "profiles/macos-chrome-v149.json"
+          }
+        },
+        "webgl": {
+          "support": "captured",
+          "fields": {
+            "parameters.3379": "captured",
+            "parameters.3386": "captured",
+            "parameters.7936": "captured",
+            "parameters.7937": "captured",
+            "parameters.7938": "captured",
+            "parameters.33901": "captured",
+            "parameters.33902": "captured",
+            "parameters.34024": "captured",
+            "parameters.34076": "captured",
+            "parameters.34921": "captured",
+            "parameters.34930": "captured",
+            "parameters.35661": "captured",
+            "parameters.35724": "captured",
+            "parameters.36347": "captured",
+            "parameters.36348": "captured",
+            "parameters.36349": "captured",
+            "parameters.37445": "captured",
+            "parameters.37446": "captured",
+            "extensions": "captured",
+            "unmaskedVendor": "captured",
+            "unmaskedRenderer": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+            "file": "profiles/macos-chrome-v149.json"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+            "file": "profiles/macos-chrome-v149.json"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+            "file": "profiles/macos-chrome-v149.json"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+            "file": "profiles/macos-chrome-v149.json"
+          }
+        }
+      },
+      "hash": "55c2206fcaba6aff711d670badbc3a9be42e640d43c07c99a8e5109816f2afdf"
+    },
+    "page": {
+      "schema": 2,
+      "id": "macos-chrome-v149:default",
+      "source": {
+        "kind": "capture",
+        "hash": "f78121ff099d0b48128e213cec6fcd4535175b22bc67272fd97aa6d5dc76b6c8",
+        "file": "profiles/macos-chrome-v149.json"
+      },
+      "connection": {
+        "effectiveType": "4g",
+        "downlink": 0.4,
+        "rtt": 350,
+        "saveData": false
+      },
+      "hash": "ae2fbad80eb7cc502f8e94b6eee5412757e5cb8e01bf2fe5914001cd3496f1b9"
+    }
+  },
+  "android-webview-v138": {
+    "profile": {
+      "schema": 2,
+      "id": "android-webview-v138",
+      "target": {
+        "engine": "chromium",
+        "host": "webview",
+        "platform": "android",
+        "form": "mobile",
+        "version": 138
+      },
+      "shape": {
+        "id": "chromium/webview/android/mobile/138",
+        "hash": "7fd571e47e7e6a11afc774f8695ab4449037567fc1c14e932825058ee96182e1"
+      },
+      "source": {
+        "kind": "capture",
+        "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+        "file": "profiles/android-webview-v138.json"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 15; M2012K11AC Build/BP1A.250505.005) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36",
+        "appVersion": "5.0 (Linux; Android 15; M2012K11AC Build/BP1A.250505.005) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.63 Mobile Safari/537.36",
+        "platform": "Linux armv8l",
+        "vendor": "Google Inc.",
+        "language": "en-US",
+        "languages": [
+          "en-US"
+        ],
+        "hardwareConcurrency": 8,
+        "deviceMemory": 8,
+        "maxTouchPoints": 5,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Not)A;Brand",
+              "version": "8"
+            },
+            {
+              "brand": "Chromium",
+              "version": "138"
+            },
+            {
+              "brand": "Android WebView",
+              "version": "138"
+            }
+          ],
+          "mobile": true,
+          "platform": "Android",
+          "architecture": "",
+          "bitness": "",
+          "fullVersionList": [],
+          "model": "",
+          "platformVersion": "",
+          "uaFullVersion": "",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 393,
+        "height": 873,
+        "availWidth": 393,
+        "availHeight": 873,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "orientation": {
+          "type": "portrait-primary",
+          "angle": 0
+        }
+      },
+      "window": {
+        "innerWidth": 394,
+        "innerHeight": 749,
+        "outerWidth": 393,
+        "outerHeight": 747,
+        "devicePixelRatio": 2.75
+      },
+      "timezone": {
+        "timeZone": "Asia/Shanghai",
+        "offset": -480
+      },
+      "webgl": {
+        "parameters": {
+          "3379": 4096,
+          "3386": [
+            16384,
+            16384
+          ],
+          "7936": "WebKit",
+          "7937": "WebKit WebGL",
+          "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "33901": [
+            1,
+            1023
+          ],
+          "33902": [
+            1,
+            8
+          ],
+          "34024": 16384,
+          "34076": 4096,
+          "34921": 32,
+          "34930": 16,
+          "35661": 96,
+          "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+          "36347": 256,
+          "36348": 31,
+          "36349": 256,
+          "37445": "Qualcomm",
+          "37446": "Adreno (TM) 650"
+        },
+        "extensions": [
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_float_blend",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "OES_texture_float_linear",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw"
+        ],
+        "unmaskedVendor": "Qualcomm",
+        "unmaskedRenderer": "Adreno (TM) 650"
+      },
+      "evidence": {
+        "navigator": {
+          "support": "derived",
+          "fields": {
+            "userAgent": "captured",
+            "appVersion": "captured",
+            "platform": "captured",
+            "vendor": "captured",
+            "language": "captured",
+            "languages": "captured",
+            "hardwareConcurrency": "captured",
+            "deviceMemory": "captured",
+            "maxTouchPoints": "captured",
+            "cookieEnabled": "captured",
+            "userAgentData.brands": "captured",
+            "userAgentData.mobile": "captured",
+            "userAgentData.platform": "captured",
+            "userAgentData.architecture": "captured",
+            "userAgentData.bitness": "captured",
+            "userAgentData.fullVersionList": "captured",
+            "userAgentData.model": "captured",
+            "userAgentData.platformVersion": "captured",
+            "userAgentData.uaFullVersion": "captured",
+            "userAgentData.wow64": "derived"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+            "file": "profiles/android-webview-v138.json"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "captured",
+            "height": "captured",
+            "availWidth": "captured",
+            "availHeight": "captured",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "captured",
+            "pixelDepth": "captured",
+            "orientation.type": "captured",
+            "orientation.angle": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+            "file": "profiles/android-webview-v138.json"
+          }
+        },
+        "window": {
+          "support": "captured",
+          "fields": {
+            "innerWidth": "captured",
+            "innerHeight": "captured",
+            "outerWidth": "captured",
+            "outerHeight": "captured",
+            "devicePixelRatio": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+            "file": "profiles/android-webview-v138.json"
+          }
+        },
+        "timezone": {
+          "support": "captured",
+          "fields": {
+            "timeZone": "captured",
+            "offset": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+            "file": "profiles/android-webview-v138.json"
+          }
+        },
+        "webgl": {
+          "support": "captured",
+          "fields": {
+            "parameters.3379": "captured",
+            "parameters.3386": "captured",
+            "parameters.7936": "captured",
+            "parameters.7937": "captured",
+            "parameters.7938": "captured",
+            "parameters.33901": "captured",
+            "parameters.33902": "captured",
+            "parameters.34024": "captured",
+            "parameters.34076": "captured",
+            "parameters.34921": "captured",
+            "parameters.34930": "captured",
+            "parameters.35661": "captured",
+            "parameters.35724": "captured",
+            "parameters.36347": "captured",
+            "parameters.36348": "captured",
+            "parameters.36349": "captured",
+            "parameters.37445": "captured",
+            "parameters.37446": "captured",
+            "extensions": "captured",
+            "unmaskedVendor": "captured",
+            "unmaskedRenderer": "captured"
+          },
+          "source": {
+            "kind": "capture",
+            "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+            "file": "profiles/android-webview-v138.json"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+            "file": "profiles/android-webview-v138.json"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+            "file": "profiles/android-webview-v138.json"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "capture",
+            "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+            "file": "profiles/android-webview-v138.json"
+          }
+        }
+      },
+      "hash": "365b08094d9ada050898bbba4073dd510b8d2c9d7d929210398b780b815a2288"
+    },
+    "page": {
+      "schema": 2,
+      "id": "android-webview-v138:default",
+      "source": {
+        "kind": "capture",
+        "hash": "f4c9618e7d0125ca9c8762a1527621ba3448252b75bc30a9602b2a29d75f3504",
+        "file": "profiles/android-webview-v138.json"
+      },
+      "connection": {
+        "effectiveType": "4g",
+        "downlink": 9.1,
+        "rtt": 0,
+        "saveData": false
+      },
+      "hash": "e623ed419913943d8f294f8fb4e7aacdb73b67cb6b10f00c1e63758ecb29eea1"
+    }
+  },
+  "android-chrome/22126rn91y-v139-59164": {
+    "profile": {
+      "schema": 2,
+      "id": "android-chrome/22126rn91y-v139-59164",
+      "target": {
+        "engine": "chromium",
+        "host": "chrome",
+        "platform": "android",
+        "form": "mobile",
+        "version": 139
+      },
+      "shape": {
+        "id": "chromium/chrome/android/mobile/139",
+        "hash": "11755b608222b84fb7463c4d59a59861b6d5a1b5de71b6bd0e2e0e52be3d325a"
+      },
+      "source": {
+        "kind": "fp-env",
+        "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+        "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+        "appVersion": "5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+        "platform": "Linux armv8l",
+        "vendor": "Google Inc.",
+        "language": "pl-PL",
+        "languages": [
+          "pl-PL",
+          "pl",
+          "en-US",
+          "en"
+        ],
+        "hardwareConcurrency": 8,
+        "deviceMemory": 4,
+        "maxTouchPoints": 5,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Not;A=Brand",
+              "version": "99"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "139"
+            },
+            {
+              "brand": "Chromium",
+              "version": "139"
+            }
+          ],
+          "mobile": true,
+          "platform": "Android",
+          "architecture": "",
+          "bitness": "",
+          "fullVersionList": [
+            {
+              "brand": "Not;A=Brand",
+              "version": "99.0.0.0"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "139.0.7258.160"
+            },
+            {
+              "brand": "Chromium",
+              "version": "139.0.7258.160"
+            }
+          ],
+          "model": "22126RN91Y",
+          "platformVersion": "14.0.0",
+          "uaFullVersion": "139.0.7258.160",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 360,
+        "height": 825,
+        "availWidth": 360,
+        "availHeight": 825,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "orientation": {
+          "type": "portrait-primary",
+          "angle": 0
+        }
+      },
+      "window": {
+        "innerWidth": 360,
+        "innerHeight": 697,
+        "outerWidth": 360,
+        "outerHeight": 698,
+        "devicePixelRatio": 2
+      },
+      "timezone": {
+        "timeZone": "Europe/Warsaw",
+        "offset": -120
+      },
+      "webgl": {
+        "parameters": {
+          "3379": 4096,
+          "3386": [
+            16383,
+            16383
+          ],
+          "3410": 8,
+          "3411": 8,
+          "3412": 8,
+          "3413": 8,
+          "3414": 24,
+          "3415": 0,
+          "7936": "WebKit",
+          "7937": "WebKit WebGL",
+          "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "33901": [
+            1,
+            1024
+          ],
+          "33902": [
+            1,
+            4095.9375
+          ],
+          "34024": 16383,
+          "34047": 16,
+          "34076": 4096,
+          "34921": 32,
+          "34930": 16,
+          "35660": 16,
+          "35661": 96,
+          "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+          "36347": 4096,
+          "36348": 31,
+          "36349": 4096,
+          "37445": "ARM",
+          "37446": "Mali-G52 MC2"
+        },
+        "extensions": [
+          "EXT_color_buffer_float",
+          "EXT_float_blend",
+          "EXT_texture_filter_anisotropic",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw"
+        ],
+        "unmaskedVendor": "ARM",
+        "unmaskedRenderer": "Mali-G52 MC2",
+        "shaderPrecision": {
+          "35632-36336": {
+            "precision": 10,
+            "rangeMax": 15,
+            "rangeMin": 15
+          },
+          "35632-36337": {
+            "precision": 10,
+            "rangeMax": 15,
+            "rangeMin": 15
+          },
+          "35632-36338": {
+            "precision": 23,
+            "rangeMax": 127,
+            "rangeMin": 127
+          },
+          "35632-36339": {
+            "precision": 0,
+            "rangeMax": 14,
+            "rangeMin": 15
+          },
+          "35632-36340": {
+            "precision": 0,
+            "rangeMax": 14,
+            "rangeMin": 15
+          },
+          "35632-36341": {
+            "precision": 0,
+            "rangeMax": 30,
+            "rangeMin": 31
+          },
+          "35633-36336": {
+            "precision": 10,
+            "rangeMax": 15,
+            "rangeMin": 15
+          },
+          "35633-36337": {
+            "precision": 10,
+            "rangeMax": 15,
+            "rangeMin": 15
+          },
+          "35633-36338": {
+            "precision": 23,
+            "rangeMax": 127,
+            "rangeMin": 127
+          },
+          "35633-36339": {
+            "precision": 0,
+            "rangeMax": 14,
+            "rangeMin": 15
+          },
+          "35633-36340": {
+            "precision": 0,
+            "rangeMax": 14,
+            "rangeMin": 15
+          },
+          "35633-36341": {
+            "precision": 0,
+            "rangeMax": 30,
+            "rangeMin": 31
+          }
+        }
+      },
+      "evidence": {
+        "navigator": {
+          "support": "captured",
+          "fields": {
+            "userAgent": "captured",
+            "appVersion": "captured",
+            "platform": "captured",
+            "vendor": "captured",
+            "language": "captured",
+            "languages": "captured",
+            "hardwareConcurrency": "captured",
+            "deviceMemory": "captured",
+            "maxTouchPoints": "captured",
+            "cookieEnabled": "captured",
+            "userAgentData.brands": "captured",
+            "userAgentData.mobile": "captured",
+            "userAgentData.platform": "captured",
+            "userAgentData.architecture": "captured",
+            "userAgentData.bitness": "captured",
+            "userAgentData.fullVersionList": "captured",
+            "userAgentData.model": "captured",
+            "userAgentData.platformVersion": "captured",
+            "userAgentData.uaFullVersion": "captured",
+            "userAgentData.wow64": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+            "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "captured",
+            "height": "captured",
+            "availWidth": "captured",
+            "availHeight": "captured",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "captured",
+            "pixelDepth": "captured",
+            "orientation.type": "captured",
+            "orientation.angle": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+            "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+          }
+        },
+        "window": {
+          "support": "captured",
+          "fields": {
+            "innerWidth": "captured",
+            "innerHeight": "captured",
+            "outerWidth": "captured",
+            "outerHeight": "captured",
+            "devicePixelRatio": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+            "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+          }
+        },
+        "timezone": {
+          "support": "captured",
+          "fields": {
+            "timeZone": "captured",
+            "offset": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+            "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+          }
+        },
+        "webgl": {
+          "support": "captured",
+          "fields": {
+            "parameters.3379": "captured",
+            "parameters.3386": "captured",
+            "parameters.3410": "captured",
+            "parameters.3411": "captured",
+            "parameters.3412": "captured",
+            "parameters.3413": "captured",
+            "parameters.3414": "captured",
+            "parameters.3415": "captured",
+            "parameters.7936": "captured",
+            "parameters.7937": "captured",
+            "parameters.7938": "captured",
+            "parameters.33901": "captured",
+            "parameters.33902": "captured",
+            "parameters.34024": "captured",
+            "parameters.34047": "captured",
+            "parameters.34076": "captured",
+            "parameters.34921": "captured",
+            "parameters.34930": "captured",
+            "parameters.35660": "captured",
+            "parameters.35661": "captured",
+            "parameters.35724": "captured",
+            "parameters.36347": "captured",
+            "parameters.36348": "captured",
+            "parameters.36349": "captured",
+            "parameters.37445": "captured",
+            "parameters.37446": "captured",
+            "extensions": "captured",
+            "unmaskedVendor": "captured",
+            "unmaskedRenderer": "captured",
+            "shaderPrecision.35632-36336.precision": "captured",
+            "shaderPrecision.35632-36336.rangeMax": "captured",
+            "shaderPrecision.35632-36336.rangeMin": "captured",
+            "shaderPrecision.35632-36337.precision": "captured",
+            "shaderPrecision.35632-36337.rangeMax": "captured",
+            "shaderPrecision.35632-36337.rangeMin": "captured",
+            "shaderPrecision.35632-36338.precision": "captured",
+            "shaderPrecision.35632-36338.rangeMax": "captured",
+            "shaderPrecision.35632-36338.rangeMin": "captured",
+            "shaderPrecision.35632-36339.precision": "captured",
+            "shaderPrecision.35632-36339.rangeMax": "captured",
+            "shaderPrecision.35632-36339.rangeMin": "captured",
+            "shaderPrecision.35632-36340.precision": "captured",
+            "shaderPrecision.35632-36340.rangeMax": "captured",
+            "shaderPrecision.35632-36340.rangeMin": "captured",
+            "shaderPrecision.35632-36341.precision": "captured",
+            "shaderPrecision.35632-36341.rangeMax": "captured",
+            "shaderPrecision.35632-36341.rangeMin": "captured",
+            "shaderPrecision.35633-36336.precision": "captured",
+            "shaderPrecision.35633-36336.rangeMax": "captured",
+            "shaderPrecision.35633-36336.rangeMin": "captured",
+            "shaderPrecision.35633-36337.precision": "captured",
+            "shaderPrecision.35633-36337.rangeMax": "captured",
+            "shaderPrecision.35633-36337.rangeMin": "captured",
+            "shaderPrecision.35633-36338.precision": "captured",
+            "shaderPrecision.35633-36338.rangeMax": "captured",
+            "shaderPrecision.35633-36338.rangeMin": "captured",
+            "shaderPrecision.35633-36339.precision": "captured",
+            "shaderPrecision.35633-36339.rangeMax": "captured",
+            "shaderPrecision.35633-36339.rangeMin": "captured",
+            "shaderPrecision.35633-36340.precision": "captured",
+            "shaderPrecision.35633-36340.rangeMax": "captured",
+            "shaderPrecision.35633-36340.rangeMin": "captured",
+            "shaderPrecision.35633-36341.precision": "captured",
+            "shaderPrecision.35633-36341.rangeMax": "captured",
+            "shaderPrecision.35633-36341.rangeMin": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+            "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+            "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+            "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+            "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+          }
+        }
+      },
+      "hash": "b60ab21da13cd42b1433f37289c2f14d3b93849b829e3ea243c2164102e625c3"
+    },
+    "page": {
+      "schema": 2,
+      "id": "android-chrome/22126rn91y-v139-59164:default",
+      "source": {
+        "kind": "fp-env",
+        "hash": "c9e403d6d9a78001b6cdc167d9c4584283d2a9d5ef56a37efe88c84155c5081d",
+        "file": "profiles/android-chrome/22126rn91y-v139-59164.json"
+      },
+      "connection": {
+        "effectiveType": "4g",
+        "downlink": 10,
+        "rtt": 50,
+        "saveData": false
+      },
+      "hash": "f6ca294562d1258c1ba1d1857f2abe9d407cb4abdc64ba0c08a9a0ddeeaf05c0"
+    }
+  },
+  "android-chrome/2201116sg-v138-10025": {
+    "profile": {
+      "schema": 2,
+      "id": "android-chrome/2201116sg-v138-10025",
+      "target": {
+        "engine": "chromium",
+        "host": "chrome",
+        "platform": "android",
+        "form": "mobile",
+        "version": 138
+      },
+      "shape": {
+        "id": "chromium/chrome/android/mobile/138",
+        "hash": "ce256ca8fccf41632247623eae5c608cd4776ef42ffd8c1981a72029ac41a8a3"
+      },
+      "source": {
+        "kind": "fp-env",
+        "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+        "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36",
+        "appVersion": "5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36",
+        "platform": "Linux armv8l",
+        "vendor": "Google Inc.",
+        "language": "en-GB",
+        "languages": [
+          "en-GB",
+          "en-US",
+          "en",
+          "pl"
+        ],
+        "hardwareConcurrency": 8,
+        "deviceMemory": 4,
+        "maxTouchPoints": 5,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Not)A;Brand",
+              "version": "8"
+            },
+            {
+              "brand": "Chromium",
+              "version": "138"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "138"
+            }
+          ],
+          "mobile": true,
+          "platform": "Android",
+          "architecture": "",
+          "bitness": "",
+          "fullVersionList": [
+            {
+              "brand": "Not)A;Brand",
+              "version": "8.0.0.0"
+            },
+            {
+              "brand": "Chromium",
+              "version": "138.0.7204.179"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "138.0.7204.179"
+            }
+          ],
+          "model": "2201116SG",
+          "platformVersion": "13.0.0",
+          "uaFullVersion": "138.0.7204.179",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 393,
+        "height": 873,
+        "availWidth": 393,
+        "availHeight": 873,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "orientation": {
+          "type": "portrait-primary",
+          "angle": 0
+        }
+      },
+      "window": {
+        "innerWidth": 392,
+        "innerHeight": 736,
+        "outerWidth": 393,
+        "outerHeight": 737,
+        "devicePixelRatio": 2.75
+      },
+      "timezone": {
+        "timeZone": "Europe/Bucharest",
+        "offset": -180
+      },
+      "webgl": {
+        "parameters": {
+          "3379": 4096,
+          "3386": [
+            16384,
+            16384
+          ],
+          "3410": 8,
+          "3411": 8,
+          "3412": 8,
+          "3413": 8,
+          "3414": 24,
+          "3415": 0,
+          "7936": "WebKit",
+          "7937": "WebKit WebGL",
+          "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "33901": [
+            1,
+            1023
+          ],
+          "33902": [
+            1,
+            8
+          ],
+          "34024": 16384,
+          "34047": 16,
+          "34076": 4096,
+          "34921": 32,
+          "34930": 16,
+          "35660": 16,
+          "35661": 96,
+          "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+          "36347": 256,
+          "36348": 31,
+          "36349": 256,
+          "37445": "Google Inc. (Qualcomm)",
+          "37446": "ANGLE (Qualcomm, Adreno (TM) 619, OpenGL ES 3.2)"
+        },
+        "extensions": [
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_float_blend",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "OES_texture_float_linear",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw"
+        ],
+        "unmaskedVendor": "Google Inc. (Qualcomm)",
+        "unmaskedRenderer": "ANGLE (Qualcomm, Adreno (TM) 619, OpenGL ES 3.2)"
+      },
+      "evidence": {
+        "navigator": {
+          "support": "captured",
+          "fields": {
+            "userAgent": "captured",
+            "appVersion": "captured",
+            "platform": "captured",
+            "vendor": "captured",
+            "language": "captured",
+            "languages": "captured",
+            "hardwareConcurrency": "captured",
+            "deviceMemory": "captured",
+            "maxTouchPoints": "captured",
+            "cookieEnabled": "captured",
+            "userAgentData.brands": "captured",
+            "userAgentData.mobile": "captured",
+            "userAgentData.platform": "captured",
+            "userAgentData.architecture": "captured",
+            "userAgentData.bitness": "captured",
+            "userAgentData.fullVersionList": "captured",
+            "userAgentData.model": "captured",
+            "userAgentData.platformVersion": "captured",
+            "userAgentData.uaFullVersion": "captured",
+            "userAgentData.wow64": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+            "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "captured",
+            "height": "captured",
+            "availWidth": "captured",
+            "availHeight": "captured",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "captured",
+            "pixelDepth": "captured",
+            "orientation.type": "captured",
+            "orientation.angle": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+            "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+          }
+        },
+        "window": {
+          "support": "captured",
+          "fields": {
+            "innerWidth": "captured",
+            "innerHeight": "captured",
+            "outerWidth": "captured",
+            "outerHeight": "captured",
+            "devicePixelRatio": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+            "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+          }
+        },
+        "timezone": {
+          "support": "captured",
+          "fields": {
+            "timeZone": "captured",
+            "offset": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+            "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+          }
+        },
+        "webgl": {
+          "support": "captured",
+          "fields": {
+            "parameters.3379": "captured",
+            "parameters.3386": "captured",
+            "parameters.3410": "captured",
+            "parameters.3411": "captured",
+            "parameters.3412": "captured",
+            "parameters.3413": "captured",
+            "parameters.3414": "captured",
+            "parameters.3415": "captured",
+            "parameters.7936": "captured",
+            "parameters.7937": "captured",
+            "parameters.7938": "captured",
+            "parameters.33901": "captured",
+            "parameters.33902": "captured",
+            "parameters.34024": "captured",
+            "parameters.34047": "captured",
+            "parameters.34076": "captured",
+            "parameters.34921": "captured",
+            "parameters.34930": "captured",
+            "parameters.35660": "captured",
+            "parameters.35661": "captured",
+            "parameters.35724": "captured",
+            "parameters.36347": "captured",
+            "parameters.36348": "captured",
+            "parameters.36349": "captured",
+            "parameters.37445": "captured",
+            "parameters.37446": "captured",
+            "extensions": "captured",
+            "unmaskedVendor": "captured",
+            "unmaskedRenderer": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+            "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+            "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+            "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+            "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+          }
+        }
+      },
+      "hash": "c233773bbae4d04a656eab62c4c268faa3c6446a1f1ea03972ce54d5dec44f38"
+    },
+    "page": {
+      "schema": 2,
+      "id": "android-chrome/2201116sg-v138-10025:default",
+      "source": {
+        "kind": "fp-env",
+        "hash": "7350d08a589099019ac1ec9816650a195151f4b1a87169f8cf41c833158f6f2e",
+        "file": "profiles/android-chrome/2201116sg-v138-10025.json"
+      },
+      "connection": {
+        "effectiveType": "4g",
+        "downlink": 8.4,
+        "rtt": 200,
+        "saveData": false
+      },
+      "hash": "3b6e73338f9e33343d4d47b1a69fa7a12c50c8255bd6b396fea74972e160e8f9"
+    }
+  },
+  "android-chrome/gpu-adreno-tm-610-v139-57987": {
+    "profile": {
+      "schema": 2,
+      "id": "android-chrome/gpu-adreno-tm-610-v139-57987",
+      "target": {
+        "engine": "chromium",
+        "host": "chrome",
+        "platform": "android",
+        "form": "mobile",
+        "version": 139
+      },
+      "shape": {
+        "id": "chromium/chrome/android/mobile/139",
+        "hash": "11755b608222b84fb7463c4d59a59861b6d5a1b5de71b6bd0e2e0e52be3d325a"
+      },
+      "source": {
+        "kind": "fp-env",
+        "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+        "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+        "appVersion": "5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+        "platform": "Linux armv8l",
+        "vendor": "Google Inc.",
+        "language": "pl-PL",
+        "languages": [
+          "pl-PL"
+        ],
+        "hardwareConcurrency": 8,
+        "deviceMemory": 2,
+        "maxTouchPoints": 5,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Not;A=Brand",
+              "version": "99"
+            },
+            {
+              "brand": "Brave",
+              "version": "139"
+            },
+            {
+              "brand": "Chromium",
+              "version": "139"
+            }
+          ],
+          "mobile": true,
+          "platform": "Android",
+          "architecture": "",
+          "bitness": "",
+          "fullVersionList": [
+            {
+              "brand": "Not;A=Brand",
+              "version": "99.0.0.0"
+            },
+            {
+              "brand": "Brave",
+              "version": "139.0.0.0"
+            },
+            {
+              "brand": "Chromium",
+              "version": "139.0.0.0"
+            }
+          ],
+          "model": "",
+          "platformVersion": "15.0.0",
+          "uaFullVersion": "139.0.0.0",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 393,
+        "height": 873,
+        "availWidth": 393,
+        "availHeight": 873,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "orientation": {
+          "type": "portrait-primary",
+          "angle": 0
+        }
+      },
+      "window": {
+        "innerWidth": 392,
+        "innerHeight": 687,
+        "outerWidth": 393,
+        "outerHeight": 688,
+        "devicePixelRatio": 2.75
+      },
+      "timezone": {
+        "timeZone": "Europe/Warsaw",
+        "offset": -120
+      },
+      "webgl": {
+        "parameters": {
+          "3379": 4096,
+          "3386": [
+            16384,
+            16384
+          ],
+          "3410": 8,
+          "3411": 8,
+          "3412": 8,
+          "3413": 8,
+          "3414": 24,
+          "3415": 0,
+          "7936": "WebKit",
+          "7937": "WebKit WebGL",
+          "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "33901": [
+            1,
+            1023
+          ],
+          "33902": [
+            1,
+            8
+          ],
+          "34024": 16384,
+          "34047": 16,
+          "34076": 4096,
+          "34921": 16,
+          "34930": 16,
+          "35660": 16,
+          "35661": 96,
+          "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+          "36347": 256,
+          "36348": 31,
+          "36349": 256,
+          "37445": "Qualcomm",
+          "37446": "Adreno (TM) 610"
+        },
+        "extensions": [
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_float_blend",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "OES_texture_float_linear",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw"
+        ],
+        "unmaskedVendor": "Qualcomm",
+        "unmaskedRenderer": "Adreno (TM) 610"
+      },
+      "evidence": {
+        "navigator": {
+          "support": "captured",
+          "fields": {
+            "userAgent": "captured",
+            "appVersion": "captured",
+            "platform": "captured",
+            "vendor": "captured",
+            "language": "captured",
+            "languages": "captured",
+            "hardwareConcurrency": "captured",
+            "deviceMemory": "captured",
+            "maxTouchPoints": "captured",
+            "cookieEnabled": "captured",
+            "userAgentData.brands": "captured",
+            "userAgentData.mobile": "captured",
+            "userAgentData.platform": "captured",
+            "userAgentData.architecture": "captured",
+            "userAgentData.bitness": "captured",
+            "userAgentData.fullVersionList": "captured",
+            "userAgentData.model": "captured",
+            "userAgentData.platformVersion": "captured",
+            "userAgentData.uaFullVersion": "captured",
+            "userAgentData.wow64": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+            "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "captured",
+            "height": "captured",
+            "availWidth": "captured",
+            "availHeight": "captured",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "captured",
+            "pixelDepth": "captured",
+            "orientation.type": "captured",
+            "orientation.angle": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+            "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+          }
+        },
+        "window": {
+          "support": "captured",
+          "fields": {
+            "innerWidth": "captured",
+            "innerHeight": "captured",
+            "outerWidth": "captured",
+            "outerHeight": "captured",
+            "devicePixelRatio": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+            "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+          }
+        },
+        "timezone": {
+          "support": "captured",
+          "fields": {
+            "timeZone": "captured",
+            "offset": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+            "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+          }
+        },
+        "webgl": {
+          "support": "captured",
+          "fields": {
+            "parameters.3379": "captured",
+            "parameters.3386": "captured",
+            "parameters.3410": "captured",
+            "parameters.3411": "captured",
+            "parameters.3412": "captured",
+            "parameters.3413": "captured",
+            "parameters.3414": "captured",
+            "parameters.3415": "captured",
+            "parameters.7936": "captured",
+            "parameters.7937": "captured",
+            "parameters.7938": "captured",
+            "parameters.33901": "captured",
+            "parameters.33902": "captured",
+            "parameters.34024": "captured",
+            "parameters.34047": "captured",
+            "parameters.34076": "captured",
+            "parameters.34921": "captured",
+            "parameters.34930": "captured",
+            "parameters.35660": "captured",
+            "parameters.35661": "captured",
+            "parameters.35724": "captured",
+            "parameters.36347": "captured",
+            "parameters.36348": "captured",
+            "parameters.36349": "captured",
+            "parameters.37445": "captured",
+            "parameters.37446": "captured",
+            "extensions": "captured",
+            "unmaskedVendor": "captured",
+            "unmaskedRenderer": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+            "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+            "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+            "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "hash": "2d7df6efd50f03d21da8128a16dd31b1bb2cb22d1a262dfafe0dd7defec57224",
+            "file": "profiles/android-chrome/gpu-adreno-tm-610-v139-57987.json"
+          }
+        }
+      },
+      "hash": "633054109e1c81e0d95224fec3dfb4c74821fb0f8928d828ad865b407bb3978d"
+    }
+  },
+  "android-chrome/2201116sg-v145-10025": {
+    "profile": {
+      "schema": 2,
+      "id": "android-chrome/2201116sg-v145-10025",
+      "target": {
+        "engine": "chromium",
+        "host": "chrome",
+        "platform": "android",
+        "form": "mobile",
+        "version": 145
+      },
+      "shape": {
+        "id": "chromium/chrome/android/mobile/145",
+        "hash": "e47d523daafe47d503b45e7ce7b34caeaf325a6c47f6d4b0cebd2d3a27e2aabe"
+      },
+      "source": {
+        "kind": "fp-env",
+        "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+        "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+      },
+      "navigator": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36",
+        "appVersion": "5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36",
+        "platform": "Linux armv8l",
+        "vendor": "Google Inc.",
+        "language": "en-GB",
+        "languages": [
+          "en-GB",
+          "en-US",
+          "en",
+          "pl"
+        ],
+        "hardwareConcurrency": 8,
+        "deviceMemory": 4,
+        "maxTouchPoints": 5,
+        "cookieEnabled": true,
+        "userAgentData": {
+          "brands": [
+            {
+              "brand": "Not)A;Brand",
+              "version": "8"
+            },
+            {
+              "brand": "Chromium",
+              "version": "145"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "145"
+            }
+          ],
+          "mobile": true,
+          "platform": "Android",
+          "architecture": "",
+          "bitness": "",
+          "fullVersionList": [
+            {
+              "brand": "Not)A;Brand",
+              "version": "8.0.0.0"
+            },
+            {
+              "brand": "Chromium",
+              "version": "145.0.7632.109"
+            },
+            {
+              "brand": "Google Chrome",
+              "version": "145.0.7632.109"
+            }
+          ],
+          "model": "2201116SG",
+          "platformVersion": "13.0.0",
+          "uaFullVersion": "145.0.7632.109",
+          "wow64": false
+        }
+      },
+      "screen": {
+        "width": 393,
+        "height": 873,
+        "availWidth": 393,
+        "availHeight": 873,
+        "availLeft": 0,
+        "availTop": 0,
+        "colorDepth": 24,
+        "pixelDepth": 24,
+        "orientation": {
+          "type": "portrait-primary",
+          "angle": 0
+        }
+      },
+      "window": {
+        "innerWidth": 392,
+        "innerHeight": 736,
+        "outerWidth": 393,
+        "outerHeight": 737,
+        "devicePixelRatio": 2.75
+      },
+      "timezone": {
+        "timeZone": "Europe/Bucharest",
+        "offset": -180
+      },
+      "webgl": {
+        "parameters": {
+          "3379": 4096,
+          "3386": [
+            16384,
+            16384
+          ],
+          "3410": 8,
+          "3411": 8,
+          "3412": 8,
+          "3413": 8,
+          "3414": 24,
+          "3415": 0,
+          "7936": "WebKit",
+          "7937": "WebKit WebGL",
+          "7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "33901": [
+            1,
+            1023
+          ],
+          "33902": [
+            1,
+            8
+          ],
+          "34024": 16384,
+          "34047": 16,
+          "34076": 4096,
+          "34921": 32,
+          "34930": 16,
+          "35660": 16,
+          "35661": 96,
+          "35724": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+          "36347": 256,
+          "36348": 31,
+          "36349": 256,
+          "37445": "Google Inc. (Qualcomm)",
+          "37446": "ANGLE (Qualcomm, Adreno (TM) 619, OpenGL ES 3.2)"
+        },
+        "extensions": [
+          "EXT_color_buffer_float",
+          "EXT_color_buffer_half_float",
+          "EXT_float_blend",
+          "EXT_texture_filter_anisotropic",
+          "EXT_texture_norm16",
+          "OES_texture_float_linear",
+          "WEBGL_compressed_texture_astc",
+          "WEBGL_compressed_texture_etc",
+          "WEBGL_compressed_texture_etc1",
+          "WEBGL_debug_renderer_info",
+          "WEBGL_debug_shaders",
+          "WEBGL_lose_context",
+          "WEBGL_multi_draw"
+        ],
+        "unmaskedVendor": "Google Inc. (Qualcomm)",
+        "unmaskedRenderer": "ANGLE (Qualcomm, Adreno (TM) 619, OpenGL ES 3.2)"
+      },
+      "evidence": {
+        "navigator": {
+          "support": "captured",
+          "fields": {
+            "userAgent": "captured",
+            "appVersion": "captured",
+            "platform": "captured",
+            "vendor": "captured",
+            "language": "captured",
+            "languages": "captured",
+            "hardwareConcurrency": "captured",
+            "deviceMemory": "captured",
+            "maxTouchPoints": "captured",
+            "cookieEnabled": "captured",
+            "userAgentData.brands": "captured",
+            "userAgentData.mobile": "captured",
+            "userAgentData.platform": "captured",
+            "userAgentData.architecture": "captured",
+            "userAgentData.bitness": "captured",
+            "userAgentData.fullVersionList": "captured",
+            "userAgentData.model": "captured",
+            "userAgentData.platformVersion": "captured",
+            "userAgentData.uaFullVersion": "captured",
+            "userAgentData.wow64": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+            "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+          }
+        },
+        "screen": {
+          "support": "derived",
+          "fields": {
+            "width": "captured",
+            "height": "captured",
+            "availWidth": "captured",
+            "availHeight": "captured",
+            "availLeft": "derived",
+            "availTop": "derived",
+            "colorDepth": "captured",
+            "pixelDepth": "captured",
+            "orientation.type": "captured",
+            "orientation.angle": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+            "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+          }
+        },
+        "window": {
+          "support": "captured",
+          "fields": {
+            "innerWidth": "captured",
+            "innerHeight": "captured",
+            "outerWidth": "captured",
+            "outerHeight": "captured",
+            "devicePixelRatio": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+            "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+          }
+        },
+        "timezone": {
+          "support": "captured",
+          "fields": {
+            "timeZone": "captured",
+            "offset": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+            "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+          }
+        },
+        "webgl": {
+          "support": "captured",
+          "fields": {
+            "parameters.3379": "captured",
+            "parameters.3386": "captured",
+            "parameters.3410": "captured",
+            "parameters.3411": "captured",
+            "parameters.3412": "captured",
+            "parameters.3413": "captured",
+            "parameters.3414": "captured",
+            "parameters.3415": "captured",
+            "parameters.7936": "captured",
+            "parameters.7937": "captured",
+            "parameters.7938": "captured",
+            "parameters.33901": "captured",
+            "parameters.33902": "captured",
+            "parameters.34024": "captured",
+            "parameters.34047": "captured",
+            "parameters.34076": "captured",
+            "parameters.34921": "captured",
+            "parameters.34930": "captured",
+            "parameters.35660": "captured",
+            "parameters.35661": "captured",
+            "parameters.35724": "captured",
+            "parameters.36347": "captured",
+            "parameters.36348": "captured",
+            "parameters.36349": "captured",
+            "parameters.37445": "captured",
+            "parameters.37446": "captured",
+            "extensions": "captured",
+            "unmaskedVendor": "captured",
+            "unmaskedRenderer": "captured"
+          },
+          "source": {
+            "kind": "fp-env",
+            "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+            "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+          }
+        },
+        "canvas": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+            "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+          }
+        },
+        "audio": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+            "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+          }
+        },
+        "fonts": {
+          "support": "unsupported",
+          "fields": {},
+          "source": {
+            "kind": "fp-env",
+            "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+            "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+          }
+        }
+      },
+      "hash": "cee49c0ff8612607e283020ab389d143ed63c0dc7253eced67ece4f847d6985d"
+    },
+    "page": {
+      "schema": 2,
+      "id": "android-chrome/2201116sg-v145-10025:default",
+      "source": {
+        "kind": "fp-env",
+        "file": "profiles/android-chrome/2201116sg-v145-10025.json",
+        "hash": "ee2ea38708733c29ec3f96d0dbbb26a346bc871b65a5428ef0694262210d86e2"
+      },
+      "connection": {
+        "effectiveType": "4g",
+        "downlink": 8.4,
+        "rtt": 200,
+        "saveData": false
+      },
+      "hash": "d5d087b08e19d7f323393f2908704ac882c53dc54968b216bb9c041bda77d02e"
+    }
+  }
+}

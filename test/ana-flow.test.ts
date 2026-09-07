@@ -17,12 +17,17 @@ interface Fixture {
 test('ANA flow posts each selected capture position once in order', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'mimic-ana-flow-'));
   try {
-    const supplier = path.join(root, 'suppliers', 'ana');
+    const flowRoot = path.join(root, 'flow');
+    const supplier = path.join(flowRoot, 'suppliers', 'ana');
     await mkdir(supplier, { recursive: true });
     await writeFile(path.join(root, 'package.json'), '{"type":"module"}');
     // Execute the compiled production flow unchanged, with local input/output adapters.
     await copyFile(new URL('../flow/suppliers/ana/flow.js', import.meta.url), path.join(supplier, 'flow.js'));
-    await writeFile(path.join(root, 'capture.js'), `
+    for (const dir of ['core', 'node', 'profiles']) await mkdir(path.join(root, 'src', dir), { recursive: true });
+    await writeFile(path.join(root, 'src/core/environment.js'), 'export const parseEnvironment = () => ({});');
+    await writeFile(path.join(root, 'src/node/assets.js'), 'export const DEFAULT_PROFILES_ROOT = "unused";');
+    await writeFile(path.join(root, 'src/profiles/fp-env.js'), 'export class FpEnvProfiles { async load() { return { profile: {} }; } }');
+    await writeFile(path.join(flowRoot, 'capture.js'), `
       export const fixture = { bodies: [], posted: [], bmsPosts: [], closed: 0, live: [] };
       export async function listAndroidChromeProfiles() { return ['fixture-profile']; }
       export async function captureBodies(options) {
@@ -56,7 +61,7 @@ test('ANA flow posts each selected capture position once in order', async (t) =>
         };
       }
     `);
-    const { fixture } = await import(pathToFileURL(path.join(root, 'capture.js')).href) as { fixture: Fixture };
+    const { fixture } = await import(pathToFileURL(path.join(flowRoot, 'capture.js')).href) as { fixture: Fixture };
     const { runAnaFlow } = await import(pathToFileURL(path.join(supplier, 'flow.js')).href) as { runAnaFlow: typeof RunAnaFlow };
     const cases: { name: string; bodies: readonly string[]; expected: readonly string[]; postCount?: number }[] = [];
     for (const count of [1, 2, 3, 4, 5, 6, 11]) {

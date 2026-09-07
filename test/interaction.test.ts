@@ -4,17 +4,26 @@ import { JSDOM } from 'jsdom';
 import { CSD4CA_MODEL } from '../src/interaction/csd4ca.model.js';
 import { createInteractionSource } from '../src/interaction/dispatch.js';
 import { createInteractionPolicy } from '../src/interaction/policies.js';
-import { createInteractionSession, synthesizeInteraction } from '../src/interaction/synthesize.js';
+import { createInteractionSession, sampleSwipeGap, synthesizeInteraction } from '../src/interaction/synthesize.js';
 
 function synthesize(recipe: 'swipe' | 'tap', seed: string, sequence: number) {
   return synthesizeInteraction(recipe, createInteractionSession(seed), sequence, 0);
 }
 
+function sessionWithGap(gapMs: number) {
+  const data = Buffer.alloc(CSD4CA_MODEL.transitionQuantization.length * 2);
+  data.writeInt16LE(Math.round(gapMs * CSD4CA_MODEL.transitionQuantization[0]), 0);
+  return {
+    ...createInteractionSession('policy-gap'),
+    transitions: { count: 1, data: data.toString('base64') },
+  };
+}
+
 test('CSD4CA interaction model is anonymous, compact and structurally complete', () => {
-  assert.equal(CSD4CA_MODEL.schema, 3);
-  assert.equal(CSD4CA_MODEL.compiler, 3);
+  assert.equal(CSD4CA_MODEL.schema, 4);
+  assert.equal(CSD4CA_MODEL.compiler, 4);
   assert.equal(CSD4CA_MODEL.frames, 16);
-  assert.equal(CSD4CA_MODEL.stride, 13);
+  assert.equal(CSD4CA_MODEL.stride, 16);
   assert.deepEqual(CSD4CA_MODEL.timingChannels, [
     'touchLogDuration', 'sensorStartOffset', 'sensorEndOffset',
   ]);
@@ -33,7 +42,7 @@ test('CSD4CA interaction model is anonymous, compact and structurally complete',
       group.mean.length,
       CSD4CA_MODEL.frames * CSD4CA_MODEL.stride + CSD4CA_MODEL.timingChannels.length,
     );
-    assert.equal(group.components.length, 31);
+    assert.equal(group.components.length, 33);
     assert.ok(group.sessions.every((session) => (
       session.gestureCount >= CSD4CA_MODEL.calibration.minimumSessionPoseGestures
       && session.gravity.length === 3
@@ -43,6 +52,7 @@ test('CSD4CA interaction model is anonymous, compact and structurally complete',
     assert.ok(group.components.every((component) => component.basis.length === group.mean.length));
     assert.ok(group.quality.varianceRetained >= 0.95);
     assert.ok(group.quality.crossModalCovarianceRetained >= 0.92);
+    assert.ok(group.quality.poseVarianceRetained >= 0.95);
   }
 });
 
@@ -94,6 +104,40 @@ test('interaction synthesis is model-backed, seeded, bounded and time ordered', 
   );
 });
 
+test('interaction sampling resamples rejected draws instead of returning the group mean', () => {
+  // These seeds reject their first two joint draws in the compiled model.
+  const cases = [
+    ['swipe', 'joint-retry-897'],
+    ['swipe', 'joint-retry-2029'],
+    ['swipe', 'joint-retry-2138'],
+    ['tap', 'joint-retry-415'],
+    ['tap', 'joint-retry-686'],
+    ['tap', 'joint-retry-1267'],
+  ] as const;
+  for (const [recipe, seed] of cases) {
+    const session = createInteractionSession(seed);
+    const frames = synthesizeInteraction(recipe, session, 0, 0);
+    const start = frames.find((frame) => frame.kind === 'touch');
+    assert.ok(start);
+    const meanStart = session.group.mean.slice(0, 2).map((value) => Number(
+      Math.max(0.01, Math.min(0.99, value / CSD4CA_MODEL.quantization)).toFixed(6),
+    ));
+    assert.notDeepEqual([start.x, start.y], meanStart, `${recipe}:${seed}`);
+    assert.deepEqual(frames, synthesize(recipe, seed, 0));
+  }
+});
+
+test('interaction sampling fails explicitly when its bounded attempts are exhausted', () => {
+  const session = createInteractionSession('invalid-joint-model');
+  const mean = [...session.group.mean];
+  mean[1] = mean[(CSD4CA_MODEL.frames - 1) * CSD4CA_MODEL.stride + 1]!;
+  const invalidSession = { ...session, group: { ...session.group, mean, components: [] } };
+  assert.throws(
+    () => synthesizeInteraction('swipe', invalidSession, 0, 0),
+    { name: 'TypeError', message: /could not sample a valid gesture after 32 attempts/ },
+  );
+});
+
 test('joint swipe synthesis retains calibrated sensor timing spread', () => {
   const startOffsets: number[] = [];
   const endOffsets: number[] = [];
@@ -116,6 +160,8 @@ test('joint swipe synthesis retains calibrated sensor timing spread', () => {
 test('interaction session preserves relative orientation and source pose continuity', () => {
   const gravityDeltas: number[] = [];
   const headingDeltas: number[] = [];
+  const withinSwipeDeltas: number[] = [];
+  const gyroResiduals: number[] = [];
   for (let index = 0; index < 1_000; index += 1) {
     const session = createInteractionSession(`pose-session-${index}`);
     const initial = synthesizeInteraction('swipe', session, 0, 120);
@@ -126,12 +172,48 @@ test('interaction session preserves relative orientation and source pose continu
     const followUpOrientation = followUp.filter((frame) => frame.kind === 'orientation');
 
     assert.equal(initialOrientation[0]!.alpha, 0);
-    for (const [motion, orientation] of initialMotion.map((frame, frameIndex) => (
-      [frame, initialOrientation[frameIndex]!] as const
-    ))) {
-      const [x, y, z] = motion.gravity;
-      assert.equal(orientation.beta, Number((Math.atan2(y, z) * 180 / Math.PI).toFixed(1)));
-      assert.equal(orientation.gamma, Number((Math.atan2(-x, Math.hypot(y, z)) * 180 / Math.PI).toFixed(1)));
+    const gravityVector = (frame: typeof initialMotion[number]) => (
+      frame.gravity.map((value, axis) => value - frame.acceleration[axis]!)
+    );
+    for (const [motions, orientations] of [
+      [initialMotion, initialOrientation], [followUpMotion, followUpOrientation],
+    ] as const) {
+      const initialGravity = gravityVector(motions[0]!);
+      let largestDelta = 0;
+      for (const [frameIndex, motion] of motions.entries()) {
+        const gravity = gravityVector(motion);
+        const orientation = orientations[frameIndex]!;
+        const beta = orientation.beta * Math.PI / 180;
+        const gamma = orientation.gamma * Math.PI / 180;
+        const magnitude = CSD4CA_MODEL.calibration.gravityMagnitude;
+        assert.ok(Math.abs(Math.hypot(...gravity) - magnitude) < 0.002);
+        assert.ok(orientation.beta >= -180 && orientation.beta <= 180);
+        assert.ok(orientation.gamma >= -90 && orientation.gamma <= 90);
+        // Forward Z-X'-Y'' projection checks the emitted fields independently of the inverse formulas.
+        const projected = [
+          -Math.cos(beta) * Math.sin(gamma), Math.sin(beta), Math.cos(beta) * Math.cos(gamma),
+        ].map((value) => value * magnitude);
+        assert.ok(Math.hypot(...gravity.map((value, axis) => value - projected[axis]!)) < 0.015);
+        largestDelta = Math.max(largestDelta, Math.hypot(
+          ...gravity.map((value, axis) => value - initialGravity[axis]!),
+        ));
+        if (frameIndex === 0) continue;
+        const previous = motions[frameIndex - 1]!;
+        const previousGravity = gravityVector(previous);
+        const dt = (motion.at - previous.at) / 1000;
+        const rate = motion.rotation.map((value, axis) => (
+          (value + previous.rotation[axis]!) / 2 * Math.PI / 180
+        ));
+        const [gx, gy, gz] = gravity.map((value, axis) => (
+          (value + previousGravity[axis]!) / 2
+        )) as [number, number, number];
+        const [wz, wx, wy] = rate as [number, number, number];
+        const expected = [wz * gy - wy * gz, wx * gz - wz * gx, wy * gx - wx * gy];
+        gyroResiduals.push(Math.hypot(...gravity.map((value, axis) => (
+          (value - previousGravity[axis]!) / dt - expected[axis]!
+        ))));
+      }
+      withinSwipeDeltas.push(largestDelta);
     }
 
     const median = (values: readonly number[]) => {
@@ -139,7 +221,7 @@ test('interaction session preserves relative orientation and source pose continu
       return (sorted[7]! + sorted[8]!) / 2;
     };
     const baseline = (frames: typeof initialMotion) => [0, 1, 2].map((axis) => (
-      median(frames.map((frame) => frame.gravity[axis]!))
+      median(frames.map((frame) => gravityVector(frame)[axis]!))
     ));
     const initialGravity = baseline(initialMotion);
     const followUpGravity = baseline(followUpMotion);
@@ -155,6 +237,11 @@ test('interaction session preserves relative orientation and source pose continu
 
   gravityDeltas.sort((left, right) => left - right);
   headingDeltas.sort((left, right) => left - right);
+  withinSwipeDeltas.sort((left, right) => left - right);
+  gyroResiduals.sort((left, right) => left - right);
+  assert.ok(withinSwipeDeltas[999]! > 0.01);
+  // Compressing deg/s independently of duration breaks the pose/gyro phase relationship.
+  assert.ok(gyroResiduals[Math.floor(gyroResiduals.length / 2)]! < 1);
   assert.ok(gravityDeltas[499]! < 0.8);
   assert.ok(gravityDeltas[989]! < 5);
   assert.ok(headingDeltas[499]! < 3);
@@ -173,31 +260,92 @@ test('interaction session conditions pose transitions on gesture spacing', () =>
 });
 
 test('Akamai interaction policy separates joint swipe, tap and follow-up swipe', () => {
-  const requestDriven = createInteractionPolicy('akamai-sensor');
+  const requestDriven = createInteractionPolicy('akamai-sensor', sessionWithGap(2_000));
   assert.equal(requestDriven.isExhausted(), false);
-  assert.equal(requestDriven.next(0, 0), null);
-  assert.deepEqual(requestDriven.next(10, 1), { recipe: 'swipe', plannedAtMs: 120 });
-  assert.equal(requestDriven.next(20, 1), null);
-  assert.equal(requestDriven.next(30, 2), null);
-  assert.equal(requestDriven.next(2_000, 20), null);
-  assert.equal(requestDriven.next(2_499, 20), null);
-  assert.deepEqual(requestDriven.next(2_500, 20), { recipe: 'tap', plannedAtMs: 2_500 });
+  assert.equal(requestDriven.next(0, 0, 0), null);
+  assert.deepEqual(requestDriven.next(10, 1, 0), { recipe: 'swipe', plannedAtMs: 120 });
+  assert.equal(requestDriven.next(20, 1, 700), null);
+  assert.equal(requestDriven.next(30, 2, 700), null);
+  assert.equal(requestDriven.next(1_919, 20, 700), null);
+  assert.deepEqual(requestDriven.next(1_920, 20, 700), { recipe: 'tap', plannedAtMs: 1_920 });
   assert.equal(requestDriven.isExhausted(), false);
-  assert.deepEqual(requestDriven.next(2_700, 20), { recipe: 'swipe', plannedAtMs: 2_700 });
+  assert.equal(requestDriven.next(2_119, 20, 2_050), null);
+  assert.deepEqual(requestDriven.next(2_120, 20, 2_050), { recipe: 'swipe', plannedAtMs: 2_120 });
   assert.equal(requestDriven.isExhausted(), true);
-  assert.equal(requestDriven.next(3_200, 20), null);
+  assert.equal(requestDriven.next(3_200, 20, 2_500), null);
 
-  const timerDriven = createInteractionPolicy('akamai-sensor');
-  assert.equal(timerDriven.next(119, 0), null);
-  assert.deepEqual(timerDriven.next(120, 0), { recipe: 'swipe', plannedAtMs: 120 });
-  assert.equal(timerDriven.next(449, 0), null);
-  assert.equal(timerDriven.next(450, 0), null);
-  assert.equal(timerDriven.next(2_000, 20), null);
-  assert.equal(timerDriven.next(2_499, 20), null);
-  assert.deepEqual(timerDriven.next(2_500, 20), { recipe: 'tap', plannedAtMs: 2_500 });
-  assert.deepEqual(timerDriven.next(2_700, 20), { recipe: 'swipe', plannedAtMs: 2_700 });
+  const timerDriven = createInteractionPolicy('akamai-sensor', sessionWithGap(2_000));
+  assert.equal(timerDriven.next(119, 0, 0), null);
+  assert.deepEqual(timerDriven.next(120, 0, 0), { recipe: 'swipe', plannedAtMs: 120 });
+  assert.equal(timerDriven.next(1_919, 20, 700), null);
+  assert.deepEqual(timerDriven.next(1_920, 20, 700), { recipe: 'tap', plannedAtMs: 1_920 });
+  assert.deepEqual(timerDriven.next(2_120, 20, 2_050), { recipe: 'swipe', plannedAtMs: 2_120 });
   assert.equal(timerDriven.isExhausted(), true);
-  assert.equal(timerDriven.next(3_200, 20), null);
+  assert.equal(timerDriven.next(3_200, 20, 2_500), null);
+});
+
+test('Akamai interaction policy waits for late contacts to finish', () => {
+  const policy = createInteractionPolicy('akamai-sensor', sessionWithGap(2_000));
+  assert.deepEqual(policy.next(0, 1, 0), { recipe: 'swipe', plannedAtMs: 120 });
+  assert.deepEqual(policy.next(2_200, 2, 700), { recipe: 'tap', plannedAtMs: 1_920 });
+  assert.equal(policy.next(2_201, 3, 2_330), null);
+  assert.equal(policy.next(2_329, 3, 2_330), null);
+  assert.deepEqual(policy.next(2_330, 3, 2_330), { recipe: 'swipe', plannedAtMs: 2_120 });
+});
+
+test('an empty source gap window retains the engineering schedule without clipping gaps', () => {
+  const session = sessionWithGap(2_000);
+  assert.equal(sampleSwipeGap(session, 2_000, 2_000), 2_000);
+  assert.equal(sampleSwipeGap(session, 2_100, 2_500), null);
+  const policy = createInteractionPolicy('akamai-sensor', session);
+  assert.deepEqual(policy.next(120, 0, 0), { recipe: 'swipe', plannedAtMs: 120 });
+  assert.equal(policy.next(2_499, 20, 2_100), null);
+  assert.deepEqual(policy.next(2_500, 20, 2_100), { recipe: 'tap', plannedAtMs: 2_500 });
+  assert.deepEqual(policy.next(2_700, 20, 2_630), { recipe: 'swipe', plannedAtMs: 2_700 });
+});
+
+test('source-conditioned swipe schedules are seeded, varied and non-overlapping', () => {
+  const observedGaps = new Set<number>();
+  for (let index = 0; index < 1_000; index += 1) {
+    const session = createInteractionSession(`policy-spacing-${index}`);
+    const policy = createInteractionPolicy('akamai-sensor', session);
+    const recipes: string[] = [];
+    let latestEndAt = 0;
+    let expectedFollowUpAt = 2_700;
+    for (let elapsed = 0; elapsed <= 5_000 && !policy.isExhausted(); elapsed += 10) {
+      const action = policy.next(elapsed, 0, latestEndAt);
+      if (action === null) continue;
+      assert.ok(elapsed >= latestEndAt);
+      const frames = synthesizeInteraction(action.recipe, session, recipes.length, action.plannedAtMs);
+      recipes.push(action.recipe);
+      latestEndAt = elapsed + frames.at(-1)!.at;
+      if (recipes.length === 1) {
+        const minimum = latestEndAt - elapsed + 200;
+        const maximum = 2_700 - elapsed;
+        const expectedGap = sampleSwipeGap(session, minimum, maximum);
+        assert.equal(sampleSwipeGap(session, minimum, maximum), expectedGap);
+        if (expectedGap !== null) {
+          expectedFollowUpAt = 120 + expectedGap;
+          assert.ok(expectedGap >= minimum && expectedGap <= maximum);
+          const data = Buffer.from(session.transitions.data, 'base64');
+          const sourceGaps = Array.from({ length: session.transitions.count }, (_, transition) => (
+            data.readInt16LE(transition * CSD4CA_MODEL.transitionQuantization.length * 2)
+            / CSD4CA_MODEL.transitionQuantization[0]
+          ));
+          assert.ok(sourceGaps.includes(expectedGap));
+        }
+      }
+      if (recipes.length === 3) {
+        assert.ok(elapsed >= expectedFollowUpAt && elapsed < expectedFollowUpAt + 10);
+        observedGaps.add(elapsed - 120);
+      }
+    }
+    assert.deepEqual(recipes, ['swipe', 'tap', 'swipe']);
+    assert.ok(latestEndAt <= 5_000);
+  }
+  assert.ok(observedGaps.size > 100);
+  assert.ok(Math.min(...observedGaps) < 1_000);
+  assert.ok(Math.max(...observedGaps) > 2_000);
 });
 
 test('Akamai synthesis uses planned times across trigger and polling schedules', () => {
@@ -209,8 +357,8 @@ test('Akamai synthesis uses planned times across trigger and polling schedules',
   ] as const;
   for (let index = 0; index < 100; index++) {
     const programs = schedules.map(schedule => {
-      const policy = createInteractionPolicy('akamai-sensor');
       const session = createInteractionSession(`schedule-check-${index}`);
+      const policy = createInteractionPolicy('akamai-sensor', session);
       const program = schedule.map(([elapsedMs, postCount], sequence) => {
         const action = policy.next(elapsedMs, postCount);
         assert.ok(action);

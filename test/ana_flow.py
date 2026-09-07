@@ -60,7 +60,6 @@ BRIDGE = Path(__file__).with_name("cebu_capture.mjs")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROFILES_DIR = REPO_ROOT / "profiles"
 MIMIC_CLI = REPO_ROOT / "dist" / "src" / "cli.js"
-DEFAULT_PROFILE = "android-chrome/2201116sg-v145-10025"
 
 # Wire TLS/UA pin (rnet egress only). Independent of mimic profile selection.
 CHROME_MAJOR = 145
@@ -155,8 +154,7 @@ def resolve_profile(explicit: str | None) -> str:
             raise FileNotFoundError(f"profile not found: {explicit}")
         return explicit
     if not pool:
-        log(f"no android-chrome profiles under {PROFILES_DIR}; using {DEFAULT_PROFILE}")
-        return DEFAULT_PROFILE
+        raise FileNotFoundError(f"no Android Chrome fp-env records under {PROFILES_DIR}")
     return random.choice(pool)
 
 

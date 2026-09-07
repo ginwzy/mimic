@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import path from 'node:path';
 import test from 'node:test';
 import { createMimic } from '../src/sdk.js';
 import { digest, seal } from '../src/core/seal.js';
@@ -30,7 +31,7 @@ test('closed-loop worker capture delivers responses and scoped cookies in the sa
   assert.ok(address && typeof address === 'object');
   const origin = `http://127.0.0.1:${address.port}`;
   const mimic = createMimic({
-    profile: 'android-webview-v138', size: 1, timeoutMs: 8_000,
+    profile: 'android-webview/unknown-v138-1', profilesRoot: path.resolve('test/fixtures/fp-env'), size: 1, timeoutMs: 8_000,
     page: seal({ schema: 2, id: 'network-page', source: { kind: 'manual', hash: digest('network-page') }, url: `${origin}/page` }),
     capture: { deadlineMs: 4_000, pollMs: 10, maxPosts: 3 },
     network: {
@@ -82,7 +83,7 @@ test('closed-loop worker capture delivers responses and scoped cookies in the sa
 
 function captureClient(request: (request: Request) => Promise<Response>, paths: string[], capture: CaptureOptions = {}, timeoutMs = 8_000) {
   return createMimic({
-    profile: 'chrome-mac', size: 1, timeoutMs,
+    profile: 'android-webview/unknown-v138-1', profilesRoot: path.resolve('test/fixtures/fp-env'), size: 1, timeoutMs,
     page: seal({ schema: 2, id: 'network-fixture', source: { kind: 'manual', hash: digest('network-fixture') }, url: 'https://fixture.invalid/page' }),
     capture: { deadlineMs: 2_000, pollMs: 10, maxPosts: 2, ...capture },
     network: { allowedUrls: paths.map(path => new URL(path, 'https://fixture.invalid').href), request },
@@ -202,7 +203,7 @@ test('ANA native transport preserves raw bootstrap cookies and does not overwrit
     const network = request.captureNetwork(`${origin}/wire`, `${origin}/page`);
     assert.equal(network.cookies!.length, 2);
     mimic = createMimic({
-      profile: 'chrome-mac', size: 1, timeoutMs: 8_000,
+      profile: 'android-webview/unknown-v138-1', profilesRoot: path.resolve('test/fixtures/fp-env'), size: 1, timeoutMs: 8_000,
       page: seal({ schema: 2, id: 'ana-local', source: { kind: 'manual', hash: digest('ana-local') }, url: `${origin}/page` }),
       network, capture: { maxPosts: 1, deadlineMs: 2_000, pollMs: 10 },
     });

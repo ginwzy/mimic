@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
-import { LegacyProfiles } from '../src/legacy/profiles.js';
+import { FixtureProfiles } from './fixtures.js';
 import { MimicError } from '../src/core/error.js';
 import { parseShape } from '../src/core/parse.js';
 import { seal } from '../src/core/seal.js';
@@ -10,7 +9,7 @@ import { features, driverIds } from '../src/features/compile.js';
 import { drivers } from '../src/features/drivers.js';
 import { fnShape } from '../src/features/ops.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 
 async function base() {
   const imported = await store.load('chrome-mac');

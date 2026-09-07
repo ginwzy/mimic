@@ -6,8 +6,8 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'resources/shapes');
-const modulePath = path.join(root, 'dist/src/legacy/profiles.js');
-const { legacyShape } = await import(pathToFileURL(modulePath).href);
+const modulePath = path.join(root, 'dist/src/collect/identity.js');
+const { targetShape } = await import(pathToFileURL(modulePath).href);
 const ids = [
   'chromium/chrome/android/desktop/139',
   'chromium/chrome/android/mobile/130',
@@ -29,7 +29,7 @@ let changed = false;
 
 for (const id of ids) {
   const [, host, platform, form, rawVersion] = id.split('/');
-  const shape = await legacyShape({ engine: 'chromium', host, platform, form, version: Number(rawVersion) });
+  const shape = await targetShape({ engine: 'chromium', host, platform, form, version: Number(rawVersion) });
   const text = `${JSON.stringify(shape)}\n`;
   const relative = `${id}.json`;
   const file = path.join(output, relative);

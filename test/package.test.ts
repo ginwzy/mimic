@@ -152,7 +152,8 @@ test('execute catalog does not import Shape compilers', async () => {
 test('worker runtime does not import the Profile importer', async () => {
   await assertImportGraph(
     ['src/executor/worker.ts'],
-    (resolved) => (resolved.endsWith(`${path.sep}legacy${path.sep}profiles.ts`)
+    (resolved) => (resolved.endsWith(`${path.sep}collect${path.sep}identity.ts`)
+      || resolved.endsWith(`${path.sep}node${path.sep}fp-env.ts`)
       ? path.relative(root, resolved)
       : undefined),
   );
@@ -233,7 +234,10 @@ test('npm tarball exposes only the current public surfaces', async (t) => {
     npm_config_cache: path.join(temp, 'npm-cache'),
   });
   const jsonStart = Math.max(0, packed.stdout.lastIndexOf('\n[') + 1);
-  const report = JSON.parse(packed.stdout.slice(jsonStart)) as Array<{ filename: string; files: Array<{ path: string }> }>;
+  const packOutput = JSON.parse(packed.stdout.slice(jsonStart)) as unknown;
+  const report = (Array.isArray(packOutput) ? packOutput : Object.values(packOutput as object)) as Array<{
+    filename: string; files: Array<{ path: string }>;
+  }>;
   assert.equal(report.length, 1);
   const names = new Set(report[0]!.files.map((file) => file.path));
   for (const expected of [
@@ -244,7 +248,6 @@ test('npm tarball exposes only the current public surfaces', async (t) => {
     'dist/src/cli.js',
     'dist/src/executor/worker.js',
     'dist/src/interaction/csd4ca.model.js',
-    'dist/assets/profiles/chrome-mac.json',
     'dist/assets/shapes/manifest.json',
     'dist/assets/baselines/macos-chrome-v148.json',
     'dist/assets/probe.js',
@@ -253,6 +256,7 @@ test('npm tarball exposes only the current public surfaces', async (t) => {
   ]) assert.ok(names.has(expected), `tarball missing ${expected}`);
   assert.equal([...names].some((name) => name.includes('/test/') || name.endsWith('.test.js')), false);
   assert.equal([...names].some((name) => name.includes('/_fp-env/') || name.endsWith('/generate.mjs')), false);
+  assert.equal([...names].some((name) => name.startsWith('dist/assets/profiles/') || name.startsWith('dist/src/legacy/')), false);
   for (const prefix of ['entry/', 'core/', 'mask/', 'patch/', 'base/', 'trace/', 'profiles/']) {
     assert.equal([...names].some((name) => name.startsWith(prefix)), false, `tarball contains ${prefix}`);
   }
@@ -273,7 +277,11 @@ test('npm tarball exposes only the current public surfaces', async (t) => {
     import { createMimic } from 'mimic';
     import * as advanced from 'mimic/advanced';
     import * as http from 'mimic/http';
-    const mimic = createMimic({ size: 1, timeoutMs: 5000 });
+    const mimic = createMimic({
+      profile: 'android-webview/unknown-v138-1',
+      profilesRoot: ${JSON.stringify(path.resolve('test/fixtures/fp-env'))},
+      size: 1, timeoutMs: 5000,
+    });
     try {
       const result = await mimic.run({ kind: 'run', code: 'navigator.userAgent' });
       console.log(JSON.stringify({
@@ -312,7 +320,11 @@ test('npm tarball exposes only the current public surfaces', async (t) => {
   assert.equal(legacyImport.stdout.trim(), 'ERR_PACKAGE_PATH_NOT_EXPORTED');
 
   const bin = await command(path.join(consumer, 'node_modules/.bin/mimic'), ['list', 'profiles'], consumer);
-  assert.ok((JSON.parse(bin.stdout) as string[]).includes('chrome-mac'));
+  assert.deepEqual(JSON.parse(bin.stdout), []);
+  const configuredBin = await command(path.join(consumer, 'node_modules/.bin/mimic'), [
+    'list', 'profiles', '--profiles', path.resolve('test/fixtures/fp-env'),
+  ], consumer);
+  assert.deepEqual(JSON.parse(configuredBin.stdout), ['android-webview/unknown-v138-1']);
 
   await writeFile(path.join(consumer, 'index.ts'), `
     import { createMimic, type RunJob } from 'mimic';

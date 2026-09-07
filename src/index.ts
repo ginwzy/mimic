@@ -1,14 +1,17 @@
 export { MimicError } from './core/error.js';
 export { digest, seal } from './core/seal.js';
+export { parseEnvironment, parseEnvironmentOptions, resolveEnvironment, regionalProfile } from './core/environment.js';
+export { listRegions, regionalCatalog, regionalRuntime } from './core/regions.js';
+export type { RegionPreset, RegionFilter } from './core/regions.js';
 export { parseCatalog, parseCollect, parseJob, parsePage, parseProfile, parseShape } from './core/parse.js';
 export { encodeResult, parseResult } from './core/result.js';
 export { Catalog } from './catalog/index.js';
 export { CatalogFiles } from './catalog/files.js';
-export { LegacyProfiles, importLegacyData, legacyTarget } from './legacy/profiles.js';
-export type { ImportedProfile, LedgerEntry, MigrationReport } from './legacy/profiles.js';
-export { FpEnvProfiles, normalizeFpEnv } from './profiles/fp-env.js';
 export { parseCaptureResult } from './core/capture.js';
 export type { CapturePost, CaptureValue, CaptureResult } from './core/capture.js';
+export { normalizeIdentity, identityTarget } from './collect/identity.js';
+export type { ImportedProfile, LedgerEntry, MigrationReport } from './collect/identity.js';
+export { FpEnvProfiles, normalizeFpEnv } from './profiles/fp-env.js';
 export { collectIdentity, createIdentityCollector } from './collect/browser.js';
 export type { IdentityCapture } from './collect/browser.js';
 export { migrateCollect } from './collect/contract.js';
@@ -67,6 +70,10 @@ export type {
   Boot,
   ErrorCode,
   ErrorInfo,
+  EnvironmentOptions,
+  RegionalEnvironment,
+  RegionalSelection,
+  ResolvedEnvironment,
   Form,
   Hash,
   Host,

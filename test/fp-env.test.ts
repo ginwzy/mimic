@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { FpEnvProfiles, MimicError } from '../src/index.js';
+import { FpEnvProfiles, MimicError, normalizeFpEnv } from '../src/index.js';
 import { createMimic } from '../src/sdk.js';
 
 const raw = {
@@ -156,4 +156,123 @@ test('FpEnvProfiles rejects malformed raw records through the Profile error cont
     new FpEnvProfiles(root).list(),
     (error: unknown) => error instanceof MimicError && error.code === 'BAD_PROFILE',
   );
+});
+
+test('runtime ignores retired Profile JSON and requires an explicit fp-env ID', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'mimic-fp-env-only-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'chrome-mac.json'), '{"meta":{"name":"chrome-mac"}}');
+  const profiles = new FpEnvProfiles(root);
+  assert.deepEqual(await profiles.list(), []);
+  await assert.rejects(profiles.load('chrome-mac'), /fp-env Profile 不存在/);
+
+  const mimic = createMimic({ profilesRoot: root, size: 1 });
+  t.after(() => mimic.close());
+  assert.deepEqual(await mimic.list('profiles'), []);
+  await assert.rejects(mimic.run({ kind: 'run', code: '1' }), /profile is required/);
+});
+
+test('FpEnvProfiles shares immutable normalized records across concurrent loaders without changing evidence', async (t) => {
+  const item = await fixture();
+  t.after(() => rm(item.root, { recursive: true, force: true }));
+  const [first, second] = await Promise.all([
+    new FpEnvProfiles(item.root).load(item.id),
+    new FpEnvProfiles(path.join(item.root, '.')).load(item.id),
+  ]);
+  assert.strictEqual(first, second);
+  assert.strictEqual(await new FpEnvProfiles(item.root).load(item.id), first);
+  const uncached = await normalizeFpEnv('1589412', raw, first.profile.source);
+  assert.deepEqual(first, uncached);
+  assert.ok(Object.isFrozen(first));
+  assert.ok(Object.isFrozen(first.profile.navigator));
+  assert.ok(Object.isFrozen(first.page?.connection));
+  assert.throws(() => { first.profile.navigator.vendor = 'modified'; }, TypeError);
+});
+
+test('FpEnvProfiles reloads an edited file even when its size and mtime are preserved', async (t) => {
+  const item = await fixture();
+  t.after(() => rm(item.root, { recursive: true, force: true }));
+  const profiles = new FpEnvProfiles(item.root);
+  const file = path.join(item.root, '_fp-env/android_148/z__env_1589412.json');
+  const timestamp = new Date('2025-01-01T00:00:00.000Z');
+  await utimes(file, timestamp, timestamp);
+  const original = await profiles.load(item.id);
+  const before = await stat(file);
+  const text = JSON.stringify({ ...raw, screen: { ...raw.screen, width: 394 } });
+  assert.equal(text.length, item.text.length);
+  await writeFile(file, text);
+  await utimes(file, before.atime, before.mtime);
+  assert.equal((await stat(file)).mtimeMs, before.mtimeMs);
+
+  const updated = await profiles.load(item.id);
+  assert.notStrictEqual(updated, original);
+  assert.equal(original.profile.screen.width, 393);
+  assert.equal(updated.profile.screen.width, 394);
+  assert.equal(updated.profile.source.hash, createHash('sha256').update(text).digest('hex'));
+  assert.strictEqual(await new FpEnvProfiles(item.root).load(item.id), updated);
+});
+
+test('FpEnvProfiles refreshes additions, changed IDs, deletions and duplicates in a warm cache', async (t) => {
+  const item = await fixture();
+  t.after(() => rm(item.root, { recursive: true, force: true }));
+  const profiles = new FpEnvProfiles(item.root);
+  await profiles.load(item.id);
+  const directory = path.join(item.root, '_fp-env/android_148');
+  const addedFile = path.join(directory, 'z__env_2.json');
+  const addedId = 'android-chrome/23049pcd8g-v148-2';
+  await writeFile(addedFile, item.text);
+  assert.equal((await profiles.load(addedId)).profile.id, addedId);
+  assert.deepEqual(await profiles.list(), [item.id, addedId].sort());
+
+  const renamed = structuredClone(raw);
+  renamed.navigator.userAgentData.HighEntropyValues.model = 'Another Model';
+  await writeFile(addedFile, JSON.stringify(renamed));
+  await assert.rejects(profiles.load(addedId), /fp-env Profile 不存在/);
+  const renamedId = 'android-chrome/another-model-v148-2';
+  assert.equal((await profiles.load(renamedId)).profile.id, renamedId);
+
+  const duplicate = path.join(item.root, '_fp-env/nested/duplicate');
+  await mkdir(duplicate, { recursive: true });
+  await writeFile(path.join(duplicate, 'z__env_1589412.json'), item.text);
+  await assert.rejects(new FpEnvProfiles(item.root).load(item.id), /fp-env Profile id 重复/);
+  await rm(duplicate, { recursive: true });
+  assert.deepEqual(await profiles.list(), [item.id, renamedId].sort());
+
+  await rm(addedFile);
+  await assert.rejects(profiles.load(renamedId), /fp-env Profile 不存在/);
+  assert.deepEqual(await new FpEnvProfiles(item.root).list(), [item.id]);
+});
+
+test('FpEnvProfiles does not retain failed scans or normalization failures', async (t) => {
+  const item = await fixture();
+  t.after(() => rm(item.root, { recursive: true, force: true }));
+  const profiles = new FpEnvProfiles(item.root);
+  await profiles.load(item.id);
+  const file = path.join(item.root, '_fp-env/android_148/z__env_1589412.json');
+  await writeFile(file, '{');
+  await assert.rejects(profiles.load(item.id), /fp-env JSON 非法/);
+  await writeFile(file, JSON.stringify({ ...raw, screen: { ...raw.screen, width: 'invalid' } }));
+  await assert.rejects(profiles.load(item.id), (error: unknown) => error instanceof MimicError && error.code === 'BAD_PROFILE');
+  await writeFile(file, item.text);
+  assert.equal((await profiles.load(item.id)).profile.navigator.maxTouchPoints, 5);
+});
+
+test('FpEnvProfiles isolates roots and discovers data after an empty scan', async (t) => {
+  const item = await fixture();
+  const other = await mkdtemp(path.join(os.tmpdir(), 'mimic-fp-env-isolated-'));
+  t.after(() => rm(item.root, { recursive: true, force: true }));
+  t.after(() => rm(other, { recursive: true, force: true }));
+  const first = await new FpEnvProfiles(item.root).load(item.id);
+  const profiles = new FpEnvProfiles(other);
+  assert.deepEqual(await profiles.list(), []);
+  const directory = path.join(other, '_fp-env/android_148');
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, 'z__env_1589412.json'), JSON.stringify({ ...raw, screen: { ...raw.screen, width: 394 } }));
+  const second = await profiles.load(item.id);
+  assert.notStrictEqual(first, second);
+  assert.equal(first.profile.screen.width, 393);
+  assert.equal(second.profile.screen.width, 394);
+  await rm(path.join(other, '_fp-env'), { recursive: true });
+  assert.deepEqual(await profiles.list(), []);
+  await assert.rejects(profiles.load(item.id), /fp-env Profile 不存在/);
 });

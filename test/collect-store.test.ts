@@ -10,17 +10,17 @@ import { createNodeApplication } from '../src/node/app.js';
 import { ProfileFiles } from '../src/collect/profiles.js';
 
 const FIXTURES = {
-  'android-webview-v138': 'android-webview-v138',
-  'macos-chrome-v148': 'macos-chrome-v148',
+  'android-webview-v138': 'collect-identity',
+  'macos-chrome-v148': 'collect-macos-identity',
 } as const;
 
 async function fixture(name: keyof typeof FIXTURES = 'android-webview-v138') {
-  const profileRaw = JSON.parse(await readFile(path.resolve(`profiles/${name}.json`), 'utf8')) as {
+  const profileRaw = JSON.parse(await readFile(path.resolve(`test/fixtures/${FIXTURES[name]}.json`), 'utf8')) as {
     meta: Record<string, unknown>;
   };
   delete profileRaw.meta.name;
   delete profileRaw.meta.traits;
-  const probeSnapshot = JSON.parse(await readFile(path.resolve(`resources/baselines/${FIXTURES[name]}.json`), 'utf8')) as {
+  const probeSnapshot = JSON.parse(await readFile(path.resolve(`resources/baselines/${name}.json`), 'utf8')) as {
     meta: Record<string, unknown>;
   };
   delete probeSnapshot.meta.profile;

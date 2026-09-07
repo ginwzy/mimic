@@ -22,6 +22,7 @@ export interface RequestClientOptions {
 export interface RequestOptions {
   cookies?: 'session' | 'none' | readonly string[];
   headerOrder?: readonly string[];
+  disableDefaultHeaders?: boolean;
   signal?: AbortSignal;
   redirect?: 'follow' | 'manual' | 'error';
 }
@@ -132,7 +133,7 @@ class FreqRequestClient implements RequestClient {
         headers,
         transport: orderedTransport ?? this.transport,
         timeout: this.options.timeoutMs,
-        ...(headerOrder === undefined ? {} : { disableDefaultHeaders: true }),
+        disableDefaultHeaders: headerOrder !== undefined || requestOptions?.disableDefaultHeaders === true,
         ...(body === undefined ? {} : { body }),
         ...(requestOptions?.signal === undefined ? {} : { signal: requestOptions.signal }),
         ...(requestOptions?.redirect === undefined ? {} : { redirect: requestOptions.redirect }),

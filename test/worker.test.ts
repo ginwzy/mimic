@@ -1,13 +1,13 @@
+import { FixtureProfiles } from './fixtures.js';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
 import {
-  Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, seal,
+  Catalog, compile, JsdomEngine, parseJob, parseProfile, seal,
 } from '../src/index.js';
 import { drivers } from '../src/features/drivers.js';
 import { features } from '../src/features/compile.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'), path.resolve('resources/shapes'));
+const store = new FixtureProfiles();
 
 async function open(id: string) {
   const imported = await store.load(id);

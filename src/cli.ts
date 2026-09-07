@@ -11,10 +11,11 @@ import {
 } from './collect/server.js';
 import { startServer, type ServerHandle } from './http/server.js';
 import { encodeResult } from './core/result.js';
+import { parseEnvironmentOptions } from './core/environment.js';
 import type { JsonValue } from './core/types.js';
 import { DEFAULT_TIMEOUT_MS } from './executor/pool.js';
 import { createMimic } from './sdk.js';
-import { DEFAULT_PROBE_PATH, DEFAULT_PROFILES_ROOT } from './node/assets.js';
+import { DEFAULT_PROBE_PATH } from './node/assets.js';
 import { diff, summarize, type ProbeSnapshot } from './collect/probe.js';
 
 export type CliServerHandle = Pick<ServerHandle, 'server' | 'close'>;
@@ -42,6 +43,7 @@ const defaultIo: CliIo = {
 
 const knownFlags = new Set([
   'profile',
+  'environment',
   'profiles',
   'probe',
   'pool-size',
@@ -81,6 +83,9 @@ function parseArguments(argv: readonly string[]): Arguments {
     } else {
       flags[name] = true;
     }
+  }
+  if (flags.environment !== undefined && (command === 'serve' || command === 'collect')) {
+    throw new TypeError('--environment applies to execution commands; HTTP tasks carry environment in the request body');
   }
   return { command, positionals, flags };
 }
@@ -149,9 +154,11 @@ function failure(io: CliIo, error: unknown): number {
 function sharedOptions(args: Arguments, io: CliIo) {
   const size = integerFlag(args.flags, 'pool-size', 1, 1);
   const timeoutMs = integerFlag(args.flags, 'timeout', DEFAULT_TIMEOUT_MS, 1);
+  const environment = stringFlag(args.flags, 'environment');
   return {
-    profile: stringFlag(args.flags, 'profile', 'chrome-mac') as string,
-    profilesRoot: pathFlag(args, io, 'profiles', DEFAULT_PROFILES_ROOT),
+    ...(environment === undefined ? {} : { environment: parseEnvironmentOptions(JSON.parse(environment)) }),
+    profile: stringFlag(args.flags, 'profile', '') as string,
+    profilesRoot: pathFlag(args, io, 'profiles', absolute(io.cwd, 'profiles')),
     probePath: pathFlag(args, io, 'probe', DEFAULT_PROBE_PATH),
     size,
     timeoutMs,
@@ -193,11 +200,12 @@ async function sdkCommand(args: Arguments, io: CliIo): Promise<number> {
   }
   const listKind = args.command === 'list' ? args.positionals[0] ?? 'profiles' : undefined;
   if (args.command === 'list'
-    && (args.positionals.length > 1 || !['profiles', 'shapes', 'features', 'drivers'].includes(listKind ?? ''))) {
-    throw new TypeError('list kind must be profiles, shapes, features, or drivers');
+    && (args.positionals.length > 1 || !['profiles', 'shapes', 'features', 'drivers', 'regions'].includes(listKind ?? ''))) {
+    throw new TypeError('list kind must be profiles, shapes, features, drivers, or regions');
   }
 
   const mimic = createMimic(sharedOptions(args, io));
+  if (mimic.environment?.selection) io.stderr(`regional environment=${JSON.stringify(mimic.environment)}`);
   try {
     let value: unknown;
     switch (args.command) {
@@ -222,7 +230,7 @@ async function sdkCommand(args: Arguments, io: CliIo): Promise<number> {
         break;
       }
       case 'list': {
-        value = await mimic.list(listKind as 'profiles' | 'shapes' | 'features' | 'drivers');
+        value = await mimic.list(listKind as 'profiles' | 'shapes' | 'features' | 'drivers' | 'regions');
         break;
       }
     }
@@ -232,10 +240,6 @@ async function sdkCommand(args: Arguments, io: CliIo): Promise<number> {
     await mimic.close();
   }
 }
-
-const pairedBaselines: Readonly<Record<string, string>> = {
-  'chrome-mac': 'macos-chrome-v148',
-};
 
 function baselineRoot(probePath: string): string {
   return path.join(path.dirname(probePath), 'baselines');
@@ -260,8 +264,6 @@ async function baselineFile(args: Arguments, io: CliIo, profile: string, probePa
   } catch {
     throw new TypeError('diff requires --baseline <snapshot.json>');
   }
-  const paired = pairedBaselines[profile];
-  if (paired !== undefined) return path.join(root, `${paired}.json`);
   if (names.includes(profile)) return path.join(root, `${profile}.json`);
   const prefixed = names.filter((name) => name.startsWith(`${profile}-`));
   if (prefixed.length === 1) return path.join(root, `${prefixed[0]}.json`);
@@ -298,6 +300,7 @@ async function diffCommand(args: Arguments, io: CliIo): Promise<number> {
   if (args.positionals.length > 1) throw new TypeError('diff accepts at most one profile');
   const shared = sharedOptions(args, io);
   const profile = args.positionals[0] ?? shared.profile;
+  if (!profile) throw new TypeError('diff requires --profile <fp-env ID>');
   const file = await baselineFile(args, io, profile, shared.probePath);
   const baseline = snapshot(JSON.parse(await fs.readFile(file, 'utf8')) as unknown, 'baseline');
   const mimic = createMimic({ ...shared, profile });

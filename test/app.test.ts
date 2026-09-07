@@ -4,7 +4,7 @@ import test from 'node:test';
 import { digest, JsdomEngine, parsePage, parseResult, seal, type CaptureOptions } from '../src/index.js';
 import { createNodeApplication } from '../src/node/app.js';
 
-const profilesRoot = path.resolve('profiles');
+const profilesRoot = path.resolve('test/fixtures/fp-env');
 const probePath = path.resolve('resources/probe.js');
 
 function application(capture: CaptureOptions = { deadlineMs: 100, pollMs: 5, maxPosts: 1 }) {
@@ -21,7 +21,7 @@ function application(capture: CaptureOptions = { deadlineMs: 100, pollMs: 5, max
 test('Application executes run and returns one validated Result contract', async () => {
   const { app, engine } = application();
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: { kind: 'run', code: '({ answer: 6 * 7, realm: Object.getPrototypeOf([]) === Array.prototype })' },
   });
 
@@ -35,7 +35,7 @@ test('Application executes run and returns one validated Result contract', async
 test('Application capture drives lifecycle events and returns the network report', async () => {
   const { app, engine } = application();
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'capture',
       code: `window.addEventListener('load', () => navigator.sendBeacon('/collect', 'event-body')); 'ready'`,
@@ -58,7 +58,7 @@ test('Application capture drives lifecycle events and returns the network report
 test('Application capture can leave lifecycle events under page control', async () => {
   const { app, engine } = application({ deadlineMs: 20, pollMs: 5, maxPosts: 1, lifecycle: 'none' });
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'capture',
       code: `(() => {
@@ -80,7 +80,7 @@ test('Application capture can leave lifecycle events under page control', async 
 test('Application capture drives the built-in Akamai interaction policy inside the Realm', async () => {
   const { app, engine } = application({ deadlineMs: 1_000, pollMs: 5, maxPosts: 3 });
   const result = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'capture',
       interaction: { adapter: 'akamai-sensor', seed: 'integration-seed' },
@@ -227,7 +227,7 @@ test('Application capture drives the built-in Akamai interaction policy inside t
 
 test('Application probe and diagnose are task dispatches over the same Result boundary', async () => {
   const { app, engine } = application();
-  const probe = await app.execute({ profile: 'android-webview-v138', job: { kind: 'probe' } });
+  const probe = await app.execute({ profile: 'android-webview/unknown-v138-1', job: { kind: 'probe' } });
   assert.equal(probe.ok, true);
   const snapshot = probe.value as {
     meta?: { probeVersion?: number };
@@ -239,7 +239,7 @@ test('Application probe and diagnose are task dispatches over the same Result bo
   assert.equal(touch?.collection?.items?.length, 1);
 
   const diagnose = await app.execute({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: { kind: 'diagnose', code: `eval('20 + 22')`, trace: false },
   });
   assert.equal(diagnose.ok, true);
@@ -250,7 +250,7 @@ test('Application probe and diagnose are task dispatches over the same Result bo
 
 test('Application normalizes failures, plans, and profile listing without leaking Runtime state', async () => {
   const { app, engine } = application();
-  const request = { profile: 'android-webview-v138', job: { kind: 'run' as const, code: 'throw new Error("boom")' } };
+  const request = { profile: 'android-webview/unknown-v138-1', job: { kind: 'run' as const, code: 'throw new Error("boom")' } };
   const plan = await app.plan(request);
   const result = await app.execute(request);
 
@@ -260,7 +260,7 @@ test('Application normalizes failures, plans, and profile listing without leakin
   assert.equal(result.error.phase, 'run');
   assert.equal(result.error.code, 'RUN_FAILED');
   assert.match(result.error.message, /boom/);
-  assert.ok((await app.list('profiles')).includes('android-webview-v138'));
+  assert.ok((await app.list('profiles')).includes('android-webview/unknown-v138-1'));
   assert.ok((await app.list('features')).includes('net'));
   assert.ok((await app.list('drivers')).includes('trace'));
   assert.equal(engine.active, 0);
@@ -269,7 +269,7 @@ test('Application normalizes failures, plans, and profile listing without leakin
 test('Application reuses an identical immutable Job plan without crossing Job boundaries', async () => {
   const { app } = application();
   const request = {
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: { kind: 'run' as const, code: '1 + 1', timeout: 1_000 },
   };
 
@@ -290,7 +290,7 @@ test('Application reuses an identical immutable Job plan without crossing Job bo
 test('Application excludes the interaction seed from the Plan cache key', async () => {
   const { app } = application();
   const request = {
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     job: {
       kind: 'capture' as const,
       code: 'void 0',
@@ -317,7 +317,7 @@ test('Application overlays Page fields while inheriting omitted Profile Page sta
     clock: { now, seed: 0x1234_5678 },
   }));
   const request = {
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     page,
     job: {
       kind: 'run' as const,
