@@ -5,6 +5,9 @@ import { digest } from '../src/core/seal.js';
 import { createNodePlanner } from '../src/node/planner.js';
 import { createNodeRuntime } from '../src/node/runtime.js';
 import { JsdomEngine } from '../src/engine/jsdom.js';
+import type { Engine } from '../src/engine/types.js';
+import { createInteractionSource } from '../src/interaction/dispatch.js';
+import { createInteractionSession, synthesizeInteraction } from '../src/interaction/synthesize.js';
 import { prepareExecution } from '../src/runtime/task.js';
 
 test('prepared execution separates installation identity from Job and effective capture policy', async () => {
@@ -80,4 +83,90 @@ test('typed capture Result retains v2 fields and rejects malformed successful pa
   }
   const failure = { ok: false, error: { name: 'MimicError', phase: 'run', code: 'RUN_FAILED', message: 'failed' } };
   assert.deepEqual(parseCaptureResult(failure), failure);
+});
+
+test('capture synthesis and Realm values survive different polling delays', async () => {
+  const planner = createNodePlanner();
+  const job = {
+    kind: 'capture' as const,
+    interaction: { adapter: 'akamai-sensor' as const, seed: 'replay-clock-probe' },
+    code: `(() => {
+      window.observedInteraction = [];
+      addEventListener('devicemotion', e => observedInteraction.push([
+        e.type, e.acceleration.x, e.acceleration.y, e.acceleration.z,
+        e.accelerationIncludingGravity.x, e.accelerationIncludingGravity.y, e.accelerationIncludingGravity.z,
+        e.rotationRate.alpha, e.rotationRate.beta, e.rotationRate.gamma, e.interval, e.isTrusted,
+      ]));
+      addEventListener('deviceorientation', e => observedInteraction.push([
+        e.type, e.alpha, e.beta, e.gamma, e.absolute, e.isTrusted,
+      ]));
+      for (const type of ['touchstart', 'touchmove', 'touchend']) {
+        document.addEventListener(type, e => {
+          const p = e.changedTouches[0];
+          observedInteraction.push([e.type, p.clientX, p.clientY, p.pageX, p.pageY, p.force, e.isTrusted]);
+        });
+      }
+      navigator.sendBeacon('/start', 'ready');
+    })();`,
+  };
+  const plan = await planner.plan({ profile: 'android-webview-v138', job });
+  const reference = prepareExecution(job, plan);
+  const session = createInteractionSession(reference.policy.capture!.interaction.seed);
+  const expectedSources: string[] = [];
+  let pageOffsetYRatio = 0;
+  for (const [sequence, action] of [
+    { recipe: 'swipe', at: 120 }, { recipe: 'tap', at: 2_500 }, { recipe: 'swipe', at: 2_700 },
+  ].entries()) {
+    assert.ok(action.recipe === 'swipe' || action.recipe === 'tap');
+    const frames = synthesizeInteraction(action.recipe, session, sequence, action.at);
+    expectedSources.push(createInteractionSource(frames, pageOffsetYRatio));
+    if (action.recipe === 'swipe') {
+      const touches = frames.filter(frame => frame.kind === 'touch');
+      pageOffsetYRatio += Math.max(0, touches[0]!.y - touches.at(-1)!.y);
+    }
+  }
+  const observations = [];
+  for (const pollMs of [10, 250, 1_000]) {
+    const underlying = new JsdomEngine();
+    const sources: string[] = [];
+    let events: unknown[][] = [];
+    const engine: Engine = {
+      manifest: underlying.manifest,
+      open: (preparedPlan, drivers) => {
+        const runtime = underlying.open(preparedPlan, drivers);
+        return {
+          plan: runtime.plan,
+          run: (code, options) => {
+            if (options?.trustedEvents) sources.push(code);
+            return runtime.run(code, options);
+          },
+          report: () => runtime.report(),
+          dispose: () => {
+            try {
+              const snapshot = runtime.run('JSON.stringify(window.observedInteraction)');
+              assert.ok(snapshot.ok && typeof snapshot.value === 'string');
+              events = JSON.parse(snapshot.value) as unknown[][];
+            } finally {
+              runtime.dispose();
+            }
+          },
+        };
+      },
+    };
+    const runner = createNodeRuntime({ engine });
+    const result = parseCaptureResult(await runner.executePrepared(prepareExecution(job, plan, {
+      deadlineMs: 10_000, pollMs, maxPosts: 20,
+    })));
+    assert.ok(result.ok);
+    assert.equal(result.value.captured, 'ready');
+    assert.equal(underlying.active, 0);
+    assert.deepEqual(sources, expectedSources, `pollMs=${pollMs} changed the planned program`);
+    assert.equal(events.length, 98);
+    assert.equal(events.filter(event => event[0] === 'touchstart').length, 3);
+    assert.equal(events.filter(event => event[0] === 'touchend').length, 3);
+    assert.ok(events.every(event => event.at(-1) === true));
+    observations.push(events);
+  }
+  assert.deepEqual(observations[1], observations[0]);
+  assert.deepEqual(observations[2], observations[0]);
 });

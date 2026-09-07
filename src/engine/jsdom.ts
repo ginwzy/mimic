@@ -4,12 +4,15 @@ import { CookieJar, JSDOM } from 'jsdom';
 import { MimicError } from '../core/error.js';
 import { deepFreeze, jsonCopy } from '../core/json.js';
 import type { Data, JsonValue, Plan } from '../core/types.js';
-import { hookFrameLifecycle, installJsdomHooks, jsdomImplementation, watchFrameOwner } from './jsdom-compat.js';
+import { disableJsdomSubresources, hookFrameLifecycle, installJsdomHooks, jsdomImplementation, watchFrameOwner } from './jsdom-compat.js';
 import type { DriverInstance, Drivers, Engine, Port, Runtime, RuntimeResult, RuntimeRunOptions } from './types.js';
 import type { Desc, EngineManifest, FnShape, Key, Op, PlanBind, Ref, StoredValue } from '../shape/types.js';
 import { parsePlan } from '../compile/parse.js';
 import { jsdomManifest } from './manifest.js';
 import { ExecutionSession } from '../runtime/session.js';
+import type { NetworkTransport } from '../network/types.js';
+import { networkResources } from './network.js';
+import { installLayout, type LayoutReplay } from './layout.js';
 
 type BrowserWindow = Window & typeof globalThis;
 type Callable = (...args: unknown[]) => unknown;
@@ -67,6 +70,7 @@ class JsdomRuntime implements Runtime {
   private readonly hiddenSymbols: Set<symbol>;
   private readonly trustedDispatchKey = `mimic.trusted-dispatch.${randomUUID()}`;
   private disposed = false;
+  private layout: LayoutReplay | undefined;
 
   constructor(
     context: vm.Context,
@@ -84,6 +88,18 @@ class JsdomRuntime implements Runtime {
     this.readInstall = readInstall;
     this.onDispose = onDispose;
     this.hiddenSymbols = hiddenSymbols;
+    if (plan.boot.layout) {
+      try {
+        const createLayout = vm.runInContext(`(${installLayout.toString()})`, context) as typeof installLayout;
+        const layoutData = vm.runInContext(`(${JSON.stringify(plan.boot.layout)})`, context);
+        this.layout = createLayout(layoutData, this.dispatchTrustedEvent);
+      } catch (cause) {
+        throw new MimicError({
+          phase: 'install', code: 'INSTALL_FAILED',
+          message: `Page.layout install failed: ${String(cause)}`, plan: plan.id, cause,
+        });
+      }
+    }
   }
 
   run(code: string, options: RuntimeRunOptions = {}): RuntimeResult {
@@ -96,23 +112,26 @@ class JsdomRuntime implements Runtime {
     return this.withScriptUrl(options.url, () => {
       let bridgeSymbol: symbol | undefined;
       try {
+        this.layout?.check();
         let source = code;
         if (options.trustedEvents === true) {
           const realm = context as unknown as { Symbol: SymbolConstructor };
           bridgeSymbol = realm.Symbol.for(this.trustedDispatchKey);
           this.hiddenSymbols.add(bridgeSymbol);
           Object.defineProperty(context, bridgeSymbol, {
-            value: this.dispatchTrustedEvent,
+            value: { dispatch: this.dispatchTrustedEvent, layout: this.layout },
             writable: false,
             enumerable: false,
             configurable: true,
           });
-          source = `((__mimicDispatchTrustedEvent) => (${code}))(globalThis[Symbol.for(${JSON.stringify(this.trustedDispatchKey)})])`;
+          const bridge = `globalThis[Symbol.for(${JSON.stringify(this.trustedDispatchKey)})]`;
+          source = `((__mimicDispatchTrustedEvent, __mimicLayout) => (${code}))(${bridge}.dispatch, ${bridge}.layout)`;
         }
         const value = vm.runInContext(source, context, {
           filename: options.url || this.plan.boot.url,
           ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
         });
+        this.layout?.check();
         return { ok: true, value };
       } catch (error) {
         const value = error as { name?: unknown; message?: unknown; stack?: unknown } | null;
@@ -190,6 +209,7 @@ class JsdomRuntime implements Runtime {
 
   report(): Data {
     if (this.disposed) throw new MimicError({ phase: 'run', code: 'RUN_FAILED', message: 'Runtime 已 dispose' });
+    this.layout?.check();
     return this.readInstall!();
   }
 
@@ -204,11 +224,18 @@ class JsdomRuntime implements Runtime {
     this.readInstall = null;
     this.closeWindow = null;
     this.onDispose = null;
+    const layout = this.layout;
+    this.layout = undefined;
     let first: unknown;
+    try {
+      layout?.close();
+    } catch (error) {
+      first = error;
+    }
     try {
       closeInstall?.();
     } catch (error) {
-      first = error;
+      first ??= error;
     } finally {
       try {
         closeWindow?.();
@@ -1053,7 +1080,7 @@ export class JsdomEngine implements Engine {
   readonly manifest: EngineManifest;
   private activeCount = 0;
 
-  constructor() {
+  constructor(private readonly options: { network?: NetworkTransport } = {}) {
     installJsdomHooks();
     this.manifest = jsdomManifest();
   }
@@ -1068,6 +1095,9 @@ export class JsdomEngine implements Engine {
     const jar = new CookieJar();
     try {
       for (const cookie of checked.boot.cookies) jar.setCookieSync(cookie, checked.boot.url);
+      for (const cookie of this.options.network?.cookies ?? []) {
+        jar.setCookieSync(cookie.value, cookie.url, cookie.receivedAt === undefined ? {} : { now: new Date(cookie.receivedAt) });
+      }
     } catch (cause) {
       throw new MimicError({ phase: 'install', code: 'BAD_PLAN', message: 'Plan boot cookie 非法', plan: checked.id, cause });
     }
@@ -1076,11 +1106,21 @@ export class JsdomEngine implements Engine {
       cookieJar: jar,
       runScripts: 'outside-only',
       pretendToBeVisual: true,
+      ...(this.options.network === undefined ? {} : {
+        resources: networkResources(this.options.network, jar),
+        beforeParse: disableJsdomSubresources,
+      }),
     });
     const context = dom.getInternalVMContext();
     const closeWindow = dom.window.close.bind(dom.window);
     const installer = new Installer(dom.window as unknown as BrowserWindow, checked, drivers);
     try {
+      if (checked.boot.layout && dom.window.document.compatMode !== 'CSS1Compat') {
+        throw new MimicError({
+          phase: 'install', code: 'INSTALL_FAILED',
+          message: 'LAYOUT_INVALID: standards mode is required', plan: checked.id,
+        });
+      }
       installer.install();
       const runtime = new JsdomRuntime(
         context,

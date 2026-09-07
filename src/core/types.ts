@@ -254,6 +254,7 @@ export interface Page {
   source: Source;
   url?: string;
   html?: string;
+  layout?: import('./layout.js').PageLayout;
   cookies?: string[];
   connection?: Connection;
   clock?: Clock;
@@ -313,6 +314,7 @@ export interface Bind {
 export interface Boot {
   readonly url: string;
   readonly html: string;
+  readonly layout?: import('./layout.js').PageLayout;
   readonly cookies: readonly string[];
 }
 

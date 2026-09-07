@@ -1,6 +1,7 @@
 import { createMimic } from '../src/public.js';
 import { digest, seal } from '../src/core/seal.js';
 import type { Page } from '../src/core/types.js';
+import type { CaptureNetworkOptions } from '../src/network/types.js';
 
 export type CaptureMode = 'abck' | 'bms';
 
@@ -17,6 +18,7 @@ export interface CaptureBodiesOptions {
   maxPosts: number;
   mode: CaptureMode;
   interactionSeed?: string;
+  network?: CaptureNetworkOptions;
 }
 
 export interface CapturedPost {
@@ -72,6 +74,7 @@ export async function captureBodies(options: CaptureBodiesOptions): Promise<Capt
     page: capturePage(options),
     size: 1,
     timeoutMs: options.scriptTimeoutMs + options.deadlineMs + 5_000,
+    ...(options.network === undefined ? {} : { network: options.network }),
     capture: {
       deadlineMs: options.deadlineMs,
       pollMs: 10,

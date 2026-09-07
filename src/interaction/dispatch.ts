@@ -8,6 +8,7 @@ export function createInteractionSource(
   return `((frames, pageOffsetYRatio) => {
     const PAN_SLOP_PX = 8;
     const POINTER_ID = 2;
+    const layout = typeof __mimicLayout === 'undefined' ? null : __mimicLayout;
     const dispatch = typeof __mimicDispatchTrustedEvent === 'function'
       ? __mimicDispatchTrustedEvent
       : (target, event) => target.dispatchEvent(event);
@@ -23,13 +24,15 @@ export function createInteractionSource(
       const force = Number(frame.force);
       const touchForce = Number.isFinite(force) ? Math.max(0, Math.min(1, force)) : 0.5;
       return {
-        clientX: x, clientY: y, pageX: x, pageY: y + pageOffsetYPx, screenX: x, screenY: y,
+        clientX: x, clientY: y,
+        ...(layout ? layout.project(x, y) : { pageX: x, pageY: y + pageOffsetYPx, screenX: x, screenY: y }),
         radiusX: Number.isFinite(radiusX) ? Math.max(0, radiusX * width) : 1,
         radiusY: Number.isFinite(radiusY) ? Math.max(0, radiusY * height) : 1,
         force: frame.phase === 'end' ? 0 : touchForce,
       };
     };
     const resolveTarget = (coords) => {
+      if (layout) return document.elementFromPoint(coords.clientX, coords.clientY);
       try {
         const target = document.elementFromPoint?.(coords.clientX, coords.clientY);
         if (target) return target;
@@ -77,11 +80,11 @@ export function createInteractionSource(
       emitPointer(target, 'pointerout', p, false);
       emitPointer(target, 'pointerleave', p, false);
     };
-    const emitTouch = (target, frame, p) => {
+    const emitTouch = (target, frame, p, cancelable = true) => {
       const type = 'touch' + frame.phase;
       const activeTouches = frame.phase === 'end' ? [] : [p];
       const fields = {
-        bubbles: true, cancelable: true,
+        bubbles: true, cancelable,
         touches: activeTouches, targetTouches: activeTouches, changedTouches: [p],
       };
       return dispatch(target, createEvent(globalThis.TouchEvent, type, fields, true)) !== false;
@@ -146,6 +149,14 @@ export function createInteractionSource(
             if (frame.phase === 'start' || contact === null) {
               const target = resolveTarget(coords);
               contact = { target, originX: coords.clientX, originY: coords.clientY, pointerActive: true };
+              if (layout) {
+                contact.layout = layout.begin(target);
+                contact.previousX = coords.clientX;
+                contact.previousY = coords.clientY;
+                contact.panAllowed = true;
+                contact.moved = false;
+                contact.panning = false;
+              }
             }
             const p = point(frame, contact.target);
             if (frame.phase === 'start') {
@@ -158,12 +169,24 @@ export function createInteractionSource(
             }
             if (frame.phase === 'move') {
               if (contact.pointerActive) emitPointer(contact.target, 'pointermove', p, true);
-              emitTouch(contact.target, frame, p);
-              if (contact.pointerActive && Math.hypot(
+              const touchMoveAccepted = emitTouch(contact.target, frame, p, !layout || !contact.panning);
+              const moved = Math.hypot(
                 p.clientX - contact.originX,
                 p.clientY - contact.originY,
-              ) > PAN_SLOP_PX) {
-                closePointer(contact.target, 'pointercancel', p);
+              ) > PAN_SLOP_PX;
+              let pan = moved;
+              if (layout) {
+                if (!contact.panning) contact.panAllowed &&= contact.touchStartAccepted && touchMoveAccepted;
+                contact.moved ||= moved;
+                pan = contact.moved && contact.panAllowed && layout.pan(
+                  contact.layout, contact.previousX - p.clientX, contact.previousY - p.clientY,
+                );
+                contact.panning ||= pan;
+                contact.previousX = p.clientX;
+                contact.previousY = p.clientY;
+              }
+              if (contact.pointerActive && pan) {
+                closePointer(contact.target, 'pointercancel', layout ? coordinates(frame) : p);
                 contact.pointerActive = false;
               }
               return;
@@ -173,7 +196,7 @@ export function createInteractionSource(
               closePointer(contact.target, 'pointerup', p);
             }
             const touchEndAccepted = emitTouch(contact.target, frame, p);
-            if (completedTap && contact.touchStartAccepted && touchEndAccepted) {
+            if (completedTap && (!layout || !contact.moved) && contact.touchStartAccepted && touchEndAccepted) {
               emitCompatibilityMouse(contact);
             }
             contact = null;

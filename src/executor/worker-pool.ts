@@ -7,6 +7,8 @@ import type { Plan, Result } from '../core/types.js';
 import type { Op, PlanBind } from '../shape/types.js';
 import { prepareExecution, type PreparedExecution } from '../runtime/task.js';
 import { WORKER_PLAN_CACHE_LIMIT, type ExecuteMessage, type WorkerConfig, type WorkerMessage } from './protocol.js';
+import { hostNetwork } from '../network/host.js';
+import type { CaptureNetworkOptions } from '../network/types.js';
 
 const WORKER_URL = new URL('./worker.js', import.meta.url);
 export const DEFAULT_TIMEOUT_MS = 5_000;
@@ -18,6 +20,7 @@ export interface WorkerPoolOptions {
   size?: number;
   timeoutMs?: number | null;
   maxQueue?: number;
+  network?: CaptureNetworkOptions;
 }
 
 export interface ExecutorStats {
@@ -52,6 +55,7 @@ interface Slot {
   watchdog: NodeJS.Timeout | null;
   down: boolean;
   plans: Map<string, true>;
+  network?: ReturnType<typeof hostNetwork>;
 }
 
 function timeout(value: number | null | undefined, fallback: number | null, name: string): number | null {
@@ -115,6 +119,7 @@ export class WorkerPool {
   readonly maxQueue: number;
   private readonly config: WorkerConfig;
   private readonly planner: Pick<PlannerPort, 'plan'>;
+  private readonly network: CaptureNetworkOptions | undefined;
   private readonly workers: Slot[] = [];
   private readonly idle: Slot[] = [];
   private readonly queue: Queued[] = [];
@@ -132,6 +137,7 @@ export class WorkerPool {
     this.maxQueue = maxQueue(options.maxQueue);
     this.config = structuredClone(options.worker);
     this.planner = options.planner;
+    this.network = options.network;
   }
 
   get active(): number {
@@ -190,6 +196,7 @@ export class WorkerPool {
     const slots = this.workers.splice(0);
     for (const slot of slots) {
       slot.down = true;
+      slot.network?.close();
       this.clearWatchdog(slot);
       this.retire(slot.worker);
     }
@@ -229,6 +236,8 @@ export class WorkerPool {
       return this.workerDown(slot, cause);
     }
     this.clearWatchdog(slot);
+    slot.network?.close();
+    delete slot.network;
     const pending = this.pending.get(message.id);
     if (pending) {
       this.pending.delete(message.id);
@@ -278,6 +287,8 @@ export class WorkerPool {
   private replace(slot: Slot): void {
     if (slot.down) return;
     slot.down = true;
+    slot.network?.close();
+    delete slot.network;
     this.clearWatchdog(slot);
     const workerIndex = this.workers.indexOf(slot);
     if (workerIndex >= 0) this.workers.splice(workerIndex, 1);
@@ -323,6 +334,9 @@ export class WorkerPool {
     let plan: Plan<Op, PlanBind>;
     let prepared: PreparedExecution;
     try {
+      if (this.network && task.request.job.kind !== 'capture') {
+        throw new TypeError('Capture network is only supported for capture jobs');
+      }
       plan = await this.planner.plan(task.request);
       prepared = prepareExecution(task.request.job, plan, this.config.capture);
     } catch (cause) {
@@ -348,13 +362,15 @@ export class WorkerPool {
       while (slot.plans.size > WORKER_PLAN_CACHE_LIMIT) slot.plans.delete(slot.plans.keys().next().value!);
     }
     try {
+      if (this.network) slot.network = hostNetwork(this.network);
       slot.worker.postMessage({
         id: task.id,
         job: prepared.job,
         policy: prepared.policy,
         planId: plan.id,
         ...(known ? {} : { plan }),
-      } satisfies ExecuteMessage);
+        ...(slot.network ? { network: slot.network.channel } : {}),
+      } satisfies ExecuteMessage, slot.network ? [slot.network.channel.port] : []);
     } catch (cause) {
       const pending = this.pending.get(task.id);
       if (pending) {

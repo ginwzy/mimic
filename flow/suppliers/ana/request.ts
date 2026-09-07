@@ -5,6 +5,7 @@ import {
   type RequestOptions,
   type TextResponse,
 } from '../../client.js';
+import type { CaptureNetworkOptions, ResponseCookie } from '../../../src/network/types.js';
 
 export const ANA_SITE = 'https://www.ana.co.jp';
 export const ANA_SELECT_URL = 'https://aswbe.ana.co.jp/webapps/reservation/common/system-error';
@@ -63,6 +64,7 @@ export interface AnaRequestOptions {
   timeoutMs?: number;
   credentials?: AnaCredentials;
   log?: (message: string) => void;
+  closedLoop?: boolean;
 }
 
 export interface AnaScripts {
@@ -78,6 +80,7 @@ export interface AnaVerifyResult {
 }
 
 export interface AnaRequest {
+  captureNetwork(url: string, pageUrl: string): CaptureNetworkOptions;
   getLanding(): Promise<string>;
   discoverScripts(html: string): AnaScripts;
   getScript(url: string): Promise<string>;
@@ -107,11 +110,47 @@ function withoutQuery(url: string): string {
 }
 
 class AnaRequestClient implements AnaRequest {
+  private readonly responseCookies: ResponseCookie[] = [];
   constructor(
     private readonly client: RequestClient,
     private readonly credentials: AnaCredentials,
     private readonly log: (message: string) => void,
+    private readonly closedLoop: boolean,
   ) {}
+
+  captureNetwork(url: string, pageUrl: string): CaptureNetworkOptions {
+    if (!this.closedLoop) throw new Error('ANA closed-loop transport was not enabled');
+    if (new URL(url).origin !== new URL(pageUrl).origin) {
+      throw new Error('ANA closed-loop currently requires same-origin sensor endpoints');
+    }
+    return {
+      allowedUrls: [...new Set([url, withoutQuery(url)])],
+      cookies: [...this.responseCookies],
+      request: async (request) => {
+        const requestBody = request.body === null ? undefined : new Uint8Array(await request.arrayBuffer());
+        const requestHeaders = Object.fromEntries(request.headers);
+        const response = await this.client.request(request.method, request.url, requestBody, {
+          ...requestHeaders, ...BROWSER_HEADERS, cookie: requestHeaders.cookie ?? '',
+        }, { signal: request.signal, redirect: 'manual' });
+        this.rememberCookies(response);
+        const responseHeaders = new globalThis.Headers();
+        for (const [name, value] of response.headers) {
+          if (name.toLowerCase() !== 'set-cookie') responseHeaders.append(name, value);
+        }
+        for (const cookie of response.headers.getSetCookie()) responseHeaders.append('set-cookie', cookie);
+        return new Response(
+          [204, 205, 304].includes(response.status) || request.method === 'HEAD' ? null : response.body,
+          { status: response.status, statusText: response.statusText ?? '', headers: responseHeaders },
+        );
+      },
+    };
+  }
+
+  private rememberCookies(response: TextResponse): void {
+    for (const value of response.headers.getSetCookie()) {
+      this.responseCookies.push({ url: response.url, value, receivedAt: Date.now() });
+    }
+  }
 
   async getLanding(): Promise<string> {
     const response = await this.get(ANA_SELECT_URL, {
@@ -256,6 +295,22 @@ class AnaRequestClient implements AnaRequest {
   }
 
   private async get(url: string, headers: Record<string, string>, label: string): Promise<TextResponse> {
+    if (this.closedLoop) {
+      for (let redirects = 0; redirects <= 10; redirects++) {
+        this.log(`GET ${url}`);
+        const response = await this.client.get(url, headers, { redirect: 'manual' });
+        this.rememberCookies(response);
+        this.log(`${label} HTTP ${response.status} body=${response.body.length}B`);
+        const location = response.headers.get('location');
+        if (![301, 302, 303, 307, 308].includes(response.status) || !location) return response;
+        const next = new URL(location, url);
+        if (next.protocol !== 'https:' || !next.hostname.endsWith('.ana.co.jp')) {
+          throw new Error('ANA initial-page redirect is outside the allowed HTTPS site');
+        }
+        url = next.href;
+      }
+      throw new Error('ANA initial-page redirect limit exceeded');
+    }
     this.log(`GET ${url}`);
     const response = await this.client.get(url, headers);
     this.log(`${label} HTTP ${response.status} body=${response.body.length}B`);
@@ -289,5 +344,6 @@ export async function createAnaRequest(options: AnaRequestOptions = {}): Promise
     client,
     options.credentials ?? ANA_DEFAULT_CREDENTIALS,
     options.log ?? (() => {}),
+    options.closedLoop ?? false,
   );
 }

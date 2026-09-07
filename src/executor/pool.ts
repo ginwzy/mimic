@@ -5,6 +5,7 @@ import { DEFAULT_PROBE_PATH } from '../node/assets.js';
 import { createNodePlanner } from '../node/planner.js';
 import { captureConfig } from '../runtime/options.js';
 import { WorkerPool, type ExecutorStats, type WorkerLifecycle } from './worker-pool.js';
+import type { CaptureNetworkOptions } from '../network/types.js';
 
 export { DEFAULT_MAX_QUEUE, DEFAULT_TIMEOUT_MS, QueueFullError } from './worker-pool.js';
 export type { ExecutorStats, WorkerLifecycle } from './worker-pool.js';
@@ -19,6 +20,7 @@ export interface ExecutorOptions {
   size?: number;
   timeoutMs?: number | null;
   maxQueue?: number;
+  network?: CaptureNetworkOptions;
 }
 
 /** Published Node convenience facade; WorkerPool only receives dependencies. */

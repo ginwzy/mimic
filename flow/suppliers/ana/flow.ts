@@ -3,6 +3,7 @@ import { captureBodies, listAndroidChromeProfiles } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
 import { ANA_SELECT_URL, createAnaRequest } from './request.js';
 import type { AnaCredentials, AnaVerifyResult } from './request.js';
+import type { CaptureNetworkOptions } from '../../../src/network/types.js';
 
 const DEFAULT_PROFILE = 'android-chrome/2201116sg-v145-10025';
 
@@ -13,6 +14,7 @@ export interface AnaFlowOptions {
   profilesRoot?: string;
   interactionSeed?: string;
   postCount?: number;
+  networkMode?: 'offline' | 'closed-loop';
   verify?: boolean;
   verifyBody?: string;
   credentials?: AnaCredentials;
@@ -50,7 +52,7 @@ function cookieNames(cookieHeader: string): string[] {
 
 function selectBodies(bodies: readonly string[], postCount: number | undefined): string[] {
   if (postCount !== undefined) return bodies.slice(0, Math.max(0, postCount));
-  if (bodies.length <= 2) return [...bodies];
+  if (bodies.length <= 5) return [...bodies];
   return [...bodies.slice(0, 2), ...bodies.slice(-3)];
 }
 
@@ -64,6 +66,11 @@ async function resolveProfile(explicit: string | undefined, profilesRoot: string
 }
 
 export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowResult> {
+  const networkMode = options.networkMode ?? 'offline';
+  if (networkMode !== 'offline' && networkMode !== 'closed-loop') throw new TypeError('Invalid ANA networkMode');
+  if (networkMode === 'closed-loop' && options.postCount !== undefined) {
+    throw new TypeError('postCount is only supported in offline ANA mode');
+  }
   const log = options.log ?? (() => {});
   const interactionSeed = options.interactionSeed ?? randomBytes(16).toString('hex');
   const profile = await resolveProfile(options.profile, options.profilesRoot);
@@ -73,7 +80,19 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
     timeoutMs: 60_000,
     ...(options.credentials === undefined ? {} : { credentials: options.credentials }),
     log,
+    ...(networkMode === 'closed-loop' ? { closedLoop: true } : {}),
   });
+  const networkFor = (url: string, posted: () => void): CaptureNetworkOptions => {
+    const network = request.captureNetwork(url, ANA_SELECT_URL);
+    return {
+      ...network,
+      request: async (outgoing) => {
+        const response = await network.request(outgoing);
+        if (outgoing.method === 'POST') posted();
+        return response;
+      },
+    };
+  };
   try {
     log(`ANA flow start profile=${profile}`);
     const html = await request.getLanding();
@@ -83,12 +102,14 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
     log(`BMS=${scripts.bms}`);
 
     const abckSource = await request.getScript(scripts.abck);
+    let abckPostCount = 0;
     const abckCapture = await captureBodies({
       pageUrl: ANA_SELECT_URL,
       pageHtml: html,
       scriptUrl: scripts.abck,
       scriptSource: abckSource,
-      cookies: splitCookies(request.cookies()),
+      cookies: networkMode === 'offline' ? splitCookies(request.cookies()) : [],
+      ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.abck, () => abckPostCount++) } : {}),
       profile,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 8_000,
@@ -99,12 +120,17 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
     });
     if (abckCapture.bodies.length === 0) throw new Error('no _abck bodies captured');
 
-    const bodiesToPost = selectBodies(abckCapture.bodies, options.postCount);
-    log(`ABCK captured=${abckCapture.bodies.length} posting=${bodiesToPost.length}`);
-    for (const [index, body] of bodiesToPost.entries()) {
-      await delay(250);
-      log(`ABCK POST ${index + 1}/${bodiesToPost.length}`);
-      await request.postAbck(scripts.abck, body);
+    if (networkMode === 'offline') {
+      const bodiesToPost = selectBodies(abckCapture.bodies, options.postCount);
+      log(`ABCK captured=${abckCapture.bodies.length} posting=${bodiesToPost.length}`);
+      for (const [index, body] of bodiesToPost.entries()) {
+        await delay(250);
+        log(`ABCK POST ${index + 1}/${bodiesToPost.length}`);
+        await request.postAbck(scripts.abck, body);
+        abckPostCount++;
+      }
+    } else {
+      log(`ABCK captured=${abckCapture.bodies.length} completedPOSTs=${abckPostCount}`);
     }
 
     let bmsPosted = false;
@@ -114,7 +140,8 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       pageHtml: html,
       scriptUrl: scripts.bms,
       scriptSource: bmsSource,
-      cookies: splitCookies(request.cookies()),
+      cookies: networkMode === 'offline' ? splitCookies(request.cookies()) : [],
+      ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.bms, () => { bmsPosted = true; }) } : {}),
       profile,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 7_000,
@@ -122,7 +149,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       maxPosts: 1,
       mode: 'bms',
     });
-    if (bmsCapture.bodies[0] !== undefined) {
+    if (networkMode === 'offline' && bmsCapture.bodies[0] !== undefined) {
       await request.postBms(scripts.bms, bmsCapture.bodies[0]);
       bmsPosted = true;
     }
@@ -136,7 +163,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       interactionSeed,
       cookies,
       abckBodyCount: abckCapture.bodies.length,
-      abckPostCount: bodiesToPost.length,
+      abckPostCount,
       bmsPosted,
       abckTilde0,
       ...(verify === undefined ? {} : { verify }),

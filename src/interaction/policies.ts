@@ -14,16 +14,16 @@ function createAkamaiSensorPolicy(): InteractionPolicy {
     next: (elapsedMs, postCount) => {
       if (!initialSwipeDispatched && (postCount > 0 || elapsedMs >= 120)) {
         initialSwipeDispatched = true;
-        return 'swipe';
+        return { recipe: 'swipe', plannedAtMs: 120 };
       }
       // Calibrated sensor lead can delay touch by 150ms; keep contacts from overlapping.
       if (!tapDispatched && initialSwipeDispatched && elapsedMs >= 2_500) {
         tapDispatched = true;
-        return 'tap';
+        return { recipe: 'tap', plannedAtMs: 2_500 };
       }
       if (!followUpDispatched && tapDispatched && elapsedMs >= 2_700) {
         followUpDispatched = true;
-        return 'swipe';
+        return { recipe: 'swipe', plannedAtMs: 2_700 };
       }
       return null;
     },

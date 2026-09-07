@@ -32,7 +32,7 @@ Profile + Shape + Page + Job
 | `Capture` | 真机原始采集结果,只追加、不推导 |
 | `Profile` | 规范化且保持单次采集相关性的设备身份 |
 | `Shape` | 浏览器版本/平台的可观察结构清单 |
-| `Page` | URL、HTML、cookie、时间与随机序列等页面上下文 |
+| `Page` | URL、HTML、cookie、时间与随机序列,以及可选的有限布局快照 |
 | `Job` | `run`、`capture`、`probe` 或 `diagnose` 任务 |
 | `Plan` | 完整校验后生成的纯数据安装计划 |
 | `Feature` | 一项浏览器能力及其依赖声明 |
@@ -87,10 +87,22 @@ probe 源码仍是 Runner 的宿主依赖,排队与 watchdog 仍归 Executor 所
 Realm、执行分派、异常/结果编码与最终 dispose。交互帧使用 Realm 的定时器,随 Realm 一起回收。
 内部 ExecuteMessage 增加有效 policy,公开 v2 Job/Plan/Result schema 不变。
 
+交互策略将触发条件与合成时间分开: `next` 返回 recipe 和 `plannedAtMs`,Akamai 动作的计划时间
+依次为 120、2500、2700ms。首次 POST 仍可提前触发第一笔 swipe,但不改变其合成时间基准。
+姿态迁移按计划间隔采样,不读取实际轮询时间;实际派发、完成窗口、deadline 和 watchdog 仍使用
+原来的运行时钟。同一有效 seed、模型和动作计划保证合成帧值及帧内相对时间一致,不保证真实事件
+时间戳、跨动作实际间隔、POST 内容或数量一致。提前终止仍可截断程序。
+
 每次 `Engine.open` 创建独立 ExecutionSession。Driver 可用 `createSession` 提供任务级共享状态,
 `open(port)` 仍创建每个 Realm 的实例;先关闭所有 Realm 实例,再关闭任务级会话。
 网络和 trace 的跨 Realm 报告由各自 `reduceReports` 聚合,Engine 不识别具体报告字段。
 jsdom 内部生命周期钩子集中在 `engine/jsdom-compat.ts`,进程级钩子仅弱引用 Realm 所有者。
+
+显式 `Page.layout` 经独立校验后进入 `Plan.boot.layout`。`engine/layout.ts` 在根 Realm 中建立
+私有几何/滚动状态,统一矩形、命中、根/嵌套滚动和交互坐标;不修改不可变 Plan。布局失效检查
+位于 Runtime 执行与报告边界,布局清理失败不能跳过 Driver 或 Realm 清理。它是固定视口的有限
+矩形回放,不是通用 CSS 布局。默认未提供布局时仍走旧路径。输入、失败边界和证据见
+[有限布局回放规范](layout-replay.md)。
 
 Feature 按编译与执行分开组织:
 
@@ -208,6 +220,11 @@ flow/capture.ts 直接消费 CapturePost,不再重复猜测或静默过滤成功
 NetConfig/TraceConfig 是各能力的局部联合类型,编译侧检查绑定配置,Driver 侧仍校验 JSON 输入;
 通用 Engine ABI 保留 JsonValue 扩展接口,不引入包含全部 Driver 的全局联合类型。
 
+可选闭环 capture 通过 `network` 注入宿主传输能力,每个任务使用独立 MessagePort。worker 中的
+jsdom XHR/CookieJar 保持响应状态,宿主只执行明确允许 URL 的请求;Net Driver 报告在途数量,
+CaptureSession 在完成判定时等待在途响应。能力不进入安装 Plan 或公开 v2 JSON,默认离线模式不变。
+取消、cookie 初始化和受限 fetch 支持见 [闭环捕获规范](network-capture.md)。
+
 TDD 只从以下已确认接缝观察行为:
 
 1. SDK `run/capture/plan/list`。
@@ -238,7 +255,8 @@ Feature 自行声明行为,未知实现保持 unknown;当前内置能力不声�
 
 Canvas、Audio 和系统颜色的身份合成集中在 `environment/identity.ts`,策略版本为
 `legacy-identity-v1`。数值写入 Plan,Driver 不根据 Profile ID 临时合成身份。
-Canvas 的新绑定格式对应 Feature rev 3 和 Engine ABI v2.11;旧 Plan 必须重新编译。
+R6 的 Canvas 绑定迁移对应 Feature rev 3 和 Engine ABI v2.11;后续有限布局安装契约将 Engine ABI
+升为 v2.12,所有旧 Plan 必须重新编译。
 Plan ID 的迁移也会改变依赖它的默认交互 seed,不意味着完整执行身份已由 Plan ID 表达。
 
 能力范围、使用方式和验证命令见 [capabilities.md](capabilities.md)。资源回收、能力声明完整性

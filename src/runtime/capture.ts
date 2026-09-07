@@ -65,11 +65,11 @@ export class CaptureSession {
     let lastPostObservedAt = 0;
     let latestInteractionEndAt = 0;
     while (Date.now() - started < policy.deadlineMs
-      && postCount < policy.maxPosts) {
+      && (postCount < policy.maxPosts || (current.pending ?? 0) > 0)) {
       const elapsed = Date.now() - started;
-      const recipe = interaction.next(elapsed, postCount);
-      if (recipe !== null) {
-        const frames = synthesizeInteraction(recipe, interactionSession, interactionSequence++, elapsed);
+      const action = postCount < policy.maxPosts ? interaction.next(elapsed, postCount) : null;
+      if (action !== null) {
+        const frames = synthesizeInteraction(action.recipe, interactionSession, interactionSequence++, action.plannedAtMs);
         const dispatchResult = runtime.run(
           createInteractionSource(frames, pageOffsetYRatio),
           { ...timeout, trustedEvents: true },
@@ -86,9 +86,8 @@ export class CaptureSession {
           latestInteractionEndAt,
           Date.now() - started + frames.at(-1)!.at,
         );
-        if (recipe === 'swipe') {
-          // Recipes never overlap, so the next one can inherit this upward
-          // swipe's full displacement.
+        if (action.recipe === 'swipe' && !runtime.plan.boot.layout) {
+          // Track planned upward displacement for subsequent recipes.
           const touchFrames = frames.filter((frame) => frame.kind === 'touch');
           const firstTouch = touchFrames[0]!;
           const lastTouch = touchFrames.at(-1)!;
@@ -109,8 +108,12 @@ export class CaptureSession {
         policy.completion.minimumInteractionMs,
       ) + policy.completion.quietMs;
       if (adapter !== 'none'
+        && (current.pending ?? 0) === 0
         && interaction.isExhausted()
         && observedAt >= settleAfter) break;
+    }
+    if ((current.pending ?? 0) > 0) {
+      throw new Error('Capture deadline expired with pending network requests');
     }
     const report = runtime.report();
     const value: CaptureValue = {

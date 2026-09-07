@@ -23,16 +23,19 @@ export interface RequestOptions {
   cookies?: 'session' | 'none' | readonly string[];
   headerOrder?: readonly string[];
   signal?: AbortSignal;
+  redirect?: 'follow' | 'manual' | 'error';
 }
 
 export interface TextResponse {
   status: number;
+  statusText?: string;
   url: string;
   headers: Headers;
   body: string;
 }
 
 export interface RequestClient {
+  request(method: string, url: string | URL, body?: string | Uint8Array, headers?: HeadersInit, options?: RequestOptions): Promise<TextResponse>;
   get(url: string | URL, headers?: HeadersInit, options?: RequestOptions): Promise<TextResponse>;
   post(
     url: string | URL,
@@ -104,12 +107,12 @@ class FreqRequestClient implements RequestClient {
     await Promise.allSettled([this.session.close(), this.transport.close()]);
   }
 
-  private async request(
-    method: 'GET' | 'POST',
+  async request(
+    method: string,
     url: string | URL,
-    body: string | Uint8Array | undefined,
-    requestHeaders: HeadersInit | undefined,
-    requestOptions: RequestOptions | undefined,
+    body?: string | Uint8Array,
+    requestHeaders?: HeadersInit,
+    requestOptions?: RequestOptions,
   ): Promise<TextResponse> {
     this.ensureOpen();
     const headerOrder = requestOptions?.headerOrder;
@@ -132,12 +135,14 @@ class FreqRequestClient implements RequestClient {
         ...(headerOrder === undefined ? {} : { disableDefaultHeaders: true }),
         ...(body === undefined ? {} : { body }),
         ...(requestOptions?.signal === undefined ? {} : { signal: requestOptions.signal }),
+        ...(requestOptions?.redirect === undefined ? {} : { redirect: requestOptions.redirect }),
       };
       const response = cookiePolicy === 'session'
         ? await this.session.fetch(url, init)
         : await freqFetch(url, init);
       return {
         status: response.status,
+        statusText: response.statusText,
         url: response.url,
         headers: response.headers,
         body: await response.text(),

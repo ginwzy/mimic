@@ -12,6 +12,7 @@
     "source": { "$ref": "#/definitions/source" },
     "url": { "type": "string", "pattern": "^https?://" },
     "html": { "type": "string" },
+    "layout": { "$ref": "https://mimic.local/schema/v2/layout.json" },
     "cookies": { "type": "array", "items": { "type": "string" } },
     "connection": { "$ref": "#/definitions/connection" },
     "clock": { "$ref": "#/definitions/clock" },

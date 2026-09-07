@@ -6,6 +6,7 @@ import { createMimic as createInternal, type MimicOptions } from './sdk.js';
 
 export { MimicError };
 export type { CapturePost, CaptureValue, CaptureResult } from './core/capture.js';
+export type { CaptureNetworkOptions, ResponseCookie } from './network/types.js';
 export type {
   ErrorInfo,
   Hash,

@@ -19,9 +19,10 @@ export type CaptureResult =
   | (Extract<Result<CaptureValue>, { ok: true }> & { value: CaptureValue })
   | Extract<Result, { ok: false }>;
 
-export interface NetReport extends Data {
+export interface NetReport {
   body: string | null;
   posts: CapturePost[];
+  pending?: number;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -41,6 +42,7 @@ export function captureReport(report: Data): NetReport {
   return {
     body: typeof data.body === 'string' ? data.body : null,
     posts: posts.map(item => ({ ...item })),
+    ...(typeof data.pending === 'number' ? { pending: data.pending } : {}),
   };
 }
 

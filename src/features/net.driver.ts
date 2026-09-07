@@ -2,6 +2,7 @@ import type { Data, JsonValue } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import type { CapturePost } from '../core/capture.js';
 import { RESPONSE_PROTO, XHR, XHR_SEND, NAV, BEACON, FETCH, ARRAY_BUFFER, type Via, type NetConfig } from './net.shared.js';
+import { liveRequests, type LiveResponse } from './net.live.js';
 
 interface Post extends CapturePost {
   via: Via;
@@ -83,7 +84,7 @@ function post(via: Via, value: unknown): Post {
   return { via, tag, len, body };
 }
 
-export const netDriver: Driver = {
+export const createNetDriver = (live = false): Driver => ({
   reduceReports: (reports, records) => {
     const posts = records.length > 0
       ? records as Post[]
@@ -91,22 +92,62 @@ export const netDriver: Driver = {
     return {
       body: posts.find((entry) => entry.len > 0 && typeof entry.body === 'string')?.body ?? null,
       posts: posts.map((entry) => ({ ...entry })),
+      ...(live ? { pending: reports.reduce<number>((sum, report) => sum + Number((report as Data).pending ?? 0), 0) } : {}),
     };
   },
   open: (port) => {
     const posts: Post[] = [];
-    let responses = new WeakSet<object>();
-    const response = (): object => {
+    const requests = live ? liveRequests(port) : undefined;
+    let responses = new WeakMap<object, LiveResponse | null>();
+    const bodyStates = new WeakMap<object, { used: boolean }>();
+    const response = (payload: LiveResponse | null = null): object => {
       const value = port.make(RESPONSE_PROTO);
       if (value === null || typeof value !== 'object') throw new TypeError('net Response allocation failed');
-      responses.add(value);
+      responses.set(value, payload);
+      if (payload) {
+        Object.defineProperty(value, 'url', { value: payload.url, enumerable: true });
+        const state = port.clone({ used: false }) as { used: boolean };
+        bodyStates.set(value, state);
+        const bodyUsedGetter = Reflect.apply(
+          port.evaluate('(state) => function bodyUsed() { return state.used; }') as Function,
+          undefined,
+          [state],
+        ) as () => boolean;
+        Object.defineProperty(value, 'bodyUsed', { get: bodyUsedGetter, enumerable: true });
+        const entries = payload.headers.trim().split('\r\n').filter(Boolean).map(line => {
+          const colon = line.indexOf(':');
+          return [line.slice(0, colon).toLowerCase(), line.slice(colon + 1).trim()];
+        });
+        const headers = port.evaluate(`(() => {
+          const entries = ${JSON.stringify(entries)};
+          const key = name => {
+            name = String(name);
+            if (!/^[!#$%&'*+.^_\x60|~0-9a-z-]+$/i.test(name)) throw new TypeError('Invalid header name');
+            return name.toLowerCase();
+          };
+          return Object.freeze({
+            get(name) { const entry = entries.find(entry => entry[0] === key(name)); return entry ? entry[1] : null; },
+            has(name) { return entries.some(entry => entry[0] === key(name)); },
+            *entries() { for (const entry of entries) yield [...entry]; },
+            *keys() { for (const entry of entries) yield entry[0]; },
+            *values() { for (const entry of entries) yield entry[1]; },
+            forEach(callback, receiver) { for (const [name, value] of entries) callback.call(receiver, value, name, this); },
+            [Symbol.iterator]() { return this.entries(); },
+            [Symbol.toStringTag]: 'Headers',
+            append() { throw new TypeError('immutable'); },
+            set() { throw new TypeError('immutable'); },
+            delete() { throw new TypeError('immutable'); },
+          });
+        })()`);
+        Object.defineProperty(value, 'headers', { value: headers, enumerable: true });
+      }
       return value;
     };
-    const responseSelf = (self: unknown): object => {
+    const responseSelf = (self: unknown): LiveResponse | null => {
       if ((typeof self !== 'object' && typeof self !== 'function') || self === null || !responses.has(self)) {
         throw port.error('TypeError', 'Illegal invocation');
       }
-      return self;
+      return responses.get(self)!;
     };
     const resolvedResponse = () => {
       const value = response();
@@ -119,17 +160,36 @@ export const netDriver: Driver = {
           throw port.error('TypeError', "Failed to construct 'Response': Please use the 'new' operator.");
         }
         if (item.op === 'response-field') {
-          responseSelf(self);
+          const payload = responseSelf(self);
+          if (payload) {
+            if (item.field === 'ok') return payload.status >= 200 && payload.status < 300;
+            return item.field === 'status' ? payload.status : payload.statusText;
+          }
           if (item.field === 'ok') return true;
           return item.field === 'status' ? 200 : 'OK';
         }
         if (item.op === 'response-body') {
-          responseSelf(self);
+          const payload = responseSelf(self);
+          if (payload) {
+            const state = bodyStates.get(self as object)!;
+            if (state.used) {
+              return port.resolve().then(() => {
+                throw port.error('TypeError', 'Body already consumed');
+              });
+            }
+            state.used = true;
+          }
+          if (payload && item.kind !== 'arrayBuffer') {
+            const text = new TextDecoder().decode(payload.body);
+            if (item.kind === 'text') return port.resolve(text);
+            return port.resolve().then(() => port.evaluate(`JSON.parse(${JSON.stringify(text)})`));
+          }
           if (item.kind === 'text') return port.resolve('');
           if (item.kind === 'json') return port.resolve({});
           const ctor = callable(port, ARRAY_BUFFER);
           if (!ctor) throw new TypeError('ArrayBuffer source unavailable');
-          const buffer = Reflect.construct(ctor, [0]);
+          const buffer = Reflect.construct(ctor, [payload?.body.byteLength ?? 0]) as ArrayBuffer;
+          if (payload) new Uint8Array(buffer).set(payload.body);
           return port.resolve().then(() => buffer);
         }
         if (item.via === 'xhr') instance(port, self, XHR);
@@ -138,6 +198,16 @@ export const netDriver: Driver = {
           const entry = post(item.via, requestBody(item.via, args));
           posts.push(entry);
           port.record(entry);
+          if (requests) {
+            if (item.via === 'xhr') return requests.send(self as XMLHttpRequest, args[0]);
+            if (item.via === 'beacon') {
+              void requests.fetch(args[0], { method: 'POST', body: args[1], credentials: 'include' }).catch(() => {});
+              return true;
+            }
+            return port.resolve().then(() => requests.fetch(args[0], args[1])).then(response).catch(cause => {
+              throw port.error('TypeError', cause instanceof Error ? cause.message : String(cause));
+            });
+          }
           if (item.via === 'fetch') return resolvedResponse();
           return item.via === 'beacon' ? true : undefined;
         }
@@ -154,11 +224,15 @@ export const netDriver: Driver = {
       report: () => ({
         body: posts.find((entry) => entry.len > 0)?.body ?? null,
         posts: posts.map((entry) => ({ ...entry })),
+        ...(requests ? { pending: requests.pending } : {}),
       }),
       close: () => {
         posts.length = 0;
-        responses = new WeakSet();
+        requests?.close();
+        responses = new WeakMap();
       },
     };
   },
-};
+});
+
+export const netDriver = createNetDriver();

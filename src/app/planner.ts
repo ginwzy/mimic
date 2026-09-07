@@ -51,6 +51,10 @@ function overlayPage(base: Page | undefined, input: Page | undefined): Page | un
   };
   const url = override.url ?? inherited.url;
   const html = override.html ?? inherited.html;
+  if (inherited.layout && !override.layout && (html !== inherited.html || url !== inherited.url)) {
+    throw new MimicError({ phase: 'parse', code: 'BAD_PAGE', message: 'Page HTML/URL override requires a new layout snapshot' });
+  }
+  const layout = override.layout ?? inherited.layout;
   const cookies = override.cookies ?? inherited.cookies;
   const connection = override.connection ?? inherited.connection;
   const clock = override.clock ?? inherited.clock;
@@ -61,6 +65,7 @@ function overlayPage(base: Page | undefined, input: Page | undefined): Page | un
     source,
     ...(url === undefined ? {} : { url }),
     ...(html === undefined ? {} : { html }),
+    ...(layout === undefined ? {} : { layout }),
     ...(cookies === undefined ? {} : { cookies }),
     ...(connection === undefined ? {} : { connection }),
     ...(clock === undefined ? {} : { clock }),

@@ -251,6 +251,7 @@ function compileUnsafe(input: CompileInput): Compilation {
     boot: Object.freeze({
       url: page?.url ?? 'https://example.com/',
       html: page?.html ?? '<!doctype html><html><head></head><body></body></html>',
+      ...(page?.layout ? { layout: page.layout } : {}),
       cookies: page?.cookies ?? EMPTY_COOKIES,
     }),
     task: job.kind,

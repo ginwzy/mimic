@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Ajv } from 'ajv';
 import dataSchema from '../schemas/v2/data.schema.json' with { type: 'json' };
+import layoutSchema from '../schemas/v2/layout.schema.json' with { type: 'json' };
 import irSchema from '../schemas/v2/ir.schema.json' with { type: 'json' };
 import planSchema from '../schemas/v2/plan.schema.json' with { type: 'json' };
 import resultSchema from '../schemas/v2/result.schema.json' with { type: 'json' };
@@ -17,6 +18,7 @@ import {
 
 const schemaAjv = new Ajv({ allErrors: true, strict: true });
 schemaAjv.addSchema(dataSchema);
+schemaAjv.addSchema(layoutSchema);
 schemaAjv.addSchema(irSchema);
 const validatePlanSchema = schemaAjv.compile(planSchema);
 const validateResultSchema = schemaAjv.compile(resultSchema);

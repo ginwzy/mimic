@@ -3,7 +3,7 @@ import type { Feature } from '../shape/types.js';
 
 export const domFeature: Feature = {
   id: 'dom',
-  describe: (_context, support) => describeCoverage(support, {
+  describe: ({ page }, support) => describeCoverage(support, {
     'dom.api': 'partial',
     'dom.worker': 'partial',
     'dom.shared-worker': 'partial',
@@ -11,7 +11,7 @@ export const domFeature: Feature = {
     'dom.offscreencanvas': 'partial',
     'dom.rtc': 'partial',
     'dom.canplaytype': 'constant',
-  }),
+  }, page?.layout ? { 'dom.api': 'mixed' } : {}),
   rev: '3',
   requires: ['globals'],
   build: () => ({

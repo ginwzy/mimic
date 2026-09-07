@@ -112,14 +112,14 @@ export function createInteractionSession(seed: string): InteractionSession {
   return { seed, group, transitions: pose.transitions, gravity: [...pose.gravity], heading: 0, swipeCount: 0 };
 }
 
-function advanceSessionPose(session: InteractionSession, next: Random, elapsedMs: number): void {
+function advanceSessionPose(session: InteractionSession, next: Random, plannedAtMs: number): void {
   if (session.swipeCount > 0) {
     const transitions = session.transitions;
     if (transitions.count === 0) throw new TypeError('CSD4CA interaction model session has no pose transitions');
     if (session.lastSwipeAt === undefined) throw new TypeError('CSD4CA interaction session has no prior swipe time');
     const data = Buffer.from(transitions.data, 'base64');
     const stride = CSD4CA_MODEL.transitionQuantization.length * 2;
-    const targetGap = elapsedMs - session.lastSwipeAt;
+    const targetGap = plannedAtMs - session.lastSwipeAt;
     const tolerance = Math.max(
       MIN_TRANSITION_GAP_TOLERANCE_MS,
       targetGap * TRANSITION_GAP_TOLERANCE_RATIO,
@@ -150,7 +150,7 @@ function advanceSessionPose(session: InteractionSession, next: Random, elapsedMs
     session.heading += transition[4];
   }
   session.swipeCount += 1;
-  session.lastSwipeAt = elapsedMs;
+  session.lastSwipeAt = plannedAtMs;
 }
 
 function reconstruct(group: InteractionModelGroup, next: Random, varied = true): number[] {
@@ -292,8 +292,8 @@ function appendSensorFrames(
   }
 }
 
-function synthesizeSwipe(session: InteractionSession, next: Random, elapsedMs: number): InteractionFrame[] {
-  advanceSessionPose(session, next, elapsedMs);
+function synthesizeSwipe(session: InteractionSession, next: Random, plannedAtMs: number): InteractionFrame[] {
+  advanceSessionPose(session, next, plannedAtMs);
   const { touchDuration, sensorStartOffset, sensorDuration, values } = sample(session.group, next);
   const frames: InteractionFrame[] = [];
   const programStart = Math.min(0, sensorStartOffset);
@@ -322,12 +322,12 @@ export function synthesizeInteraction(
   recipe: InteractionRecipe,
   session: InteractionSession,
   sequence: number,
-  elapsedMs: number,
+  plannedAtMs: number,
 ): readonly InteractionFrame[] {
   const next = createRandom(hashSeed(`${session.seed}\u0000${sequence}\u0000${recipe}`));
   switch (recipe) {
     case 'swipe':
-      return Object.freeze(synthesizeSwipe(session, next, elapsedMs));
+      return Object.freeze(synthesizeSwipe(session, next, plannedAtMs));
     case 'tap':
       return Object.freeze(synthesizeTap(session, next));
   }

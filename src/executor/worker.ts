@@ -6,6 +6,7 @@ import type { Plan, Result } from '../core/types.js';
 import { createNodeRuntime } from '../node/runtime.js';
 import type { Op, PlanBind } from '../shape/types.js';
 import { WORKER_PLAN_CACHE_LIMIT, type ExecuteMessage, type WorkerConfig } from './protocol.js';
+import { workerNetwork } from '../network/worker.js';
 
 if (!parentPort) throw new Error('executor/worker must run inside worker_threads');
 
@@ -20,9 +21,10 @@ function failure(cause: unknown): Result {
   });
 }
 
-parentPort.on('message', async ({ id, job, policy, planId, plan: wire }: ExecuteMessage) => {
+parentPort.on('message', async ({ id, job, policy, planId, plan: wire, network }: ExecuteMessage) => {
   parentPort!.postMessage({ id, started: true });
   let result: Result;
+  const transport = network ? workerNetwork(network) : undefined;
   try {
     let plan = plans.get(planId);
     if (plan) {
@@ -34,9 +36,12 @@ parentPort.on('message', async ({ id, job, policy, planId, plan: wire }: Execute
       plans.set(planId, plan);
       while (plans.size > WORKER_PLAN_CACHE_LIMIT) plans.delete(plans.keys().next().value!);
     }
-    result = await app.executePrepared({ plan, job: deepFreeze(job), policy: deepFreeze(policy) });
+    const runner = transport ? createNodeRuntime({ ...workerData as WorkerConfig, network: transport }) : app;
+    result = await runner.executePrepared({ plan, job: deepFreeze(job), policy: deepFreeze(policy) });
   } catch (cause) {
     result = failure(cause);
+  } finally {
+    transport?.close();
   }
   await new Promise<void>((resolve) => setImmediate(resolve));
   parentPort!.postMessage({ id, result });

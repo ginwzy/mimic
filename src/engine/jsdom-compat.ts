@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import { createTouchList } from './touch.js';
 
+const { implSymbol } = createRequire(import.meta.url)('jsdom/lib/generated/idl/utils.js') as { implSymbol: symbol };
+
 type TouchEventInitModule = {
   convert(globalObject: object, value: unknown, options: unknown): Record<string, unknown>;
 };
@@ -10,6 +12,26 @@ const TOUCH_LIST_FIELDS = ['touches', 'targetTouches', 'changedTouches'] as cons
 const FRAME_OWNERS = new WeakMap<object, (child: unknown) => void>();
 const FRAME_ATTACH_HOOKS = new WeakSet<object>();
 const FRAME_ATTRIBUTE_HOOKS = new WeakSet<object>();
+
+/** Keep host observers out of page-overridable addEventListener methods. */
+export function observeJsdomEvent(target: object, type: string, callback: () => void, once = false): () => void {
+  const require = createRequire(import.meta.url);
+  const eventTargetIDL = require('jsdom/lib/generated/idl/EventTarget.js') as { is(value: unknown): boolean };
+  if (!eventTargetIDL.is(target)) throw new TypeError('Expected a jsdom EventTarget');
+  const targetImpl = jsdomImplementation(target, 'EventTarget');
+  const listener = Object.assign(() => callback(), { objectReference: callback });
+  Reflect.apply(targetImpl.addEventListener as Function, targetImpl, [type, listener, { capture: false, once }]);
+  return () => {
+    Reflect.apply(targetImpl.removeEventListener as Function, targetImpl, [type, listener, false]);
+  };
+}
+
+/** resources.interceptors enables subresources in jsdom; keep offline loading behavior. */
+export function disableJsdomSubresources(window: object): void {
+  Reflect.set(window, '_loadSubresources', false);
+  const document = jsdomImplementation(Reflect.get(window, 'document'), 'Document');
+  Reflect.set(document._resourceLoader as object, '_loadSubresources', false);
+}
 
 /** Process-wide hooks retain only weak references to individual Realm trees. */
 export function installJsdomHooks(): void {
@@ -92,8 +114,7 @@ export function jsdomImplementation(wrapper: unknown, name: string): Record<Prop
   if ((typeof wrapper !== 'object' && typeof wrapper !== 'function') || wrapper === null) {
     throw new TypeError(`${name} is not a jsdom wrapper`);
   }
-  const key = Object.getOwnPropertySymbols(wrapper).find((symbol) => symbol.description === 'impl');
-  const implementation = key === undefined ? undefined : Reflect.get(wrapper, key);
+  const implementation = Reflect.get(wrapper, implSymbol);
   if ((typeof implementation !== 'object' && typeof implementation !== 'function') || implementation === null) {
     throw new TypeError(`${name} has no jsdom implementation`);
   }

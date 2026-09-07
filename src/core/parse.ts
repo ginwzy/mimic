@@ -4,6 +4,8 @@ import dataSchema from '../../schemas/v2/data.schema.json' with { type: 'json' }
 import catalogSchema from '../../schemas/v2/catalog.schema.json' with { type: 'json' };
 import irSchema from '../../schemas/v2/ir.schema.json' with { type: 'json' };
 import pageSchema from '../../schemas/v2/page.schema.json' with { type: 'json' };
+import layoutSchema from '../../schemas/v2/layout.schema.json' with { type: 'json' };
+import { checkLayout } from './layout.js';
 import profileSchema from '../../schemas/v2/profile.schema.json' with { type: 'json' };
 import shapeSchema from '../../schemas/v2/shape.schema.json' with { type: 'json' };
 import { MimicError } from './error.js';
@@ -22,6 +24,7 @@ import {
 
 const ajv = new Ajv({ allErrors: true, strict: true });
 ajv.addSchema(dataSchema);
+ajv.addSchema(layoutSchema);
 ajv.addSchema(irSchema);
 ajv.addSchema(shapeSchema);
 const validateCollect = ajv.compile<CollectBundle>(collectSchema);
@@ -68,6 +71,13 @@ export const parseProfile = (input: unknown): Profile => {
 export const parsePage = (input: unknown): Page => {
   if (isTrustedPage(input)) return input;
   const page = parse(input, validatePage, 'BAD_PAGE', 'Page');
+  if (page.layout !== undefined) {
+    try {
+      checkLayout(page.layout);
+    } catch (cause) {
+      throw new MimicError({ phase: 'parse', code: 'BAD_PAGE', message: String(cause), cause });
+    }
+  }
   if (page.url !== undefined) httpUrl(page.url, 'BAD_PAGE', 'Page.url');
   if (!validHash(page)) throw new MimicError({ phase: 'parse', code: 'BAD_PAGE', message: 'Page content hash 不匹配' });
   return trustPage(page);

@@ -176,28 +176,54 @@ test('Akamai interaction policy separates joint swipe, tap and follow-up swipe',
   const requestDriven = createInteractionPolicy('akamai-sensor');
   assert.equal(requestDriven.isExhausted(), false);
   assert.equal(requestDriven.next(0, 0), null);
-  assert.equal(requestDriven.next(10, 1), 'swipe');
+  assert.deepEqual(requestDriven.next(10, 1), { recipe: 'swipe', plannedAtMs: 120 });
   assert.equal(requestDriven.next(20, 1), null);
   assert.equal(requestDriven.next(30, 2), null);
   assert.equal(requestDriven.next(2_000, 20), null);
   assert.equal(requestDriven.next(2_499, 20), null);
-  assert.equal(requestDriven.next(2_500, 20), 'tap');
+  assert.deepEqual(requestDriven.next(2_500, 20), { recipe: 'tap', plannedAtMs: 2_500 });
   assert.equal(requestDriven.isExhausted(), false);
-  assert.equal(requestDriven.next(2_700, 20), 'swipe');
+  assert.deepEqual(requestDriven.next(2_700, 20), { recipe: 'swipe', plannedAtMs: 2_700 });
   assert.equal(requestDriven.isExhausted(), true);
   assert.equal(requestDriven.next(3_200, 20), null);
 
   const timerDriven = createInteractionPolicy('akamai-sensor');
   assert.equal(timerDriven.next(119, 0), null);
-  assert.equal(timerDriven.next(120, 0), 'swipe');
+  assert.deepEqual(timerDriven.next(120, 0), { recipe: 'swipe', plannedAtMs: 120 });
   assert.equal(timerDriven.next(449, 0), null);
   assert.equal(timerDriven.next(450, 0), null);
   assert.equal(timerDriven.next(2_000, 20), null);
   assert.equal(timerDriven.next(2_499, 20), null);
-  assert.equal(timerDriven.next(2_500, 20), 'tap');
-  assert.equal(timerDriven.next(2_700, 20), 'swipe');
+  assert.deepEqual(timerDriven.next(2_500, 20), { recipe: 'tap', plannedAtMs: 2_500 });
+  assert.deepEqual(timerDriven.next(2_700, 20), { recipe: 'swipe', plannedAtMs: 2_700 });
   assert.equal(timerDriven.isExhausted(), true);
   assert.equal(timerDriven.next(3_200, 20), null);
+});
+
+test('Akamai synthesis uses planned times across trigger and polling schedules', () => {
+  const schedules = [
+    [[10, 1], [2_500, 1], [2_700, 1]],
+    [[120, 0], [2_500, 0], [2_700, 0]],
+    [[130, 0], [2_510, 0], [2_710, 0]],
+    [[500, 0], [3_000, 0], [4_000, 0]],
+  ] as const;
+  for (let index = 0; index < 100; index++) {
+    const programs = schedules.map(schedule => {
+      const policy = createInteractionPolicy('akamai-sensor');
+      const session = createInteractionSession(`schedule-check-${index}`);
+      const program = schedule.map(([elapsedMs, postCount], sequence) => {
+        const action = policy.next(elapsedMs, postCount);
+        assert.ok(action);
+        return {
+          ...action,
+          frames: synthesizeInteraction(action.recipe, session, sequence, action.plannedAtMs),
+        };
+      });
+      assert.ok(policy.isExhausted());
+      return program;
+    });
+    for (const program of programs.slice(1)) assert.deepEqual(program, programs[0]);
+  }
 });
 
 interface ObservedInputFields {

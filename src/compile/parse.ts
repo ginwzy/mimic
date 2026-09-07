@@ -7,6 +7,7 @@ import { checkContribution } from '../shape/check.js';
 import type { Op, PlanBind } from '../shape/types.js';
 import { validateGraph } from './graph.js';
 import { isTrustedPlan, trustPlan } from './trusted.js';
+import { checkLayout } from '../core/layout.js';
 
 type ObjectValue = Record<string, JsonValue>;
 
@@ -66,7 +67,14 @@ export function parsePlan(input: unknown): Plan<Op, PlanBind> {
   text(engine.hash, 'plan.engine.hash');
 
   const boot = object(root.boot, 'plan.boot');
-  exact(boot, ['url', 'html', 'cookies'], ['url', 'html', 'cookies'], 'plan.boot');
+  exact(boot, ['url', 'html', 'cookies', 'layout'], ['url', 'html', 'cookies'], 'plan.boot');
+  if (boot.layout !== undefined) {
+    try {
+      checkLayout(boot.layout);
+    } catch (cause) {
+      fail(String(cause));
+    }
+  }
   const url = text(boot.url, 'plan.boot.url');
   try {
     const parsed = new URL(url);

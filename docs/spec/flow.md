@@ -13,8 +13,8 @@ supplier flow
     +-- captureBodies()  -> createMimic().capture()
 ```
 
-真实网络只发生在 host。`flow` 不改变 Plan、Worker、Realm、Feature 或 Engine，也不允许 Realm 中的页面
-脚本访问真实网络。
+真实网络只发生在 host。默认离线 capture 不让页面脚本发送真实请求；显式闭环模式通过任务级
+MessagePort 请求宿主传输，并将响应返回仍在运行的 Realm。安装 Plan 不携带传输能力。
 
 ## 目录
 
@@ -80,6 +80,9 @@ Mimic client。
 每次 capture 创建独立 Mimic client。Page、deadline 和 maxPosts 都是该次 capture 的固定配置，不为复用
 worker 修改核心 SDK。
 
+`captureBodies` 可显式接收 `network`。允许地址、响应回灌、取消和支持边界见
+[闭环捕获规范](network-capture.md)。默认不启用；ABCK 与 BMS 仍是独立 Realm。
+
 ### Proxy
 
 `proxy.ts` 只构造代理 URL 和动态认证信息，不定义 `none/local/lumi/mitm/reqable` 等 CLI 模式。
@@ -104,6 +107,20 @@ profile、capture 或网络失败直接拒绝 Promise，不转换为 `ok`、`cla
 
 ANA 和 Cebu 各自定义 options、结果与日志。不要增加 `FlowStage`、通用生命周期、站点 adapter、步骤注册表
 或 DAG；只有出现稳定且实质相同的第三处实现时，才继续抽取共用逻辑。
+
+ANA 默认 `networkMode: 'offline'` 的 ABCK body 选择按捕获位置保序，不按 body 内容去重：
+
+- 未传 `postCount`：不超过 5 个时全部发送；超过 5 个时发送前两个和最后三个。
+- 显式 `postCount`：保留既有的前缀选择规则，0 表示不发送 ABCK body。
+- 同一捕获位置最多选择一次；不同捕获位置即使内容相同，也仍是独立请求。
+
+默认策略会跳过长序列的中间 body，不等价于完整浏览器请求序列。`abckBodyCount` 和
+`abckPostCount` 分别报告捕获数量与实际发送数量，不能互相替代。
+
+显式 `networkMode: 'closed-loop'` 会在捕获期间发送请求并回灌响应，不再离线筛选或重复发送 body；
+此模式拒绝 `postCount`。ANA 闭环仅支持与捕获页同源的 sensor 地址，逐跳匹配已发现的脚本 URL
+及其去查询参数版本。初始化使用带来源 URL 的原始 Set-Cookie，不把 HttpOnly 值放入普通 Page cookies。
+`abckPostCount` 在闭环中统计已收到响应的 POST，包括非 2xx；不表示挑战通过。
 
 ## 运行约束
 
@@ -133,9 +150,12 @@ browser alias。
 
 ## 验收
 
-验收以实际 supplier 流程为准，不新增专用测试文件。当前实现已通过：
+历史离线模式的验收包括：
 
 - reqable 下 ANA/Cebu 完整请求流程与 wire header/cookie 捕获检查。
 - Lumi 和 mitm-to-Lumi 下 ABCK、BMS、sticky session 与最终 API 请求。
 - 本地 TCP CONNECT 探针确认 proxy headers 到达代理。
 - 项目 typecheck、构建、数据检查和 npm package export 检查。
+
+闭环模式另有实际 worker、本地 HTTP 和 freq-js 传输验证，以及供应商 flow 本地夹具；未进行
+ANA 线上验收。上述历史网络验收不能转用为闭环模式的成功证据。

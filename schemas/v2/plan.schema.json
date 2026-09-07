@@ -72,6 +72,7 @@
       "properties": {
         "url": { "type": "string", "minLength": 1 },
         "html": { "type": "string" },
+        "layout": { "$ref": "https://mimic.local/schema/v2/layout.json" },
         "cookies": { "type": "array", "items": { "type": "string" } }
       }
     },

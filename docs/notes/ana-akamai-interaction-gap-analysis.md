@@ -926,17 +926,18 @@ The schema-3 compiler and runtime now split pose from gesture dynamics:
    gesture PCA coefficients but share that template, group, relative heading
    reference, and evolving gravity state. The sensorless tap does not advance
    pose.
-5. The capture loop passes each action's existing elapsed time to the internal
-   synthesizer. A later swipe selects transitions from the same anonymous
-   session whose source gap is within 25% of the generated gesture gap (with a
+5. The capture loop now passes each action's nominal planned time to the internal
+   synthesizer, not its actual polling time. A later swipe selects transitions
+   from the same anonymous session whose source gap is within 25% of the planned gesture gap (with a
    250 ms minimum window); if none exists, it uses the nearest source gap.
    This prevents sub-second adjustments and long re-grips from being mixed
    without regard to timing.
 
 The public adapter, Job schema, immutable Plan, and Engine ABI are unchanged.
 Creating the session and evolving it remain private capture-runtime behavior;
-the same seed reproduces the selected anonymous session, transitions, and
-gesture residuals.
+the same effective seed, model and planned action times reproduce the selected
+anonymous session, transitions, and gesture residuals. Actual event delivery
+times and customer-script payloads are outside that deterministic contract.
 
 Removing duplicated absolute-pose channels raised the dynamic model's effective
 rank requirement. Rank 31 is the smallest tested rank that keeps the existing
@@ -1077,15 +1078,231 @@ This suggests that event cadence must be designed at the session/gesture
 level, including Akamai's own sampling or throttling behavior. Increasing the
 number of generated frames alone is not sufficient.
 
-### 9. Capture does not continue from real response state
+### 9. Response feedback is opt-in; cross-capture continuity remains absent
 
 The browser continues interacting across many ABCK requests and stream resets.
-ANA/Cebu currently generate all bodies inside one Realm before Python sends
-them. Real `Set-Cookie` responses do not update that Realm or affect later
-generated bodies.
+The original captures used Python to send generated bodies. The default Node
+offline mode still finishes each capture before sending its selected bodies;
+real responses cannot affect those already-generated bodies. Opt-in ANA
+`networkMode: 'closed-loop'` now returns actual HTTP responses and scoped cookies
+to the ongoing capture Realm. A later BMS capture receives server cookie updates
+but still starts a new Realm, without prior JavaScript state or script-only cookie
+edits. This is per-capture feedback, not continuous browser-page replay.
 
 This is broader than event synthesis, but it limits any attempt to reproduce
 the browser's repeated event/request lifecycle.
+
+### ANA posting-selection follow-up
+
+By default, the Node ANA flow sends all captured ABCK bodies for lists of up to
+five, or the first two and last three positions for longer lists. Explicit
+`postCount` selects a prefix instead. Historical all-body validation above must
+not be treated as validation of this default subset policy.
+
+The overlapping-position defect is fixed: the former short-list branch covered
+only lengths up to two, so three captures produced positions `1,2,1,2,3` and
+four produced `1,2,2,3,4`. Lists of up to five now send every position once in
+order. Longer lists retain the existing subset policy; for eleven captures the
+default remains `1,2,9,10,11`. Equal body strings from different capture positions
+are deliberately retained, not content-deduplicated.
+
+Regression verification runs the compiled `runAnaFlow` unchanged against local
+capture/request fixtures. Before the fix it reproduced both overlapping cases;
+coverage also includes lengths 1, 2, 5, 6 and 11, identical body contents,
+explicit prefix limits, empty-capture rejection, BMS continuation and request
+cleanup. This verifies selection and posting order, not ANA acceptance. It does
+not close the response-feedback gap or establish whether dropping intermediate
+bodies changes a live challenge result.
+
+Verification checkpoint: `npm test` passed 277/277 tests without skips;
+`npm run check` passed type checking, Shape regeneration and data validation.
+No live supplier requests were made for this fix. The synthesis-clock follow-up
+is recorded below; the later opt-in response-feedback work is recorded separately.
+
+### Deterministic synthesis follow-up
+
+Status: fixed for the synthesized program, not for wall-clock event delivery or
+complete ABCK payload replay.
+
+Previously InteractionPolicy returned only a recipe. CaptureSession passed the
+current `Date.now() - started` value into synthesis, where the initial/follow-up
+gap changes the candidate pool of source pose transitions. Reusing a seed did
+not remove this additional input. A real TaskRunner/JsdomEngine regression
+reproduced the changed program when polling at 1000ms rather than 10ms.
+
+The policy now returns `{ recipe, plannedAtMs }`. The swipe/tap/swipe plan uses
+nominal times 120/2500/2700ms, so its pose-transition gap is always 2580ms.
+An initial POST still permits immediate first-swipe dispatch before 120ms;
+120ms is the model's planning anchor, not a new minimum delay. Real polling
+still decides when an action is dispatched, and frame timers still start at
+dispatch. This preserves the existing request-driven trigger and does not
+introduce a virtual browser clock or timer catch-up behavior.
+
+The compatibility boundary is explicit:
+
+- Equal effective seed, model, recipe order and planned times yield equal
+  synthesized values and per-action relative frame times. The effective seed
+  retains its existing Plan ID + adapter + caller seed composition.
+- Source-gap conditioning remains active: deliberately changing planned gesture
+  spacing can still select a different pose transition. It was not removed or
+  replaced with zero drift.
+- Actual action spacing, event timestamps, wall-clock reads, request boundaries,
+  payload bytes and live challenge results are not guaranteed equal. Severe
+  delays can still compress or overlap dispatch windows under the existing
+  trigger policy; this change does not implement late-action scheduling.
+- Completion still tracks actual dispatch end and observed requests. Deadline,
+  maxPosts and worker watchdog can terminate before all planned events execute.
+- Model/Profile/Shape artifacts, public schemas, Engine ABI and installation
+  Plan IDs are unchanged. Historical runtime outputs for the same caller seed
+  may change because accidental wall-clock gap inputs are no longer sampled.
+  Plan ID is still not a complete execution-version identity.
+
+Verification: 100 seeds across four early/on-time/late polling schedules produced
+identical programs. Real Realm runs with 10/250/1000ms polling matched all three
+dispatch programs and 98 trusted touch/motion/orientation values, including all
+three touch completions and resource disposal. Independent SDK worker captures
+with 10/1000ms polling matched all 98 values, taking 5866/6346ms; their value
+SHA-256 was `d5e828cf000a9b5ef6ebaf9b59142343df6c449638d03af2c7ea6bb41656a922`.
+The worker probe used an explicit 15000ms watchdog budget: the initial probe
+correctly timed out under the unchanged 5000ms default.
+
+`npm test` passed 279/279 without skips; `npm run check` passed. All 2026 corpus
+Plan IDs and operation digests remain equal to the previous baseline. No live
+supplier requests or new browser captures were made for this follow-up.
+
+### Opt-in response-feedback follow-up
+
+Implemented as an explicit mode; offline selection and posting remain unchanged.
+The SDK accepts a host-only transport with an exact URL allowlist. Each task
+owns a MessagePort; native jsdom XHR processes responses, CORS and cookies in the
+same Realm. In-flight requests delay completion, and task termination aborts host
+I/O. Redirect targets are checked separately. A jsdom 29 cookie-at-body-end race
+is handled locally so redirect cookies are present before the next hop.
+
+ANA closed-loop capture sends requests as generated and does not replay the
+captured body list. It rejects offline `postCount` selection. The adapter reuses
+freq-js and raw response cookies, preserving HttpOnly and Path rather than
+flattening them into document-visible boot cookies. Initial redirects are
+followed explicitly to retain their cookie provenance.
+
+The mode remains bounded: sensor endpoints must be same-origin in the ANA
+adapter; synchronous XHR, element subresources, protocol upgrades, fetch
+credentials=omit/no-cors and streaming request bodies are not supported. Responses
+are buffered and the fetch facade is partial. ABCK/BMS are separate Realms;
+arbitrary page state and script-only cookie changes are not carried between them.
+See [the network capture contract](../spec/network-capture.md) for exact limits.
+
+Verification uses actual workers, local HTTP and the actual freq-js transport,
+plus unchanged compiled ANA flow code with local adapters. It covers callbacks,
+headers, JSON, cookie scope, iframe requests, redirects, CORS, HTTP errors,
+worker reuse and I/O cancellation. No live ANA request or acceptance claim is
+part of this follow-up.
+
+Verification checkpoint: `npm test` passed 292/292 without skips or cancellations;
+`npm run check` passed. All 2026 Plan IDs, Shape hashes and operation digests
+match the prior checkpoint. The compiled resource gate passed with no active
+Runtime or live worker remaining. Its existing offline workload still grew RSS
+by about 620 MiB; this does not establish closed-loop memory stability or resolve
+the previously recorded RSS risk.
+
+### Scroll consistency investigation
+
+Status: reproduced in the initial investigation; opt-in bounded Page geometry
+replay has since been implemented below. Default mode retains the original
+geometry limitations. General browser layout is not claimed.
+
+No Android device was connected. The browser control was a fresh, isolated local
+headless Chrome 152.0.7977.77 process with CDP mobile metrics 394x749 and DPR 2.75,
+not an Android-device or ANA capture. Four local HTML fixtures exercised root
+scrolling, a nested overflow container, `touch-action:none`, and a non-passive
+`touchmove` listener calling `preventDefault()`. The page used four 600px bands;
+the nested case placed them in a 520px scrollport at viewport y=100. No supplier
+network requests were made.
+
+The native-input control moved from client y=550 to y=286 in twelve steps, ended
+the contact, and started another contact at y=550:
+
+| Browser case | Root scrollY | Container scrollTop | Next touch pageY/clientY | Pointer cancellation |
+| --- | ---: | ---: | --- | --- |
+| Root scrolling | 249 | n/a | 799/550 | One for the swipe |
+| Nested scrolling | 0 | 249 | 550/550 | One for the swipe |
+| touch-action:none | 0 | n/a | 550/550 | None |
+| Canceled touchmove | 0 | n/a | 550/550 | None |
+
+For root scrolling, `pageYOffset`, `document.scrollingElement.scrollTop` and
+`visualViewport.pageTop` also became 249; band 0's rectangle moved to y=-249 and
+the next contact hit band 1. In the nested case, the container rectangle stayed
+at y=100 while its content moved; hit testing likewise reached band 1 without
+adding the container offset to page coordinates. Programmatic `scrollTo(0,600)`
+still worked when gesture scrolling was blocked. During the root swipe, the
+native page coordinates followed the evolving root offset, not just a single
+offset applied to the following gesture. Neither the measured 249px displacement
+nor this desktop control's 109px screen/client offset is a universal constant.
+
+The same fixtures were run through actual mimic worker capture with the existing
+swipe/tap/swipe policy. All four completed three contacts, but had zero-size
+element rectangles, no hit-test result, BODY event targets, zero root scroll,
+and constant VisualViewport state. In the root fixture, later contacts reported
+pageY/clientY 723/559 and 703/539 while scrollY remained zero. The cancellation
+fixture recorded 28 prevented touchmoves but still emitted two pointercancels
+and accumulated the same synthetic offset. `scrollTo` remained unimplemented.
+These checks compare state invariants, not identical trajectories or identical
+effective seeds across different Page/Plan identities.
+
+The causal boundary spans CaptureSession's planned displacement, the constant
+View Driver data, and jsdom's lack of layout-backed geometry and hit testing.
+Updating one getter cannot determine which scroll container consumes a gesture,
+its scroll bounds, clipping, or the target of the next contact. A coherent next
+implementation therefore needed an explicit choice between bounded, captured Page
+geometry replay and a layout-capable browser engine. The former needs a new
+layout input/validity contract; the latter changes dependencies, execution cost,
+and the Profile/Driver integration boundary. Bounded replay was explicitly chosen.
+
+Local investigation artifacts: `/tmp/mimic-scroll-fixture.mjs`,
+`/tmp/mimic-scroll-probe.mjs`, `/tmp/mimic-scroll-replay.mjs`,
+`/tmp/mimic-scroll-chrome.json`, and `/tmp/mimic-scroll-replay.json`. These are
+temporary diagnostic artifacts, not a versioned browser baseline. Production
+code, Profile/Shape data and existing tests were not changed in that initial investigation.
+
+### Bounded layout implementation follow-up
+
+`Page.layout` now supplies versioned viewport, DOM-parent rectangles, scrollports,
+touch-action and front-to-back hit ordering. Planner preserves it in Page overlays
+and `Plan.boot`; JsdomRuntime creates private task-local state. Root/nested scroll,
+bounding rectangles, hit testing, VisualViewport and input page/screen coordinates
+now share that state. The capture loop does not additionally apply its synthetic
+offset when layout is supplied. Touch-action and pre-pan cancellation are respected;
+blocked drags do not produce pan cancellation or compatibility-mouse taps.
+
+The mode is optional and has a strict validity boundary: DOM/text/attribute or CSSOM
+changes, unmapped geometry, unsupported boxes, frames and shadow trees fail the task
+rather than returning stale zero geometry. A failed layout cleanup cannot skip
+Driver or Realm cleanup. This is fixed-viewport, borderless rectangle replay with
+non-inertial scrolling, not CSS reflow, scroll physics or complete pointer capture.
+See [the contract](../spec/layout-replay.md) for unsupported APIs and capture inputs.
+
+The desktop mobile-emulation fixture is now versioned at
+`test/fixtures/layout-browser.json`. `scripts/probe-layout.mjs` re-captures the local
+Chrome control; `scripts/replay-layout.mjs` executes the resulting Pages through
+the production SDK/worker. All four cases completed three contacts; the final
+worker run checked 280 event records for root/VisualViewport and coordinate
+consistency. Root and nested geometry matched the captured programmatic snapshots.
+The synthesized gestures intentionally did not have to reproduce Chrome's 249px
+native swipe displacement. Android evidence and live ANA acceptance remain absent.
+
+Engine ABI is now v2.12. All 2026 existing Plan IDs change and must be recompiled;
+their normalized comparison against the preceding baseline remains unchanged
+(using the existing Engine/Catalog and Canvas-version normalization). The 13 Shape
+artifacts are unchanged. Default effective interaction seeds therefore also change.
+The Page/Plan v2 schemas gain optional layout fields; Job/Result JSON is unchanged.
+
+Verification checkpoint: 301/301 tests and `npm run check` passed. The existing
+default-mode resource gate also passed: active Runtimes and live workers both
+returned to zero. It observed about 94 MiB RSS growth without forced GC; this is
+not a memory-stability result or a long-running layout-mode memory test. The full browser
+scrolling gap remains open outside this explicit bounded mode; the 8px takeover
+threshold, pointer capture, inertia, dynamic layouts and multi-device behavior
+are not declared repaired.
 
 ## Event-state fields
 
@@ -1116,7 +1333,7 @@ well enough to model directly.
 
 ## Implementation priority
 
-### Completed in the current change
+### Completed stages
 
 1. Project PointerEvent and TouchEvent from one TouchFrame.
 2. Terminate the pan with pointer cancellation and no tap-style mouse events.
@@ -1128,21 +1345,28 @@ well enough to model directly.
 6. Model relative orientation and one anonymous, gap-conditioned CSD4CA pose
    session across all gestures in a capture.
 7. Keep contacts within viewport bounds and carry prior upward-swipe
-   displacement across Touch, PointerEvent, and MouseEvent page coordinates.
+   displacement across Touch, PointerEvent, and MouseEvent page coordinates in
+   the legacy mode; bounded layout mode instead projects actual replay state.
+8. Avoid duplicate positions in ANA's short-list body selection.
+9. Separate planned synthesis time from actual dispatch time.
+10. Provide opt-in per-capture HTTP response and cookie feedback.
+11. Provide opt-in bounded Page geometry, scrolling and hit testing with explicit
+    invalidation. This does not supply general browser layout or Android evidence.
 
 ### Priority 1
 
 1. Support short drags, non-monotonic movement, and more than one direction.
 2. Model gesture selection and spacing as a session distribution rather than a
    fixed swipe/tap/swipe sequence.
-3. Capture direct screen/client/page coordinate evidence before modeling screen
-   origin or exposing interaction offsets through Realm scroll state.
+3. Extend bounded-layout evidence to Android devices and unsupported layouts;
+   do not generalize desktop-emulation screen offsets or takeover thresholds.
 4. Condition sensor hardware/noise and cadence on Profile only after obtaining
    evidence from more than the current single CSD4CA device.
 
 ### Priority 2
 
-1. Allow subsequent capture activity to consume prior response/cookie state.
+1. Extend opt-in per-capture response feedback to continuous page state across
+   capture phases, including script-written cookies, only with matching evidence.
 2. Re-evaluate unresolved Akamai lifecycle fields after the event sequence is
    native-shaped.
 
@@ -1171,7 +1395,10 @@ It should demonstrate all of the following in a decrypted capture:
 8. At least one gesture uses a non-document target.
 9. Page coordinates can differ from client coordinates when the page is
    scrolled.
-10. A repeated fixed seed reproduces the complete multi-stream event program.
+10. A repeated effective seed, model and action plan reproduce the synthesized
+    multi-stream values and per-action relative times. Real dispatch timestamps
+    and wall-clock-dependent payloads are checked separately, not required to
+    be byte-identical merely because the caller seed is unchanged.
 11. Different seeds vary the program without violating event order.
 12. ABCK body count, `_abck ~0~`, and the final business response are reported
     separately.

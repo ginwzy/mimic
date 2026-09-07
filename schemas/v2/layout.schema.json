@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mimic.local/schema/v2/layout.json",
+  "title": "Bounded Page Layout",
+  "type": "object", "additionalProperties": false,
+  "required": ["version", "viewport", "root", "nodes", "paintOrder"],
+  "properties": {
+    "version": { "const": 1 },
+    "viewport": {
+      "type": "object", "additionalProperties": false,
+      "required": ["width", "height", "screenOffsetX", "screenOffsetY"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "screenOffsetX": { "type": "number", "minimum": -10000000, "maximum": 10000000 },
+        "screenOffsetY": { "type": "number", "minimum": -10000000, "maximum": 10000000 }
+      }
+    },
+    "root": { "$ref": "#/definitions/scroll" },
+    "nodes": {
+      "type": "array", "minItems": 2, "maxItems": 1024,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["selector", "parent", "rect", "hit", "clip", "touchAction"],
+        "properties": {
+          "selector": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "parent": { "type": ["integer", "null"], "minimum": 0 },
+          "rect": { "$ref": "#/definitions/rect" },
+          "hit": { "type": "boolean" }, "clip": { "type": "boolean" },
+          "touchAction": { "enum": ["auto", "none", "pan-x", "pan-y"] },
+          "scroll": { "$ref": "#/definitions/scroll" }
+        }
+      }
+    },
+    "paintOrder": {
+      "type": "array", "minItems": 2, "maxItems": 1024, "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 0 }
+    }
+  },
+  "definitions": {
+    "rect": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number", "minimum": -10000000, "maximum": 10000000 },
+        "y": { "type": "number", "minimum": -10000000, "maximum": 10000000 },
+        "width": { "type": "number", "minimum": 0, "maximum": 10000000 },
+        "height": { "type": "number", "minimum": 0, "maximum": 10000000 }
+      }
+    },
+    "scroll": {
+      "type": "object", "additionalProperties": false,
+      "required": ["width", "height", "left", "top", "pan", "overscroll"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "height": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "left": { "type": "number", "minimum": 0 }, "top": { "type": "number", "minimum": 0 },
+        "pan": { "enum": ["none", "x", "y", "both"] },
+        "overscroll": { "enum": ["auto", "contain"] }
+      }
+    }
+  }
+}

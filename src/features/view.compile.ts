@@ -45,10 +45,10 @@ function geometry(window: WindowData | undefined, name: typeof GEOMETRY[number])
 
 export const viewFeature: Feature = {
   id: 'view',
-  describe: (_context, support) => describeCoverage(support, {
+  describe: ({ page }, support) => describeCoverage(support, {
     'view.api': 'partial',
-    'view.data': 'constant',
-  }),
+    'view.data': page?.layout ? 'partial' : 'constant',
+  }, page?.layout ? { 'view.api': 'mixed', 'view.data': 'mixed' } : {}),
   rev: '1',
   build: ({ profile }) => {
     const viewData: Record<typeof VIEW_VALUES[number], number> = {

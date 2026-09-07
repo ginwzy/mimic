@@ -31,7 +31,13 @@ export interface TouchFrame extends TimedFrame {
 
 export type InteractionFrame = MotionFrame | OrientationFrame | TouchFrame;
 
+export interface InteractionAction {
+  readonly recipe: InteractionRecipe;
+  /** Nominal capture-relative time for synthesis, independent of actual dispatch. */
+  readonly plannedAtMs: number;
+}
+
 export interface InteractionPolicy {
-  next(elapsedMs: number, postCount: number): InteractionRecipe | null;
+  next(elapsedMs: number, postCount: number): InteractionAction | null;
   isExhausted(): boolean;
 }
