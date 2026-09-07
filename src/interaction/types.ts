@@ -32,6 +32,6 @@ export interface TouchFrame extends TimedFrame {
 export type InteractionFrame = MotionFrame | OrientationFrame | TouchFrame;
 
 export interface InteractionPolicy {
-  next(elapsedMs: number, postCount: number): InteractionRecipe | null;
+  next(elapsedMs: number, postCount: number, latestInteractionEndAt: number): InteractionRecipe | null;
   isExhausted(): boolean;
 }

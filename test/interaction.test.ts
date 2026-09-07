@@ -4,10 +4,19 @@ import { JSDOM } from 'jsdom';
 import { CSD4CA_MODEL } from '../src/interaction/csd4ca.model.js';
 import { createInteractionSource } from '../src/interaction/dispatch.js';
 import { createInteractionPolicy } from '../src/interaction/policies.js';
-import { createInteractionSession, synthesizeInteraction } from '../src/interaction/synthesize.js';
+import { createInteractionSession, sampleSwipeGap, synthesizeInteraction } from '../src/interaction/synthesize.js';
 
 function synthesize(recipe: 'swipe' | 'tap', seed: string, sequence: number) {
   return synthesizeInteraction(recipe, createInteractionSession(seed), sequence, 0);
+}
+
+function sessionWithGap(gapMs: number) {
+  const data = Buffer.alloc(CSD4CA_MODEL.transitionQuantization.length * 2);
+  data.writeInt16LE(Math.round(gapMs * CSD4CA_MODEL.transitionQuantization[0]), 0);
+  return {
+    ...createInteractionSession('policy-gap'),
+    transitions: { count: 1, data: data.toString('base64') },
+  };
 }
 
 test('CSD4CA interaction model is anonymous, compact and structurally complete', () => {
@@ -94,6 +103,40 @@ test('interaction synthesis is model-backed, seeded, bounded and time ordered', 
   );
 });
 
+test('interaction sampling resamples rejected draws instead of returning the group mean', () => {
+  // These seeds reject their first two joint draws in the compiled model.
+  const cases = [
+    ['swipe', 'joint-retry-221'],
+    ['swipe', 'joint-retry-383'],
+    ['swipe', 'joint-retry-615'],
+    ['tap', 'joint-retry-268'],
+    ['tap', 'joint-retry-277'],
+    ['tap', 'joint-retry-350'],
+  ] as const;
+  for (const [recipe, seed] of cases) {
+    const session = createInteractionSession(seed);
+    const frames = synthesizeInteraction(recipe, session, 0, 0);
+    const start = frames.find((frame) => frame.kind === 'touch');
+    assert.ok(start);
+    const meanStart = session.group.mean.slice(0, 2).map((value) => Number(
+      Math.max(0.01, Math.min(0.99, value / CSD4CA_MODEL.quantization)).toFixed(6),
+    ));
+    assert.notDeepEqual([start.x, start.y], meanStart, `${recipe}:${seed}`);
+    assert.deepEqual(frames, synthesize(recipe, seed, 0));
+  }
+});
+
+test('interaction sampling fails explicitly when its bounded attempts are exhausted', () => {
+  const session = createInteractionSession('invalid-joint-model');
+  const mean = [...session.group.mean];
+  mean[1] = mean[(CSD4CA_MODEL.frames - 1) * CSD4CA_MODEL.stride + 1]!;
+  const invalidSession = { ...session, group: { ...session.group, mean, components: [] } };
+  assert.throws(
+    () => synthesizeInteraction('swipe', invalidSession, 0, 0),
+    { name: 'TypeError', message: /could not sample a valid gesture after 32 attempts/ },
+  );
+});
+
 test('joint swipe synthesis retains calibrated sensor timing spread', () => {
   const startOffsets: number[] = [];
   const endOffsets: number[] = [];
@@ -173,31 +216,92 @@ test('interaction session conditions pose transitions on gesture spacing', () =>
 });
 
 test('Akamai interaction policy separates joint swipe, tap and follow-up swipe', () => {
-  const requestDriven = createInteractionPolicy('akamai-sensor');
+  const requestDriven = createInteractionPolicy('akamai-sensor', sessionWithGap(2_000));
   assert.equal(requestDriven.isExhausted(), false);
-  assert.equal(requestDriven.next(0, 0), null);
-  assert.equal(requestDriven.next(10, 1), 'swipe');
-  assert.equal(requestDriven.next(20, 1), null);
-  assert.equal(requestDriven.next(30, 2), null);
-  assert.equal(requestDriven.next(2_000, 20), null);
-  assert.equal(requestDriven.next(2_499, 20), null);
-  assert.equal(requestDriven.next(2_500, 20), 'tap');
+  assert.equal(requestDriven.next(0, 0, 0), null);
+  assert.equal(requestDriven.next(10, 1, 0), 'swipe');
+  assert.equal(requestDriven.next(20, 1, 700), null);
+  assert.equal(requestDriven.next(30, 2, 700), null);
+  assert.equal(requestDriven.next(1_809, 20, 700), null);
+  assert.equal(requestDriven.next(1_810, 20, 700), 'tap');
   assert.equal(requestDriven.isExhausted(), false);
-  assert.equal(requestDriven.next(2_700, 20), 'swipe');
+  assert.equal(requestDriven.next(2_009, 20, 1_940), null);
+  assert.equal(requestDriven.next(2_010, 20, 1_940), 'swipe');
   assert.equal(requestDriven.isExhausted(), true);
-  assert.equal(requestDriven.next(3_200, 20), null);
+  assert.equal(requestDriven.next(3_200, 20, 2_500), null);
 
-  const timerDriven = createInteractionPolicy('akamai-sensor');
-  assert.equal(timerDriven.next(119, 0), null);
-  assert.equal(timerDriven.next(120, 0), 'swipe');
-  assert.equal(timerDriven.next(449, 0), null);
-  assert.equal(timerDriven.next(450, 0), null);
-  assert.equal(timerDriven.next(2_000, 20), null);
-  assert.equal(timerDriven.next(2_499, 20), null);
-  assert.equal(timerDriven.next(2_500, 20), 'tap');
-  assert.equal(timerDriven.next(2_700, 20), 'swipe');
+  const timerDriven = createInteractionPolicy('akamai-sensor', sessionWithGap(2_000));
+  assert.equal(timerDriven.next(119, 0, 0), null);
+  assert.equal(timerDriven.next(120, 0, 0), 'swipe');
+  assert.equal(timerDriven.next(1_919, 20, 700), null);
+  assert.equal(timerDriven.next(1_920, 20, 700), 'tap');
+  assert.equal(timerDriven.next(2_120, 20, 2_050), 'swipe');
   assert.equal(timerDriven.isExhausted(), true);
-  assert.equal(timerDriven.next(3_200, 20), null);
+  assert.equal(timerDriven.next(3_200, 20, 2_500), null);
+});
+
+test('Akamai interaction policy waits for late contacts to finish', () => {
+  const policy = createInteractionPolicy('akamai-sensor', sessionWithGap(2_000));
+  assert.equal(policy.next(0, 1, 0), 'swipe');
+  assert.equal(policy.next(2_200, 2, 700), 'tap');
+  assert.equal(policy.next(2_201, 3, 2_330), null);
+  assert.equal(policy.next(2_329, 3, 2_330), null);
+  assert.equal(policy.next(2_330, 3, 2_330), 'swipe');
+});
+
+test('an empty source gap window retains the engineering schedule without clipping gaps', () => {
+  const session = sessionWithGap(2_000);
+  assert.equal(sampleSwipeGap(session, 2_000, 2_000), 2_000);
+  assert.equal(sampleSwipeGap(session, 2_100, 2_500), null);
+  const policy = createInteractionPolicy('akamai-sensor', session);
+  assert.equal(policy.next(120, 0, 0), 'swipe');
+  assert.equal(policy.next(2_499, 20, 2_100), null);
+  assert.equal(policy.next(2_500, 20, 2_100), 'tap');
+  assert.equal(policy.next(2_700, 20, 2_630), 'swipe');
+});
+
+test('source-conditioned swipe schedules are seeded, varied and non-overlapping', () => {
+  const observedGaps = new Set<number>();
+  for (let index = 0; index < 1_000; index += 1) {
+    const session = createInteractionSession(`policy-spacing-${index}`);
+    const policy = createInteractionPolicy('akamai-sensor', session);
+    const recipes: string[] = [];
+    let latestEndAt = 0;
+    let expectedFollowUpAt = 2_700;
+    for (let elapsed = 0; elapsed <= 5_000 && !policy.isExhausted(); elapsed += 10) {
+      const recipe = policy.next(elapsed, 0, latestEndAt);
+      if (recipe === null) continue;
+      assert.ok(elapsed >= latestEndAt);
+      const frames = synthesizeInteraction(recipe, session, recipes.length, elapsed);
+      recipes.push(recipe);
+      latestEndAt = elapsed + frames.at(-1)!.at;
+      if (recipes.length === 1) {
+        const minimum = latestEndAt - elapsed + 200;
+        const maximum = 2_700 - elapsed;
+        const expectedGap = sampleSwipeGap(session, minimum, maximum);
+        assert.equal(sampleSwipeGap(session, minimum, maximum), expectedGap);
+        if (expectedGap !== null) {
+          expectedFollowUpAt = 120 + expectedGap;
+          assert.ok(expectedGap >= minimum && expectedGap <= maximum);
+          const data = Buffer.from(session.transitions.data, 'base64');
+          const sourceGaps = Array.from({ length: session.transitions.count }, (_, transition) => (
+            data.readInt16LE(transition * CSD4CA_MODEL.transitionQuantization.length * 2)
+            / CSD4CA_MODEL.transitionQuantization[0]
+          ));
+          assert.ok(sourceGaps.includes(expectedGap));
+        }
+      }
+      if (recipes.length === 3) {
+        assert.ok(elapsed >= expectedFollowUpAt && elapsed < expectedFollowUpAt + 10);
+        observedGaps.add(elapsed - 120);
+      }
+    }
+    assert.deepEqual(recipes, ['swipe', 'tap', 'swipe']);
+    assert.ok(latestEndAt <= 5_000);
+  }
+  assert.ok(observedGaps.size > 100);
+  assert.ok(Math.min(...observedGaps) < 1_000);
+  assert.ok(Math.max(...observedGaps) > 2_000);
 });
 
 interface ObservedInputFields {

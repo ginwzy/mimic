@@ -235,9 +235,9 @@ export class RuntimeApplication {
         const started = Date.now();
         let current = net(runtime.report());
         const adapter = job.interaction?.adapter ?? 'none';
-        const policy = createInteractionPolicy(adapter);
         const interactionSeed = `${plan.id}\u0000${adapter}\u0000${job.interaction?.seed ?? ''}`;
         const interactionSession = createInteractionSession(interactionSeed);
+        const policy = createInteractionPolicy(adapter, interactionSession);
         let interactionSequence = 0;
         let pageOffsetYRatio = 0;
         let postCount = nonEmptyPostCount(current);
@@ -246,7 +246,7 @@ export class RuntimeApplication {
         while (Date.now() - started < this.capture.deadlineMs
           && postCount < this.capture.maxPosts) {
           const elapsed = Date.now() - started;
-          const recipe = policy.next(elapsed, postCount);
+          const recipe = policy.next(elapsed, postCount, latestInteractionEndAt);
           if (recipe !== null) {
             const frames = synthesizeInteraction(recipe, interactionSession, interactionSequence++, elapsed);
             const dispatchResult = runtime.run(

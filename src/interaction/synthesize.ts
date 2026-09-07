@@ -50,6 +50,7 @@ const TIMING_INDEX = {
 } as const;
 const TRANSITION_GAP_TOLERANCE_RATIO = 0.25;
 const MIN_TRANSITION_GAP_TOLERANCE_MS = 250;
+const MAX_SAMPLE_ATTEMPTS = 32;
 
 function hashSeed(input: string): number {
   let value = 0x811c9dc5;
@@ -112,6 +113,19 @@ export function createInteractionSession(seed: string): InteractionSession {
   return { seed, group, transitions: pose.transitions, gravity: [...pose.gravity], heading: 0, swipeCount: 0 };
 }
 
+export function sampleSwipeGap(session: InteractionSession, minimumMs: number, maximumMs: number): number | null {
+  const data = Buffer.from(session.transitions.data, 'base64');
+  const stride = CSD4CA_MODEL.transitionQuantization.length * 2;
+  const gaps: number[] = [];
+  for (let index = 0; index < session.transitions.count; index += 1) {
+    const gap = data.readInt16LE(index * stride) / CSD4CA_MODEL.transitionQuantization[0];
+    if (gap >= minimumMs && gap <= maximumMs) gaps.push(gap);
+  }
+  if (gaps.length === 0) return null;
+  const next = createRandom(hashSeed(`${session.seed}\u0000gap\u0000${session.swipeCount}`));
+  return gaps[Math.floor(next() * gaps.length)]!;
+}
+
 function advanceSessionPose(session: InteractionSession, next: Random, elapsedMs: number): void {
   if (session.swipeCount > 0) {
     const transitions = session.transitions;
@@ -153,8 +167,8 @@ function advanceSessionPose(session: InteractionSession, next: Random, elapsedMs
   session.lastSwipeAt = elapsedMs;
 }
 
-function reconstruct(group: InteractionModelGroup, next: Random, varied = true): number[] {
-  const coefficients = group.components.map(() => varied ? normal(next) : 0);
+function reconstruct(group: InteractionModelGroup, next: Random): number[] {
+  const coefficients = group.components.map(() => normal(next));
   const values = new Array<number>(group.mean.length);
   for (let index = 0; index < group.mean.length; index += 1) {
     let standardized = group.mean[index]! / CSD4CA_MODEL.quantization;
@@ -196,15 +210,14 @@ function decodeSample(group: InteractionModelGroup, values: readonly number[]): 
 }
 
 function sample(group: InteractionModelGroup, next: Random): GestureSample {
-  let values = reconstruct(group, next);
-  let decoded = decodeSample(group, values);
-  if (decoded) return decoded;
-  values = reconstruct(group, next);
-  decoded = decodeSample(group, values);
-  if (decoded) return decoded;
-  decoded = decodeSample(group, reconstruct(group, next, false));
-  if (!decoded) throw new TypeError('CSD4CA interaction model group has an invalid mean gesture');
-  return decoded;
+  // Retry the whole joint sample; mean fallback makes unrelated seeds emit identical gestures.
+  for (let attempt = 0; attempt < MAX_SAMPLE_ATTEMPTS; attempt += 1) {
+    const decoded = decodeSample(group, reconstruct(group, next));
+    if (decoded) return decoded;
+  }
+  throw new TypeError(
+    `CSD4CA ${group.scenario}/${group.hand}/${group.direction} could not sample a valid gesture after ${MAX_SAMPLE_ATTEMPTS} attempts`,
+  );
 }
 
 function frameTriple(values: readonly number[], frame: number, start: number): readonly [number, number, number] {
