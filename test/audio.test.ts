@@ -1,8 +1,8 @@
+import { FixtureProfiles } from './fixtures.js';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
 import {
-  Catalog, compile, JsdomEngine, LegacyProfiles, parseJob,
+  Catalog, compile, JsdomEngine, parseJob,
 } from '../src/index.js';
 import {
   audioBo39,
@@ -11,7 +11,7 @@ import {
 } from '../src/features/audio.js';
 import { drivers, features } from '../src/features/index.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 
 /** Use baked shape + full feature set (production path). Rebuilds via audioShape hit chrome/dom WRITE_CONFLICT on hasPrivateToken. */
 async function open(id: string) {

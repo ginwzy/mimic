@@ -28,7 +28,8 @@
 import { createMimic } from 'mimic';
 
 const mimic = createMimic({
-  profile: 'chrome-mac',
+  profilesRoot: './profiles',
+  profile: 'android-chrome/23049pcd8g-v148-1589412',
   size: 2,
   timeoutMs: 5_000,
   maxQueue: 100,
@@ -47,7 +48,8 @@ try {
 
 | 参数 | 默认值 | 含义 |
 |---|---:|---|
-| `profile` | `chrome-mac` | 所有任务使用的 Profile ID |
+| `profile` | 无 | 执行任务必须指定本地 fp-env ID;仅 list/close 可省略 |
+| `profilesRoot` | 当前工作目录的 `./profiles` | 本地数据根目录,包含 `_fp-env` 子目录 |
 | `size` | 最多 4 个 worker | 按需启动的最大并行 worker 数 |
 | `timeoutMs` | `5000` | worker watchdog;设为 `null` 可关闭 |
 | `maxQueue` | `100` | 所有 worker 忙碌时允许等待的任务数 |
@@ -56,12 +58,13 @@ try {
 | `require` | 无 | 按能力声明最低 Support 等级 |
 | `capture` | 见下文 | 请求捕获的等待时间、轮询间隔和目标 POST 数 |
 
-`profilesRoot`、`shapesRoot`、`probePath` 可覆盖包内数据路径,主要用于自定义数据集与开发测试。
+`shapesRoot`、`probePath` 保留结构资源和探针路径配置;`profilesRoot` 不再指向包内设备库。
 
-### 直接使用 fp-env
+### 唯一数据源 fp-env
 
 `profiles/generate.mjs` 下载的原始 `z__env` 文件会写入 `profiles/_fp-env/<platform>_<version>/`。该目录是
-本地 raw cache,默认被 Git 和 npm 构建排除。使用仓库 Profile root 时,mimic 会自动索引这些文件：
+本地 raw cache,默认被 Git 和 npm 构建排除。运行时只索引这些文件,不再读取旧 Profile JSON 或解析
+`meta.extends`,也不会回退到内置设备。以下下载只在准备数据时执行,Plan 编译和 capture 不联网取数据：
 
 ```bash
 node profiles/generate.mjs --startAfterId 1589411 --limit 100
@@ -69,7 +72,8 @@ npm run build
 node dist/src/cli.js list profiles --profiles ./profiles
 ```
 
-生成的 ID 采用 `<platform>-<host>/<model>-v<version>-<recordId>`。例如：
+生成的 ID 采用 `<platform>-<host>/<model>-v<version>-<recordId>`。必须从 list 结果选择已存在的 ID;
+下面仅为示例。数据根目录应是 `_fp-env` 的父目录：
 
 ```js
 const mimic = createMimic({
@@ -81,6 +85,10 @@ const mimic = createMimic({
 raw 数据在主线程按需规范化成内存 Profile/Page/Shape。原始采集字段标记为 `captured`;缺失但可由 Chromium
 合同确定的 `navigator.vendor`、`cookieEnabled` 标记为 `derived`;当前无法可靠映射的 Audio、Canvas 和字体
 数据保持 `unsupported`。未知版本的 Shape 从 Feature 表生成并标记为 `derived`,不会冒充真机结构采集。
+
+空目录的 `list profiles` 返回空数组,执行缺失 ID 会报 `BAD_PROFILE`。SDK 不再默认使用 `chrome-mac`;
+未指定 profile 的执行请求会报错。ANA/Cebu 可以从非空 Android Chrome raw 池随机选取,池为空直接报错。
+构建、npm 安装和测试不要求私人 raw 缓存存在;测试使用独立夹具,包内不分发设备身份数据。
 
 ### run
 
@@ -293,11 +301,11 @@ CLI 每次只向 stdout 写一行 JSON。参数错误写入 stderr 的 JSON,失�
 ### 执行与检查
 
 ```bash
-mimic run script.js --profile chrome-mac
-mimic capture script.js --profile chrome-mac
-mimic diagnose script.js --profile chrome-mac
-mimic probe --profile chrome-mac
-mimic plan script.js --profile chrome-mac
+mimic run script.js --profile android-chrome/23049pcd8g-v148-1589412
+mimic capture script.js --profile android-chrome/23049pcd8g-v148-1589412
+mimic diagnose script.js --profile android-chrome/23049pcd8g-v148-1589412
+mimic probe --profile android-chrome/23049pcd8g-v148-1589412
+mimic plan script.js --profile android-chrome/23049pcd8g-v148-1589412
 mimic list profiles
 mimic list shapes
 mimic list features
@@ -311,8 +319,8 @@ mimic list drivers
 
 | 参数 | CLI 默认值 | 含义 |
 |---|---:|---|
-| `--profile <id>` | `chrome-mac` | Profile ID |
-| `--profiles <dir>` | 包内数据 | 自定义 Profile 根目录 |
+| `--profile <id>` | 无 | 执行命令必填的 fp-env Profile ID |
+| `--profiles <dir>` | 当前工作目录的 `./profiles` | 本地数据根目录,包含 `_fp-env` |
 | `--probe <file>` | 包内探针 | 自定义 probe 脚本 |
 | `--pool-size <n>` | `1` | worker 数 |
 | `--timeout <ms>` | `5000` | worker watchdog |
@@ -327,13 +335,12 @@ mimic list drivers
 ### diff
 
 ```bash
-mimic diff chrome-mac
-mimic diff chrome-mac --baseline macos-chrome-v148
-mimic diff --profile chrome-mac --baseline ./macos-chrome-baseline.json --t1 true
+mimic diff android-chrome/23049pcd8g-v148-1589412 --baseline ./android-chrome-baseline.json
+mimic diff --profile android-chrome/23049pcd8g-v148-1589412 --baseline ./android-chrome-baseline.json --t1 true
 ```
 
-`diff` 最多接受一个位置参数作为 Profile;也可使用共享的 `--profile`,两者都省略时使用
-`chrome-mac`。`--baseline` 接受内建 baseline 名或 JSON 快照路径;省略时按内建配对、同名或唯一前缀
+`diff` 最多接受一个位置参数作为 Profile;也可使用共享的 `--profile`,两者都省略时报错。
+`--baseline` 接受内建 baseline 名或 JSON 快照路径;省略时按同名或唯一前缀
 查找。`--t1 true` 只汇总 T1 gate。
 
 输出是标准 `Result`,其中 `value` 为 `{ profile, baseline, summary, entries }`,并用 entries 区分
@@ -377,6 +384,9 @@ mimic-data/
   catalog.json               从全部 Shape 可重复构建的 Catalog
 ```
 
+这些是 collect 的证据和回归产物,不会被默认 fp-env 加载器当作第二套运行时设备库扫描。
+高级调用仍可通过 `ProfileFiles` 显式读取它们进行采集验证。
+
 只有身份与结构两部分证据都存在时才生成派生物;原始 `captures/` 永远不被 normalize 覆写。
 
 ## 执行 HTTP API
@@ -397,7 +407,7 @@ mimic-data/
 curl -sS http://127.0.0.1:3000/run \
   -H 'content-type: application/json' \
   --data '{
-    "profile":"chrome-mac",
+    "profile":"android-chrome/23049pcd8g-v148-1589412",
     "job":{"kind":"run","code":"({ua:navigator.userAgent})","timeout":1000}
   }'
 ```
@@ -406,7 +416,7 @@ curl -sS http://127.0.0.1:3000/run \
 curl -sS http://127.0.0.1:3000/capture \
   -H 'content-type: application/json' \
   --data '{
-    "profile":"chrome-mac",
+    "profile":"android-chrome/23049pcd8g-v148-1589412",
     "job":{"kind":"capture","code":"navigator.sendBeacon(\"/t\",\"body\")"}
   }'
 ```

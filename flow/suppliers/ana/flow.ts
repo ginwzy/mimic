@@ -4,8 +4,6 @@ import type { HeadersInit } from '../../client.js';
 import { ANA_SELECT_URL, createAnaRequest } from './request.js';
 import type { AnaCredentials, AnaVerifyResult } from './request.js';
 
-const DEFAULT_PROFILE = 'android-chrome/2201116sg-v145-10025';
-
 export interface AnaFlowOptions {
   proxy?: string;
   proxyHeaders?: HeadersInit;
@@ -60,7 +58,8 @@ async function resolveProfile(explicit: string | undefined, profilesRoot: string
     if (!profiles.includes(explicit)) throw new Error(`profile not found: ${explicit}`);
     return explicit;
   }
-  return profiles.length === 0 ? DEFAULT_PROFILE : profiles[randomInt(profiles.length)] as string;
+  if (profiles.length === 0) throw new Error('no Android Chrome fp-env records; configure profilesRoot and download data first');
+  return profiles[randomInt(profiles.length)] as string;
 }
 
 export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowResult> {

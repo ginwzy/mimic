@@ -30,7 +30,7 @@ function runBridge(input: object): Promise<BridgeResult> {
       }
       resolve(JSON.parse(stdout.slice(marker + RESULT_PREFIX.length)) as BridgeResult);
     });
-    child.stdin.end(JSON.stringify(input));
+    child.stdin.end(JSON.stringify({ profilesRoot: path.resolve('test/fixtures/fp-env'), ...input }));
   });
 }
 
@@ -79,7 +79,7 @@ test('ANA/Cebu bridge forwards independent seeds to the model-backed ABCK adapte
       })), { once: true });
       post('initial');
     })()`,
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     cookies: [],
     deadlineMs: 2_000,
     maxPosts: 4,
@@ -171,7 +171,7 @@ test('ANA/Cebu separates canceled swipe and trusted tap compatibility events', {
         events,
       })), 5300);
     })()`,
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     cookies: [],
     deadlineMs: 6_000,
     maxPosts: 2,

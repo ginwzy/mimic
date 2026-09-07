@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { startServer } from '../src/http/server.js';
 
-const profilesRoot = path.resolve('profiles');
+const profilesRoot = path.resolve('test/fixtures/fp-env');
 const probePath = path.resolve('resources/probe.js');
 
 interface Response {
@@ -82,7 +82,7 @@ test('HTTP exposes the common TaskRequest/Result contract on loopback', async ()
       method: 'POST',
       path: '/run',
       body: {
-        profile: 'android-webview-v138',
+        profile: 'android-webview/unknown-v138-1',
         job: { kind: 'run', code: '({ answer: 6 * 7 })' },
       },
     });
@@ -93,12 +93,12 @@ test('HTTP exposes the common TaskRequest/Result contract on loopback', async ()
 
     const profiles = await request(port, { path: '/profiles' });
     assert.equal(profiles.status, 200);
-    assert.ok((profiles.body as string[]).includes('android-webview-v138'));
+    assert.ok((profiles.body as string[]).includes('android-webview/unknown-v138-1'));
 
     const mismatch = await request(port, {
       method: 'POST',
       path: '/capture',
-      body: { profile: 'android-webview-v138', job: { kind: 'run', code: '1' } },
+      body: { profile: 'android-webview/unknown-v138-1', job: { kind: 'run', code: '1' } },
     });
     assert.equal(mismatch.status, 400);
     assert.equal((mismatch.body as { error?: { code?: string } }).error?.code, 'BAD_ROUTE_KIND');
@@ -116,7 +116,7 @@ test('HTTP exposes the common TaskRequest/Result contract on loopback', async ()
   }
 
   await assert.rejects(
-    handle.executor.run({ profile: 'android-webview-v138', job: { kind: 'run', code: '1' } }),
+    handle.executor.run({ profile: 'android-webview/unknown-v138-1', job: { kind: 'run', code: '1' } }),
     /destroy|closed/i,
   );
 });
@@ -129,7 +129,7 @@ test('HTTP bounds request bodies and maps executor backpressure to 503', async (
       method: 'POST',
       path: '/run',
       body: {
-        profile: 'android-webview-v138',
+        profile: 'android-webview/unknown-v138-1',
         job: { kind: 'run', code: 'x'.repeat(128) },
       },
     });
@@ -143,14 +143,14 @@ test('HTTP bounds request bodies and maps executor backpressure to 503', async (
   try {
     await once(saturated.server, 'listening');
     const running = saturated.executor.run({
-      profile: 'android-webview-v138',
+      profile: 'android-webview/unknown-v138-1',
       job: { kind: 'run', code: 'while (true) {}', timeout: 100 },
     });
     assert.equal(saturated.executor.stats.active, 1);
     const overloaded = await request(portOf(saturated.server), {
       method: 'POST',
       path: '/run',
-      body: { profile: 'android-webview-v138', job: { kind: 'run', code: '42' } },
+      body: { profile: 'android-webview/unknown-v138-1', job: { kind: 'run', code: '42' } },
     });
     assert.equal(overloaded.status, 503);
     assert.equal((overloaded.body as { error?: { code?: string } }).error?.code, 'ERR_MIMIC_QUEUE_FULL');
@@ -171,7 +171,7 @@ test('HTTP destroys workers when listen fails', async () => {
     assert.equal((error as NodeJS.ErrnoException).code, 'EADDRINUSE');
     await failed.close();
     await assert.rejects(
-      failed.executor.run({ profile: 'android-webview-v138', job: { kind: 'run', code: '1' } }),
+      failed.executor.run({ profile: 'android-webview/unknown-v138-1', job: { kind: 'run', code: '1' } }),
       /destroy|closed/i,
     );
   } finally {

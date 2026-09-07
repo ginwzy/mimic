@@ -5,11 +5,11 @@ import { digest, seal } from '../core/seal.js';
 import type { Data, Hash, JsonValue, Target } from '../core/types.js';
 import { shape as builtShape } from '../features/shape.js';
 import {
-  importLegacyData,
-  legacyTarget,
+  normalizeIdentity,
+  identityTarget,
   type ImportedProfile,
   type MigrationReport,
-} from '../legacy/profiles.js';
+} from '../collect/identity.js';
 import type { CollectBundle, RawEvidence } from './types.js';
 import { probeShape } from './shape.js';
 import type { ProbeSnapshot } from './probe.js';
@@ -67,14 +67,14 @@ export function normalizeCollect(bundle: CollectBundle): NormalizedCollect {
   }
   const profileRaw = jsonCopy(bundle.profileRaw);
   const probeSnapshot = jsonCopy(bundle.probeSnapshot);
-  const target = legacyTarget(profileRaw);
+  const target = identityTarget(profileRaw);
   validatePair(profileRaw, probeSnapshot, target);
 
   const identityHash = digest(profileRaw);
   const probeHash = digest(probeSnapshot);
   const id = profileName(target, identityHash);
   const meta = record(profileRaw.meta) || {};
-  const legacy = { ...profileRaw, meta: { ...meta, name: id } };
+  const identity = { ...profileRaw, meta: { ...meta, name: id } };
   const source = { kind: 'capture' as const, hash: identityHash };
   const shape = probeShape(builtShape(parseShape(seal({
     schema: 2 as const,
@@ -86,7 +86,7 @@ export function normalizeCollect(bundle: CollectBundle): NormalizedCollect {
     ops: [],
     support: { structure: 'derived' as const },
   }))), probeSnapshot as ProbeSnapshot);
-  const imported = importLegacyData(id, legacy, { source, shape });
+  const imported = normalizeIdentity(id, identity, { source, shape });
   return {
     capture: { id: bundle.id, hash: bundle.hash },
     profile: imported.profile,

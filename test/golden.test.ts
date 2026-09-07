@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { createNodeApplication, JsdomEngine } from '../src/index.js';
+import { FixtureProfiles } from './fixtures.js';
 import {
   collectApplicationOracle,
   evaluateGoldenOracle,
@@ -19,7 +20,7 @@ function application() {
   const engine = new JsdomEngine();
   const app = createNodeApplication({
     engine,
-    profilesRoot: path.resolve('profiles'),
+    profiles: new FixtureProfiles(),
     probePath: path.resolve('resources/probe.js'),
     capture: { deadlineMs: 1_000, pollMs: 5, maxPosts: 5 },
   });
@@ -28,7 +29,7 @@ function application() {
 
 test('Application preserves the fixed v1 behavior and execution golden corpus', async () => {
   const { app, engine } = application();
-  const observation = await collectApplicationOracle(app);
+  const observation = await collectApplicationOracle(app, { chrome: 'chrome-mac', webview: 'android-webview-v138' });
   const gate = evaluateGoldenOracle(await expected(), observation);
 
   assert.deepEqual(gate.failures, []);

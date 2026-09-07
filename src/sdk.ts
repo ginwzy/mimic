@@ -26,7 +26,7 @@ export class Mimic {
 
   constructor(options: MimicOptions = {}) {
     this.context = {
-      profile: options.profile ?? 'chrome-mac',
+      profile: options.profile ?? '',
       ...(options.page === undefined ? {} : { page: structuredClone(options.page) }),
       ...(options.shape === undefined ? {} : { shape: structuredClone(options.shape) }),
       ...(options.require === undefined ? {} : { require: structuredClone(options.require) }),
@@ -74,6 +74,9 @@ export class Mimic {
   }
 
   private request(job: Job): TaskRequest {
+    if (!this.context.profile.trim()) {
+      throw new TypeError('profile is required; use list("profiles") to select a local fp-env ID');
+    }
     return structuredClone({ ...this.context, job });
   }
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import path from 'node:path';
 import { benchmarkRuntime } from '../src/quality/bench.js';
 import { runLeakGate } from '../src/quality/leak.js';
 
@@ -9,7 +10,8 @@ test('runtime benchmark emits machine-readable metrics', async () => {
     warmup: 0,
     rounds: 1,
     poolSize: 1,
-    profiles: ['android-webview-v138'],
+    profiles: ['android-webview/unknown-v138-1'],
+    profilesRoot: path.resolve('test/fixtures/fp-env'),
   });
 
   assert.equal(report.schema, 3);
@@ -19,8 +21,8 @@ test('runtime benchmark emits machine-readable metrics', async () => {
   assert.ok(report.machine.jsdom.length > 0);
   assert.ok(report.machine.cpu.model.length > 0);
   assert.ok(report.machine.cpu.logical > 0);
-  assert.deepEqual(report.config.profiles, ['android-webview-v138']);
-  const profile = report.runtime.profiles['android-webview-v138'];
+  assert.deepEqual(report.config.profiles, ['android-webview/unknown-v138-1']);
+  const profile = report.runtime.profiles['android-webview/unknown-v138-1'];
   assert.ok(profile);
   assert.ok(profile.createMs.median > 0);
   assert.ok(profile.createMs.p95 > 0);
@@ -31,7 +33,10 @@ test('runtime benchmark emits machine-readable metrics', async () => {
 });
 
 test('two-round leak gate proves application, executor, worker and child-process cleanup', async () => {
-  const report = await runLeakGate({ tasksPerRound: 1, workerSize: 1, timeoutMs: 20_000 });
+  const report = await runLeakGate({
+    tasksPerRound: 1, workerSize: 1, timeoutMs: 20_000,
+    profile: 'android-webview/unknown-v138-1', profilesRoot: path.resolve('test/fixtures/fp-env'),
+  });
 
   assert.equal(report.schema, 1);
   assert.equal(report.gate.status, 'passed');

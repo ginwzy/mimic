@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LegacyProfiles } from '../dist/src/legacy/profiles.js';
+import { FpEnvProfiles } from '../dist/src/node/fp-env.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const JSON_ROOTS = ['package.json', 'package-lock.json', 'profiles', 'resources', 'schemas'];
@@ -43,10 +43,7 @@ for (const file of jsonFiles) {
   }
 }
 
-const profiles = new LegacyProfiles(
-  path.join(ROOT, 'profiles'),
-  path.join(ROOT, 'resources/shapes'),
-);
+const profiles = new FpEnvProfiles(path.join(ROOT, 'profiles'));
 const profileIds = await profiles.list();
 for (const id of profileIds) await profiles.load(id);
 

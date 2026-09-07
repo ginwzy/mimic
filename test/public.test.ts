@@ -45,13 +45,17 @@ test('public client is a runtime facade over only the stable SDK methods', async
   }
 });
 
-test('zero-config public SDK resolves packaged assets outside the consumer cwd', async (t) => {
+test('public SDK uses explicit fp-env data and packaged runtime assets outside the consumer cwd', async (t) => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'mimic-public-'));
   t.after(() => rm(cwd, { recursive: true, force: true }));
   const entry = new URL('../src/public.js', import.meta.url).href;
   const run = await child(cwd, `
     import { createMimic } from ${JSON.stringify(entry)};
-    const mimic = createMimic({ size: 1, timeoutMs: 5000 });
+    const mimic = createMimic({
+      profile: 'android-webview/unknown-v138-1',
+      profilesRoot: ${JSON.stringify(path.resolve('test/fixtures/fp-env'))},
+      size: 1, timeoutMs: 5000,
+    });
     try {
       const result = await mimic.run({ kind: 'run', code: 'navigator.userAgent' });
       console.log(JSON.stringify(result));

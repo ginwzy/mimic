@@ -79,7 +79,7 @@ async function temporaryRoot(t: test.TestContext): Promise<string> {
 }
 
 async function fixture(): Promise<{ profileRaw: Record<string, unknown>; probeSnapshot: Record<string, unknown> }> {
-  const profileRaw = JSON.parse(await readFile(path.resolve('profiles/android-webview-v138.json'), 'utf8')) as {
+  const profileRaw = JSON.parse(await readFile(path.resolve('test/fixtures/collect-identity.json'), 'utf8')) as {
     meta: Record<string, unknown>;
   } & Record<string, unknown>;
   delete profileRaw.meta.name;

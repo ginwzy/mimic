@@ -6,7 +6,7 @@ import test from 'node:test';
 import { runCli, type CliIo } from '../src/cli.js';
 import type { CliServerHandle } from '../src/cli.js';
 
-const profilesRoot = path.resolve('profiles');
+const profilesRoot = path.resolve('test/fixtures/fp-env');
 const probePath = path.resolve('resources/probe.js');
 
 function captureIo(cwd = process.cwd()): { readonly io: CliIo; readonly stdout: string[]; readonly stderr: string[] } {
@@ -25,7 +25,7 @@ function captureIo(cwd = process.cwd()): { readonly io: CliIo; readonly stdout: 
 
 function common(): string[] {
   return [
-    '--profile', 'android-webview-v138',
+    '--profile', 'android-webview/unknown-v138-1',
     '--profiles', profilesRoot,
     '--probe', probePath,
     '--pool-size', '1',
@@ -119,7 +119,7 @@ test('CLI probe, plan, and list share profile/profiles/probe configuration', asy
 
     const list = captureIo(temp);
     assert.equal(await runCli(['list', 'profiles', ...common()], list.io), 0);
-    assert.ok((output(list.stdout) as string[]).includes('android-webview-v138'));
+    assert.ok((output(list.stdout) as string[]).includes('android-webview/unknown-v138-1'));
   } finally {
     await fs.rm(temp, { recursive: true, force: true });
   }
@@ -148,7 +148,7 @@ test('CLI diff emits a machine-readable Result and passes an exact profile basel
   const cli = captureIo();
   const code = await runCli([
     'diff',
-    'android-webview-v138',
+    'android-webview/unknown-v138-1',
     '--baseline', 'android-webview-v138',
     ...common(),
   ], cli.io);
@@ -169,7 +169,7 @@ test('CLI diff emits a machine-readable Result and passes an exact profile basel
   assert.equal(result.ok, true);
   assert.equal(typeof result.plan, 'string');
   assert.equal(typeof result.support, 'object');
-  assert.equal(result.value?.profile, 'android-webview-v138');
+  assert.equal(result.value?.profile, 'android-webview/unknown-v138-1');
   assert.match(result.value?.baseline ?? '', /android-webview-v138\.json$/);
   assert.deepEqual(result.value?.entries, []);
   assert.deepEqual(result.value?.summary?.counts, { TELL: 0, MISSING: 0, EXTRA: 0, INFO: 0 });

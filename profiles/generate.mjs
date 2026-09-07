@@ -153,3 +153,14 @@ for (const record of records) {
 }
 
 console.log(`Generated ${records.length} env file(s) under ${OUTPUT_ROOT}`)
+console.log(`Last ID: ${records.at(-1)?.id ?? 'none'}`)
+
+const distribution = new Map()
+for (const { subdir } of records) {
+    distribution.set(subdir, (distribution.get(subdir) || 0) + 1)
+}
+console.log('Environment distribution (platform_browser-major):')
+if (records.length === 0) console.log('  none')
+for (const [environment, count] of [...distribution].sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }))) {
+    console.log(`  ${environment}: ${count} (${(count / records.length * 100).toFixed(1)}%)`)
+}

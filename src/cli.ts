@@ -14,7 +14,7 @@ import { encodeResult } from './core/result.js';
 import type { JsonValue } from './core/types.js';
 import { DEFAULT_TIMEOUT_MS } from './executor/pool.js';
 import { createMimic } from './sdk.js';
-import { DEFAULT_PROBE_PATH, DEFAULT_PROFILES_ROOT } from './node/assets.js';
+import { DEFAULT_PROBE_PATH } from './node/assets.js';
 import { diff, summarize, type ProbeSnapshot } from './collect/probe.js';
 
 export type CliServerHandle = Pick<ServerHandle, 'server' | 'close'>;
@@ -150,8 +150,8 @@ function sharedOptions(args: Arguments, io: CliIo) {
   const size = integerFlag(args.flags, 'pool-size', 1, 1);
   const timeoutMs = integerFlag(args.flags, 'timeout', DEFAULT_TIMEOUT_MS, 1);
   return {
-    profile: stringFlag(args.flags, 'profile', 'chrome-mac') as string,
-    profilesRoot: pathFlag(args, io, 'profiles', DEFAULT_PROFILES_ROOT),
+    profile: stringFlag(args.flags, 'profile', '') as string,
+    profilesRoot: pathFlag(args, io, 'profiles', absolute(io.cwd, 'profiles')),
     probePath: pathFlag(args, io, 'probe', DEFAULT_PROBE_PATH),
     size,
     timeoutMs,
@@ -233,10 +233,6 @@ async function sdkCommand(args: Arguments, io: CliIo): Promise<number> {
   }
 }
 
-const pairedBaselines: Readonly<Record<string, string>> = {
-  'chrome-mac': 'macos-chrome-v148',
-};
-
 function baselineRoot(probePath: string): string {
   return path.join(path.dirname(probePath), 'baselines');
 }
@@ -260,8 +256,6 @@ async function baselineFile(args: Arguments, io: CliIo, profile: string, probePa
   } catch {
     throw new TypeError('diff requires --baseline <snapshot.json>');
   }
-  const paired = pairedBaselines[profile];
-  if (paired !== undefined) return path.join(root, `${paired}.json`);
   if (names.includes(profile)) return path.join(root, `${profile}.json`);
   const prefixed = names.filter((name) => name.startsWith(`${profile}-`));
   if (prefixed.length === 1) return path.join(root, `${prefixed[0]}.json`);
@@ -298,6 +292,7 @@ async function diffCommand(args: Arguments, io: CliIo): Promise<number> {
   if (args.positionals.length > 1) throw new TypeError('diff accepts at most one profile');
   const shared = sharedOptions(args, io);
   const profile = args.positionals[0] ?? shared.profile;
+  if (!profile) throw new TypeError('diff requires --profile <fp-env ID>');
   const file = await baselineFile(args, io, profile, shared.probePath);
   const baseline = snapshot(JSON.parse(await fs.readFile(file, 'utf8')) as unknown, 'baseline');
   const mimic = createMimic({ ...shared, profile });

@@ -1,11 +1,10 @@
+import { FixtureProfiles } from './fixtures.js';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
 import {
   Catalog,
   compile,
   JsdomEngine,
-  LegacyProfiles,
   MimicError,
   parseJob,
   parseProfile,
@@ -18,7 +17,7 @@ import {
 } from '../src/index.js';
 import { JSDOM_ENGINE_ABI } from '../src/engine/jsdom.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 
 test('JsdomEngine locks the current ABI', () => {
   assert.equal(JSDOM_ENGINE_ABI, 'mimic-jsdom-v2.9');

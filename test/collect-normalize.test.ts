@@ -8,7 +8,7 @@ import { MimicError } from '../src/core/error.js';
 import { createNodeApplication } from '../src/node/app.js';
 
 async function fixture() {
-  const profileRaw = JSON.parse(await readFile(path.resolve('profiles/android-webview-v138.json'), 'utf8')) as {
+  const profileRaw = JSON.parse(await readFile(path.resolve('test/fixtures/collect-identity.json'), 'utf8')) as {
     meta: Record<string, unknown>;
     navigator: { userAgent: string };
   };

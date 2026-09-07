@@ -1,7 +1,7 @@
+import { FixtureProfiles } from './fixtures.js';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
-import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal } from '../src/index.js';
+import { Catalog, compile, JsdomEngine, parseJob, parseProfile, parseShape, seal } from '../src/index.js';
 import { chromeDriver, chromeFeature, touchDriver, touchFeature } from '../src/features/chrome.js';
 import { globalsDriver, globalsFeature } from '../src/features/globals.js';
 import { globalsShape } from '../src/features/globals.shape.js';
@@ -17,7 +17,7 @@ import {
 import { uaDriver, uaFeature } from '../src/features/ua.js';
 import { viewDriver, viewFeature } from '../src/features/view.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 const features = [
   viewFeature, screenFeature, chromeFeature, touchFeature, navFeature, uaFeature, pluginsFeature, globalsFeature,
 ];

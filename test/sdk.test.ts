@@ -4,13 +4,13 @@ import test from 'node:test';
 import { createNodeApplication } from '../src/node/app.js';
 import { createMimic } from '../src/sdk.js';
 
-const profilesRoot = path.resolve('profiles');
+const profilesRoot = path.resolve('test/fixtures/fp-env');
 const probePath = path.resolve('resources/probe.js');
 
 test('SDK and in-process Application preserve identical Job/Result semantics', async () => {
   const app = createNodeApplication({ profilesRoot, probePath });
   const mimic = createMimic({
-    profile: 'android-webview-v138',
+    profile: 'android-webview/unknown-v138-1',
     profilesRoot,
     probePath,
     size: 1,
@@ -20,14 +20,14 @@ test('SDK and in-process Application preserve identical Job/Result semantics', a
   const job = { kind: 'run' as const, code: '({ answer: 6 * 7, ua: navigator.userAgent })' };
   try {
     const [direct, worker] = await Promise.all([
-      app.execute({ profile: 'android-webview-v138', job }),
+      app.execute({ profile: 'android-webview/unknown-v138-1', job }),
       mimic.run(job),
     ]);
     assert.deepEqual(worker, direct);
 
     const plan = await mimic.plan(job);
     assert.equal(plan.id, worker.plan);
-    assert.ok((await mimic.list('profiles')).includes('android-webview-v138'));
+    assert.ok((await mimic.list('profiles')).includes('android-webview/unknown-v138-1'));
   } finally {
     await mimic.close();
     await mimic.close();
@@ -36,7 +36,7 @@ test('SDK and in-process Application preserve identical Job/Result semantics', a
 
 test('SDK methods enforce task kinds while sharing one configured context', async () => {
   const mimic = createMimic({
-    profile: 'android-webview-v138', profilesRoot, probePath, size: 1, timeoutMs: 5_000,
+    profile: 'android-webview/unknown-v138-1', profilesRoot, probePath, size: 1, timeoutMs: 5_000,
     capture: { deadlineMs: 50, pollMs: 5, maxPosts: 1 },
   });
   try {

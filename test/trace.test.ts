@@ -1,11 +1,10 @@
+import { FixtureProfiles } from './fixtures.js';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test from 'node:test';
 import {
   Catalog,
   compile,
   JsdomEngine,
-  LegacyProfiles,
   parseJob,
   parseProfile,
   parseShape,
@@ -14,7 +13,7 @@ import {
 import { traceDriver, traceFeature } from '../src/features/trace.js';
 import { traceShape } from '../src/features/trace.shape.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 
 async function open(enabled: boolean) {
   const imported = await store.load('chrome-mac');

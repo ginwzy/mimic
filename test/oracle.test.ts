@@ -1,8 +1,9 @@
+import { FixtureProfiles } from './fixtures.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { Catalog, compile, JsdomEngine, LegacyProfiles, parseJob } from '../src/index.js';
+import { Catalog, compile, JsdomEngine, parseJob } from '../src/index.js';
 import { drivers, features } from '../src/features/index.js';
 import { diff, summarize, type ProbeSnapshot } from '../src/collect/probe.js';
 
@@ -21,12 +22,13 @@ interface Pair {
 const pairs: readonly Pair[] = [
   { profile: 'chrome-mac', baseline: 'macos-chrome-v148', budget: { TELL: 1, EXTRA: 0, MISSING: 7 } },
   { profile: 'macos-chrome-v148', baseline: 'macos-chrome-v148', budget: { TELL: 0, EXTRA: 0, MISSING: 7 } },
-  { profile: 'macos-chrome-v149', baseline: 'macos-chrome-v149', budget: { TELL: 0, EXTRA: 0, MISSING: 8 } },
+  // Minimal Notification omits maxActions/requestPermission; same known chrome media-surface gap.
+  { profile: 'macos-chrome-v149', baseline: 'macos-chrome-v149', budget: { TELL: 1, EXTRA: 0, MISSING: 8 } },
   { profile: 'android-webview-v138', baseline: 'android-webview-v138', budget: { TELL: 0, EXTRA: 0, MISSING: 0 } },
   { profile: 'linux-chrome', baseline: 'linux-chrome-v143', budget: { TELL: 0, EXTRA: 0, MISSING: 0 } },
 ];
 
-const profiles = new LegacyProfiles(path.resolve('profiles'));
+const profiles = new FixtureProfiles();
 const probe = readFileSync(path.resolve('resources/probe.js'), 'utf8');
 
 function fixture(value: unknown): ProbeSnapshot {

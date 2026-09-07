@@ -157,3 +157,17 @@ test('FpEnvProfiles rejects malformed raw records through the Profile error cont
     (error: unknown) => error instanceof MimicError && error.code === 'BAD_PROFILE',
   );
 });
+
+test('runtime ignores retired Profile JSON and requires an explicit fp-env ID', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'mimic-fp-env-only-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'chrome-mac.json'), '{"meta":{"name":"chrome-mac"}}');
+  const profiles = new FpEnvProfiles(root);
+  assert.deepEqual(await profiles.list(), []);
+  await assert.rejects(profiles.load('chrome-mac'), /fp-env Profile 不存在/);
+
+  const mimic = createMimic({ profilesRoot: root, size: 1 });
+  t.after(() => mimic.close());
+  assert.deepEqual(await mimic.list('profiles'), []);
+  await assert.rejects(mimic.run({ kind: 'run', code: '1' }), /profile is required/);
+});

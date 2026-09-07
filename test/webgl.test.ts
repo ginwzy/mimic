@@ -1,15 +1,15 @@
+import { FixtureProfiles } from './fixtures.js';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import test, { after, before } from 'node:test';
 import {
-  Catalog, compile, JsdomEngine, LegacyProfiles, parseJob, parseProfile, parseShape, seal,
+  Catalog, compile, JsdomEngine, parseJob, parseProfile, parseShape, seal,
   type Feature,
 } from '../src/index.js';
 import { canvasDriver, canvasFeature } from '../src/features/canvas.js';
 import { webglDriver, webglFeature } from '../src/features/webgl.js';
 import { webglShape } from '../src/features/webgl.shape.js';
 
-const store = new LegacyProfiles(path.resolve('profiles'));
+const store = new FixtureProfiles();
 // Keep the Runtime seam real while excluding unrelated upstream feature graphs from this slice.
 const deps = ['view', 'screen', 'chrome', 'touch', 'nav', 'ua', 'plugins', 'globals', 'dom'];
 const stubs: Feature[] = deps.map((id) => ({ id, build: () => ({}) }));
@@ -19,7 +19,7 @@ const drivers = {
   webgl: webglDriver,
 };
 const bases = new Map<string, Promise<{
-  imported: Awaited<ReturnType<LegacyProfiles['load']>>;
+  imported: Awaited<ReturnType<FixtureProfiles['load']>>;
   shape: ReturnType<typeof webglShape>;
   catalog: Catalog;
 }>>();

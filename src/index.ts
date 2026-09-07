@@ -4,9 +4,9 @@ export { parseCatalog, parseCollect, parseJob, parsePage, parseProfile, parseSha
 export { encodeResult, parseResult } from './core/result.js';
 export { Catalog } from './catalog/index.js';
 export { CatalogFiles } from './catalog/files.js';
-export { LegacyProfiles, importLegacyData, legacyTarget } from './legacy/profiles.js';
-export type { ImportedProfile, LedgerEntry, MigrationReport } from './legacy/profiles.js';
-export { FpEnvProfiles, normalizeFpEnv } from './legacy/fp-env.js';
+export { normalizeIdentity, identityTarget } from './collect/identity.js';
+export type { ImportedProfile, LedgerEntry, MigrationReport } from './collect/identity.js';
+export { FpEnvProfiles, normalizeFpEnv } from './node/fp-env.js';
 export { collectIdentity, createIdentityCollector } from './collect/browser.js';
 export type { IdentityCapture } from './collect/browser.js';
 export { migrateCollect } from './collect/contract.js';

@@ -92,8 +92,8 @@ function config(options: LeakOptions): LeakConfig & { timeoutMs: number } {
   const tasksPerRound = positive(options.tasksPerRound, 20, 'tasksPerRound');
   const workerSize = positive(options.workerSize, 1, 'workerSize');
   const timeoutMs = positive(options.timeoutMs, 30_000, 'timeoutMs');
-  const profile = options.profile ?? 'android-webview-v138';
-  if (profile.length === 0) throw new TypeError('profile must be a non-empty id');
+  const profile = options.profile;
+  if (!profile) throw new TypeError('profile must be an explicit fp-env id');
   return {
     rounds: ROUNDS,
     tasksPerRound,
