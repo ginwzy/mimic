@@ -15,10 +15,11 @@ from pathlib import Path
 from typing import Iterator, Mapping, Sequence
 
 import numpy as np
+from scipy.spatial.transform import Rotation, Slerp
 
 
-COMPILER_VERSION = 3
-MODEL_SCHEMA = 3
+COMPILER_VERSION = 4
+MODEL_SCHEMA = 4
 SCREEN_WIDTH = 1080
 SCREEN_HEIGHT = 2400
 QUANTIZATION = 4096
@@ -32,17 +33,21 @@ MIN_CLOCK_CALIBRATION_SAMPLES = 20
 MIN_SESSION_POSE_GESTURES = 20
 MIN_VARIANCE_RETAINED = 0.95
 MIN_CROSS_MODAL_COVARIANCE_RETAINED = 0.92
+GRAVITY_MAGNITUDE = 9.80665
 CHANNELS = (
     "touchX", "touchY", "radiusX", "radiusY", "force",
     "accelerationX", "accelerationY", "accelerationZ",
-    "rotationAlpha", "rotationBeta", "rotationGamma",
+    "rotationAlphaTurn", "rotationBetaTurn", "rotationGammaTurn",
     "orientationSinAlpha", "orientationCosAlpha",
+    "poseRotationX", "poseRotationY", "poseRotationZ",
 )
 SCALES = np.asarray((
     1, 1, 0.1, 0.1, 1,
     10, 10, 10,
-    180, 180, 180,
+    0.1, 0.1, 0.1,
     1, 1,
+    # Preserve small within-swipe rotations alongside touch and timing variation.
+    0.1, 0.1, 0.1,
 ), dtype=np.float64)
 TIMING_CHANNELS = ("touchLogDuration", "sensorStartOffset", "sensorEndOffset")
 # A 25 ms unit keeps physical phase variation represented in the retained PCA rank.
@@ -78,6 +83,7 @@ class SampledGroup:
     end: float
     duration: float
     values: np.ndarray | None
+    native_values: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +95,7 @@ class GestureSample:
     touch: np.ndarray
     gravity: np.ndarray
     linear_acceleration: np.ndarray
+    pose_rotation: np.ndarray
     rotation: np.ndarray
     heading: np.ndarray
     heading_center: float
@@ -110,7 +117,7 @@ def arguments() -> argparse.Namespace:
         help="generated TypeScript module",
     )
     parser.add_argument("--frames", type=int, default=16)
-    parser.add_argument("--rank", type=int, default=31)
+    parser.add_argument("--rank", type=int, default=33)
     parser.add_argument("--min-group", type=int, default=20)
     parser.add_argument("--check", action="store_true", help="fail instead of updating a stale output")
     return parser.parse_args()
@@ -208,6 +215,7 @@ def sampled_groups(
     value_columns: Sequence[int],
     frames: int,
     target_windows: Mapping[int, tuple[float, float]] | None = None,
+    retain_native: bool = False,
 ) -> dict[int, SampledGroup]:
     # A small number of swipe IDs recur in non-adjacent CSV blocks. Defer only
     # those IDs so the common path can be resampled without retaining raw rows.
@@ -221,7 +229,8 @@ def sampled_groups(
         end = ordered[-1][0] if ordered else 0
         target_window = target_windows.get(group.swipe_id) if target_windows is not None else None
         values = resample(ordered, frames, target_window) if group.valid else None
-        return SampledGroup(group.clock_key, group.scenario, group.hand, start, end, end - start, values)
+        native_values = collapse(ordered) if retain_native and group.valid else None
+        return SampledGroup(group.clock_key, group.scenario, group.hand, start, end, end - start, values, native_values)
 
     for group in grouped_rows(path, value_columns):
         if group.swipe_id not in repeated:
@@ -257,25 +266,62 @@ def direction(touch: np.ndarray) -> str | None:
     return "down" if delta_y > 0 else "up"
 
 
-def headings(acceleration: np.ndarray, magnetometer: np.ndarray) -> np.ndarray:
-    output = np.zeros(acceleration.shape[0], dtype=np.float64)
-    for index, (gravity, magnetic) in enumerate(zip(acceleration, magnetometer, strict=True)):
+def headings(gravity_frames: np.ndarray, magnetometer: np.ndarray) -> np.ndarray:
+    output = np.zeros(gravity_frames.shape[0], dtype=np.float64)
+    for index, (gravity, magnetic) in enumerate(zip(gravity_frames, magnetometer, strict=True)):
         gx, gy, gz = gravity
         norm = math.sqrt(gx * gx + gy * gy + gz * gz)
         if norm == 0:
             continue
         gx, gy, gz = gx / norm, gy / norm, gz / norm
-        roll = math.atan2(gy, gz)
-        pitch = math.atan2(-gx, math.sqrt(gy * gy + gz * gz))
+        # W3C Z-X'-Y'': retain gamma in [-90, 90] when the screen faces down.
+        facing = -1 if gz < 0 else 1
+        beta = math.atan2(gy, facing * math.hypot(gx, gz))
+        gamma = math.atan2(-facing * gx, abs(gz))
         mx, my, mz = magnetic
-        horizontal_x = mx * math.cos(pitch) + mz * math.sin(pitch)
+        horizontal_x = mx * math.cos(gamma) + mz * math.sin(gamma)
         horizontal_y = (
-            mx * math.sin(roll) * math.sin(pitch)
-            + my * math.cos(roll)
-            - mz * math.sin(roll) * math.cos(pitch)
+            mx * math.sin(beta) * math.sin(gamma)
+            + my * math.cos(beta)
+            - mz * math.sin(beta) * math.cos(gamma)
         )
         output[index] = math.atan2(-horizontal_y, horizontal_x)
     return output
+
+
+def estimate_pose(
+    acceleration: np.ndarray,
+    gyroscope: np.ndarray,
+    frames: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Estimate gravity using native-rate gyro rotation and a robust accelerometer reference."""
+    if not np.isfinite(acceleration).all() or not np.isfinite(gyroscope).all():
+        return None
+    times = (acceleration[:, 0] - acceleration[0, 0]) / (SENSOR_TIME_SCALE * 1000)
+    rates = np.column_stack([
+        np.interp(acceleration[:, 0], gyroscope[:, 0], gyroscope[:, axis])
+        for axis in range(1, 4)
+    ])
+    steps = Rotation.from_rotvec((rates[:-1] + rates[1:]) / 2 * np.diff(times)[:, None])
+    rotations = [Rotation.identity()]
+    for step in steps:
+        rotations.append(rotations[-1] * step)
+    body_to_reference = Rotation.concatenate(rotations)
+    reference_gravity = np.median(body_to_reference.apply(acceleration[:, 1:]), axis=0)
+    norm = float(np.linalg.norm(reference_gravity))
+    if norm == 0:
+        return None
+    reference_gravity *= GRAVITY_MAGNITUDE / norm
+    interpolate = Slerp(times, body_to_reference)
+    center = interpolate(times[-1] / 2)
+    sampled = interpolate(np.linspace(0, times[-1], frames))
+    # Relative rotations can be applied to another anonymous session's gravity
+    # without changing its magnitude or confusing translation with tilt.
+    return (
+        center.inv().apply(reference_gravity),
+        (sampled.inv() * center).as_rotvec(),
+        sampled.inv().apply(reference_gravity),
+    )
 
 
 def clock_offsets(
@@ -356,10 +402,18 @@ def prepare_gesture(
         touch[:, 3] / 2 / SCREEN_HEIGHT,
         np.clip(touch[:, 4], 0, 1),
     ))
-    gravity = np.median(acceleration, axis=0)
-    linear_acceleration = acceleration - gravity
-    rotation = np.degrees(gyroscope)
-    heading = headings(acceleration, magnetometer)
+    if acceleration_group.native_values is None or gyroscope_group.native_values is None:
+        raise ValueError("pose estimation requires native accelerometer and gyroscope samples")
+    pose = estimate_pose(acceleration_group.native_values, gyroscope_group.native_values, len(touch))
+    if pose is None:
+        return None
+    gravity, pose_rotation, gravity_frames = pose
+    linear_acceleration = acceleration - gravity_frames
+    # Store radians per normalized gesture time, so PCA need not learn the
+    # nonlinear rate * duration relationship. Runtime converts back to deg/s.
+    # Android gyro xyz correspond to DeviceMotion beta/gamma/alpha.
+    rotation = gyroscope[:, (2, 0, 1)] * sensor_duration / 1000
+    heading = headings(gravity_frames, magnetometer)
     if not all(np.isfinite(values).all() for values in (touch_values, acceleration, rotation, heading)):
         return None
     timing = (math.log(touch_duration), sensor_start_offset, sensor_end_offset)
@@ -372,6 +426,7 @@ def prepare_gesture(
         touch_values,
         gravity,
         linear_acceleration,
+        pose_rotation,
         rotation,
         heading,
         circular_mean(heading),
@@ -407,6 +462,7 @@ def vectorize(gesture: GestureSample) -> np.ndarray:
         gesture.linear_acceleration,
         gesture.rotation,
         orientation_values,
+        gesture.pose_rotation,
     ))
     if raw.shape[1] != len(CHANNELS) or not np.isfinite(raw).all():
         raise ValueError("invalid prepared CSD4CA gesture")
@@ -531,12 +587,23 @@ def compile_groups(
         )
         cross_modal_covariance_retained = 1 - reconstruction_error / cross_modal_norm
         variance_retained = float(np.sum(selected_eigenvalues) / np.sum(np.maximum(eigenvalues, 0)))
+        pose_indices = np.asarray([
+            frame * len(CHANNELS) + channel
+            for frame in range(frames)
+            for channel in range(CHANNELS.index("poseRotationX"), len(CHANNELS))
+        ])
+        pose_variance_retained = float(
+            np.sum(eigenvectors[pose_indices][:, selected] ** 2 * selected_eigenvalues)
+            / np.sum(np.diag(covariance)[pose_indices])
+        )
         if variance_retained < MIN_VARIANCE_RETAINED:
             raise ValueError(f"{key} retains only {variance_retained:.6f} total variance")
         if cross_modal_covariance_retained < MIN_CROSS_MODAL_COVARIANCE_RETAINED:
             raise ValueError(
                 f"{key} retains only {cross_modal_covariance_retained:.6f} cross-modal covariance"
             )
+        if pose_variance_retained < MIN_VARIANCE_RETAINED:
+            raise ValueError(f"{key} retains only {pose_variance_retained:.6f} pose variance")
         timing_values = np.asarray(timings[key], dtype=np.float64)
         touch_durations = np.exp(timing_values[:, 0])
         sensor_starts = timing_values[:, 1]
@@ -556,6 +623,7 @@ def compile_groups(
             "quality": {
                 "varianceRetained": round(variance_retained, 6),
                 "crossModalCovarianceRetained": round(cross_modal_covariance_retained, 6),
+                "poseVarianceRetained": round(pose_variance_retained, 6),
             },
             "mean": quantize(mean),
             "components": components,
@@ -597,12 +665,12 @@ def main() -> int:
 
     gestures: list[GestureSample] = []
     touch_groups = sampled_groups(paths["touch"], (8, 9, 10, 11, 12), options.frames)
-    acceleration_groups = sampled_groups(paths["acceleration"], (9, 10, 11), options.frames)
+    acceleration_groups = sampled_groups(paths["acceleration"], (9, 10, 11), options.frames, retain_native=True)
     sensor_windows = {
         swipe_id: (group.start, group.end)
         for swipe_id, group in acceleration_groups.items()
     }
-    gyroscope_groups = sampled_groups(paths["gyroscope"], (9, 10, 11), options.frames, sensor_windows)
+    gyroscope_groups = sampled_groups(paths["gyroscope"], (9, 10, 11), options.frames, sensor_windows, retain_native=True)
     magnetometer_groups = sampled_groups(paths["magnetometer"], (9, 10, 11), options.frames, sensor_windows)
     offsets = clock_offsets(touch_groups, acceleration_groups)
     accepted = 0
@@ -644,7 +712,8 @@ def main() -> int:
         "calibration": {
             "sensorTimeScale": SENSOR_TIME_SCALE,
             "clockCalibration": "median-window-midpoint-by-session-scenario-user",
-            "poseNormalization": "gesture-baseline-residuals-with-session-gravity-heading-transitions",
+            "poseNormalization": "native-gyro-relative-rotations-with-session-gravity-heading-transitions",
+            "gravityMagnitude": GRAVITY_MAGNITUDE,
             "minimumSessionPoseGestures": MIN_SESSION_POSE_GESTURES,
             "minimumDurationMs": MIN_DURATION_MS,
             "maximumDurationMs": MAX_DURATION_MS,
@@ -684,6 +753,7 @@ def main() -> int:
         "minimumCrossModalCovarianceRetained": min(
             group["quality"]["crossModalCovarianceRetained"] for group in groups
         ),
+        "minimumPoseVarianceRetained": min(group["quality"]["poseVarianceRetained"] for group in groups),
     }, separators=(",", ":")))
     return 0
 

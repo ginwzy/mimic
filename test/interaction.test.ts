@@ -20,10 +20,10 @@ function sessionWithGap(gapMs: number) {
 }
 
 test('CSD4CA interaction model is anonymous, compact and structurally complete', () => {
-  assert.equal(CSD4CA_MODEL.schema, 3);
-  assert.equal(CSD4CA_MODEL.compiler, 3);
+  assert.equal(CSD4CA_MODEL.schema, 4);
+  assert.equal(CSD4CA_MODEL.compiler, 4);
   assert.equal(CSD4CA_MODEL.frames, 16);
-  assert.equal(CSD4CA_MODEL.stride, 13);
+  assert.equal(CSD4CA_MODEL.stride, 16);
   assert.deepEqual(CSD4CA_MODEL.timingChannels, [
     'touchLogDuration', 'sensorStartOffset', 'sensorEndOffset',
   ]);
@@ -42,7 +42,7 @@ test('CSD4CA interaction model is anonymous, compact and structurally complete',
       group.mean.length,
       CSD4CA_MODEL.frames * CSD4CA_MODEL.stride + CSD4CA_MODEL.timingChannels.length,
     );
-    assert.equal(group.components.length, 31);
+    assert.equal(group.components.length, 33);
     assert.ok(group.sessions.every((session) => (
       session.gestureCount >= CSD4CA_MODEL.calibration.minimumSessionPoseGestures
       && session.gravity.length === 3
@@ -52,6 +52,7 @@ test('CSD4CA interaction model is anonymous, compact and structurally complete',
     assert.ok(group.components.every((component) => component.basis.length === group.mean.length));
     assert.ok(group.quality.varianceRetained >= 0.95);
     assert.ok(group.quality.crossModalCovarianceRetained >= 0.92);
+    assert.ok(group.quality.poseVarianceRetained >= 0.95);
   }
 });
 
@@ -106,12 +107,12 @@ test('interaction synthesis is model-backed, seeded, bounded and time ordered', 
 test('interaction sampling resamples rejected draws instead of returning the group mean', () => {
   // These seeds reject their first two joint draws in the compiled model.
   const cases = [
-    ['swipe', 'joint-retry-221'],
-    ['swipe', 'joint-retry-383'],
-    ['swipe', 'joint-retry-615'],
-    ['tap', 'joint-retry-268'],
-    ['tap', 'joint-retry-277'],
-    ['tap', 'joint-retry-350'],
+    ['swipe', 'joint-retry-897'],
+    ['swipe', 'joint-retry-2029'],
+    ['swipe', 'joint-retry-2138'],
+    ['tap', 'joint-retry-415'],
+    ['tap', 'joint-retry-686'],
+    ['tap', 'joint-retry-1267'],
   ] as const;
   for (const [recipe, seed] of cases) {
     const session = createInteractionSession(seed);
@@ -159,6 +160,8 @@ test('joint swipe synthesis retains calibrated sensor timing spread', () => {
 test('interaction session preserves relative orientation and source pose continuity', () => {
   const gravityDeltas: number[] = [];
   const headingDeltas: number[] = [];
+  const withinSwipeDeltas: number[] = [];
+  const gyroResiduals: number[] = [];
   for (let index = 0; index < 1_000; index += 1) {
     const session = createInteractionSession(`pose-session-${index}`);
     const initial = synthesizeInteraction('swipe', session, 0, 120);
@@ -169,12 +172,48 @@ test('interaction session preserves relative orientation and source pose continu
     const followUpOrientation = followUp.filter((frame) => frame.kind === 'orientation');
 
     assert.equal(initialOrientation[0]!.alpha, 0);
-    for (const [motion, orientation] of initialMotion.map((frame, frameIndex) => (
-      [frame, initialOrientation[frameIndex]!] as const
-    ))) {
-      const [x, y, z] = motion.gravity;
-      assert.equal(orientation.beta, Number((Math.atan2(y, z) * 180 / Math.PI).toFixed(1)));
-      assert.equal(orientation.gamma, Number((Math.atan2(-x, Math.hypot(y, z)) * 180 / Math.PI).toFixed(1)));
+    const gravityVector = (frame: typeof initialMotion[number]) => (
+      frame.gravity.map((value, axis) => value - frame.acceleration[axis]!)
+    );
+    for (const [motions, orientations] of [
+      [initialMotion, initialOrientation], [followUpMotion, followUpOrientation],
+    ] as const) {
+      const initialGravity = gravityVector(motions[0]!);
+      let largestDelta = 0;
+      for (const [frameIndex, motion] of motions.entries()) {
+        const gravity = gravityVector(motion);
+        const orientation = orientations[frameIndex]!;
+        const beta = orientation.beta * Math.PI / 180;
+        const gamma = orientation.gamma * Math.PI / 180;
+        const magnitude = CSD4CA_MODEL.calibration.gravityMagnitude;
+        assert.ok(Math.abs(Math.hypot(...gravity) - magnitude) < 0.002);
+        assert.ok(orientation.beta >= -180 && orientation.beta <= 180);
+        assert.ok(orientation.gamma >= -90 && orientation.gamma <= 90);
+        // Forward Z-X'-Y'' projection checks the emitted fields independently of the inverse formulas.
+        const projected = [
+          -Math.cos(beta) * Math.sin(gamma), Math.sin(beta), Math.cos(beta) * Math.cos(gamma),
+        ].map((value) => value * magnitude);
+        assert.ok(Math.hypot(...gravity.map((value, axis) => value - projected[axis]!)) < 0.015);
+        largestDelta = Math.max(largestDelta, Math.hypot(
+          ...gravity.map((value, axis) => value - initialGravity[axis]!),
+        ));
+        if (frameIndex === 0) continue;
+        const previous = motions[frameIndex - 1]!;
+        const previousGravity = gravityVector(previous);
+        const dt = (motion.at - previous.at) / 1000;
+        const rate = motion.rotation.map((value, axis) => (
+          (value + previous.rotation[axis]!) / 2 * Math.PI / 180
+        ));
+        const [gx, gy, gz] = gravity.map((value, axis) => (
+          (value + previousGravity[axis]!) / 2
+        )) as [number, number, number];
+        const [wz, wx, wy] = rate as [number, number, number];
+        const expected = [wz * gy - wy * gz, wx * gz - wz * gx, wy * gx - wx * gy];
+        gyroResiduals.push(Math.hypot(...gravity.map((value, axis) => (
+          (value - previousGravity[axis]!) / dt - expected[axis]!
+        ))));
+      }
+      withinSwipeDeltas.push(largestDelta);
     }
 
     const median = (values: readonly number[]) => {
@@ -182,7 +221,7 @@ test('interaction session preserves relative orientation and source pose continu
       return (sorted[7]! + sorted[8]!) / 2;
     };
     const baseline = (frames: typeof initialMotion) => [0, 1, 2].map((axis) => (
-      median(frames.map((frame) => frame.gravity[axis]!))
+      median(frames.map((frame) => gravityVector(frame)[axis]!))
     ));
     const initialGravity = baseline(initialMotion);
     const followUpGravity = baseline(followUpMotion);
@@ -198,6 +237,11 @@ test('interaction session preserves relative orientation and source pose continu
 
   gravityDeltas.sort((left, right) => left - right);
   headingDeltas.sort((left, right) => left - right);
+  withinSwipeDeltas.sort((left, right) => left - right);
+  gyroResiduals.sort((left, right) => left - right);
+  assert.ok(withinSwipeDeltas[999]! > 0.01);
+  // Compressing deg/s independently of duration breaks the pose/gyro phase relationship.
+  assert.ok(gyroResiduals[Math.floor(gyroResiduals.length / 2)]! < 1);
   assert.ok(gravityDeltas[499]! < 0.8);
   assert.ok(gravityDeltas[989]! < 5);
   assert.ok(headingDeltas[499]! < 3);

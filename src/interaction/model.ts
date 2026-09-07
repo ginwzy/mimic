@@ -1,15 +1,17 @@
 export const INTERACTION_CHANNELS = [
   'touchX', 'touchY', 'radiusX', 'radiusY', 'force',
   'accelerationX', 'accelerationY', 'accelerationZ',
-  'rotationAlpha', 'rotationBeta', 'rotationGamma',
+  'rotationAlphaTurn', 'rotationBetaTurn', 'rotationGammaTurn',
   'orientationSinAlpha', 'orientationCosAlpha',
+  'poseRotationX', 'poseRotationY', 'poseRotationZ',
 ] as const;
 
 export const INTERACTION_SCALES = [
   1, 1, 0.1, 0.1, 1,
   10, 10, 10,
-  180, 180, 180,
+  0.1, 0.1, 0.1,
   1, 1,
+  0.1, 0.1, 0.1,
 ] as const;
 
 export const INTERACTION_TIMING_CHANNELS = [
@@ -53,13 +55,14 @@ export interface InteractionModelGroup {
   readonly quality: {
     readonly varianceRetained: number;
     readonly crossModalCovarianceRetained: number;
+    readonly poseVarianceRetained: number;
   };
   readonly mean: readonly number[];
   readonly components: readonly InteractionModelComponent[];
 }
 
 export interface InteractionModel {
-  readonly schema: 3;
+  readonly schema: 4;
   readonly compiler: number;
   readonly frames: number;
   readonly stride: number;
@@ -73,6 +76,7 @@ export interface InteractionModel {
     readonly sensorTimeScale: number;
     readonly clockCalibration: string;
     readonly poseNormalization: string;
+    readonly gravityMagnitude: number;
     readonly minimumSessionPoseGestures: number;
     readonly minimumDurationMs: number;
     readonly maximumDurationMs: number;

@@ -39,6 +39,7 @@ const CHANNEL = {
   rotation: 8,
   orientationSinAlpha: 11,
   orientationCosAlpha: 12,
+  poseRotation: 13,
 } as const;
 
 const UP_GROUPS = CSD4CA_MODEL.groups.filter((group) => group.direction === 'up');
@@ -83,14 +84,6 @@ function round(value: number, digits = 3): number {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
-}
-
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1]! + sorted[middle]!) / 2
-    : sorted[middle]!;
 }
 
 function chooseGroup(next: Random): InteractionModelGroup {
@@ -220,11 +213,30 @@ function sample(group: InteractionModelGroup, next: Random): GestureSample {
   );
 }
 
-function frameTriple(values: readonly number[], frame: number, start: number): readonly [number, number, number] {
+function frameTriple(values: readonly number[], frame: number, start: number, digits = 3): readonly [number, number, number] {
   return [
-    round(frameValue(values, frame, start)),
-    round(frameValue(values, frame, start + 1)),
-    round(frameValue(values, frame, start + 2)),
+    round(frameValue(values, frame, start), digits),
+    round(frameValue(values, frame, start + 1), digits),
+    round(frameValue(values, frame, start + 2), digits),
+  ];
+}
+
+function rotateGravity(
+  gravity: readonly [number, number, number],
+  rotation: readonly [number, number, number],
+): readonly [number, number, number] {
+  const angle = Math.hypot(...rotation);
+  if (angle === 0) return gravity;
+  const [x, y, z] = rotation.map((value) => value / angle) as [number, number, number];
+  const [gx, gy, gz] = gravity;
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const projection = (x * gx + y * gy + z * gz) * (1 - cosine);
+  // Rodrigues' formula applies the compiled relative rotation without changing |g|.
+  return [
+    gx * cosine + (y * gz - z * gy) * sine + x * projection,
+    gy * cosine + (z * gx - x * gz) * sine + y * projection,
+    gz * cosine + (x * gy - y * gx) * sine + z * projection,
   ];
 }
 
@@ -260,14 +272,8 @@ function appendSensorFrames(
   session: InteractionSession,
 ): void {
   const interval = Math.max(1, Math.round(duration / (CSD4CA_MODEL.frames - 1)));
-  const accelerations = Array.from(
-    { length: CSD4CA_MODEL.frames },
-    (_, index) => frameTriple(values, index, CHANNEL.acceleration),
-  );
-  // Quantized PCA reconstruction can shift the median; keep this stream dynamic-only.
-  const accelerationCenter = [0, 1, 2].map((axis) => median(
-    accelerations.map((acceleration) => acceleration[axis]!),
-  ));
+  const gravityScale = CSD4CA_MODEL.calibration.gravityMagnitude / Math.hypot(...session.gravity);
+  const baselineGravity = session.gravity.map((value) => value * gravityScale) as [number, number, number];
   const headings = Array.from({ length: CSD4CA_MODEL.frames }, (_, index) => Math.atan2(
     frameValue(values, index, CHANNEL.orientationSinAlpha),
     frameValue(values, index, CHANNEL.orientationCosAlpha),
@@ -278,29 +284,30 @@ function appendSensorFrames(
   ) * 180 / Math.PI;
   for (let index = 0; index < CSD4CA_MODEL.frames; index += 1) {
     const at = Math.round(start + duration * index / (CSD4CA_MODEL.frames - 1));
-    const acceleration = accelerations[index]!.map(
-      (value, axis) => round(value - accelerationCenter[axis]!),
-    ) as [number, number, number];
-    const gravity = acceleration.map(
-      (value, axis) => round(value + session.gravity[axis]!),
-    ) as [number, number, number];
+    const acceleration = frameTriple(values, index, CHANNEL.acceleration);
+    const gravity = rotateGravity(baselineGravity, frameTriple(values, index, CHANNEL.poseRotation, 6));
     frames.push(Object.freeze({
       kind: 'motion',
       at,
       acceleration,
-      gravity,
-      rotation: frameTriple(values, index, CHANNEL.rotation),
+      gravity: acceleration.map((value, axis) => round(value + gravity[axis]!)) as [number, number, number],
+      rotation: frameTriple(values, index, CHANNEL.rotation, 6).map(
+        (value) => round(value * 180 / Math.PI * 1000 / duration),
+      ) as [number, number, number],
       interval,
     } satisfies MotionFrame));
     const relativeAlpha = headings[index]! - headingCenter;
     const alpha = relativeAlpha + session.heading;
     session.alphaReference ??= alpha;
+    const [gx, gy, gz] = gravity;
+    // W3C Z-X'-Y'' keeps gamma in [-90, 90], including screen-down poses.
+    const facing = gz < 0 ? -1 : 1;
     frames.push(Object.freeze({
       kind: 'orientation',
       at,
       alpha: round((alpha - session.alphaReference + 360) % 360, 1),
-      beta: round(Math.atan2(gravity[1], gravity[2]) * 180 / Math.PI, 1),
-      gamma: round(Math.atan2(-gravity[0], Math.hypot(gravity[1], gravity[2])) * 180 / Math.PI, 1),
+      beta: round(Math.atan2(gy, facing * Math.hypot(gx, gz)) * 180 / Math.PI, 1),
+      gamma: round(Math.atan2(-facing * gx, Math.abs(gz)) * 180 / Math.PI, 1),
     } satisfies OrientationFrame));
   }
 }

@@ -239,11 +239,13 @@ Engine 的内部派发路径呈现 `isTrusted: true`；touch 列表和触点分�
 swipe 的 motion/orientation/touch 数值由同一个 CSD4CA 匿名低秩样本生成；同一次 capture 还会选择
 一个匿名 recording-session 姿态，并让后续 swipe 按真实手势间隔沿该 session 的 pose transition
 演化。模型保留校准后的跨流时序、压力和触点面积，不包含参与者标识或单条原始轨迹。tap 没有对应的
-CSD4CA sensor 数据，因此保持 sensorless。重新编译需要单独安装
-`scripts/csd4ca-requirements.txt`，然后执行：
+CSD4CA sensor 数据，因此保持 sensorless。逐帧姿态由原始采样率的陀螺仪旋转和去旋转后的加速度
+稳健中心估计，不等同于独立测得的重力真值。运行时从同一姿态计算重力和方向角，线性加速度单独
+投射。重新编译需要在隔离的 Python 环境中安装 `scripts/csd4ca-requirements.txt` 中的 NumPy/SciPy：
 
 ```bash
-npm run generate:interaction-model -- \
+/path/to/csd4ca-venv/bin/python -m pip install -r scripts/csd4ca-requirements.txt
+/path/to/csd4ca-venv/bin/python scripts/compile-csd4ca.py \
   --input /path/to/CSD4CA \
   --output src/interaction/csd4ca.model.ts
 ```
