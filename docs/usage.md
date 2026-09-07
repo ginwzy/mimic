@@ -294,6 +294,26 @@ ANA/Cebu 的 wire profile 固定为 Chrome 145/Android；`profile` 只控制 mim
 `verify`/`search` 结果中。结果包含完整 cookie 仅用于调用方调试和后续请求,不应直接写入日志。
 ANA 执行 verify 前会先用当前会话生成的 cookies 提交固定的 `flight-search` 表单导航请求。
 
+同一进程内重复调用时,可共享捕获池以复用 worker 和编译缓存。每次捕获仍创建独立 Realm;
+不同数据目录、deadline 和 maxPosts 使用各自的执行器。调用方必须在全部任务结束后关闭池：
+
+```js
+import { CapturePool, runAnaFlow } from 'mimic/flow';
+
+const capturePool = new CapturePool(2); // 每种捕获配置最多两个 worker
+try {
+  await Promise.allSettled([
+    runAnaFlow({ profilesRoot: './profiles', capturePool }),
+    runAnaFlow({ profilesRoot: './profiles', capturePool }),
+  ]);
+} finally {
+  await capturePool.close();
+}
+```
+
+`npm run flow -- ana reqable --total 10 --concurrency 2` 自动在整批任务中共享并关闭捕获池。
+不传 `capturePool` 时保持一次性捕获行为。`captureBodies(options, capturePool)` 也可直接复用同一个池。
+
 ## CLI
 
 CLI 每次只向 stdout 写一行 JSON。参数错误写入 stderr 的 JSON,失败退出码为 `1`。

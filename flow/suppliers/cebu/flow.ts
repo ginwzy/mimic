@@ -1,10 +1,11 @@
 import { randomBytes, randomInt } from 'node:crypto';
-import { captureBodies, listAndroidChromeProfiles } from '../../capture.js';
+import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
 import { CEBU_SELECT_URL, createCebuRequest } from './request.js';
 import type { CebuCredentials, CebuSearchResult } from './request.js';
 
 export interface CebuFlowOptions {
+  capturePool?: CapturePool;
   proxy?: string;
   proxyHeaders?: HeadersInit;
   profile?: string;
@@ -97,7 +98,7 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
       maxPosts: 14,
       mode: 'abck',
       interactionSeed,
-    });
+    }, options.capturePool);
     if (abckCapture.bodies.length === 0) throw new Error('no _abck bodies captured');
 
     const bodiesToPost = selectBodies(abckCapture.bodies, options.postCount);
@@ -123,7 +124,7 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
         scriptTimeoutMs: 16_000,
         maxPosts: 1,
         mode: 'bms',
-      });
+      }, options.capturePool);
       if (bmsCapture.bodies[0] !== undefined) {
         await request.postBms(scripts.bms, bmsCapture.bodies[0]);
         bmsPosted = true;

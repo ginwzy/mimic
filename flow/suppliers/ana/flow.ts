@@ -1,10 +1,11 @@
 import { randomBytes, randomInt } from 'node:crypto';
-import { captureBodies, listAndroidChromeProfiles } from '../../capture.js';
+import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
 import { ANA_SELECT_URL, createAnaRequest } from './request.js';
 import type { AnaCredentials, AnaVerifyResult } from './request.js';
 
 export interface AnaFlowOptions {
+  capturePool?: CapturePool;
   proxy?: string;
   proxyHeaders?: HeadersInit;
   profile?: string;
@@ -49,7 +50,7 @@ function cookieNames(cookieHeader: string): string[] {
 function selectBodies(bodies: readonly string[], postCount: number | undefined): string[] {
   if (postCount !== undefined) return bodies.slice(0, Math.max(0, postCount));
   if (bodies.length <= 2) return [...bodies];
-  return [...bodies.slice(0, 2), ...bodies.slice(-3)];
+  return [...bodies.slice(0, 2), ...bodies.slice(-1)];
 }
 
 async function resolveProfile(explicit: string | undefined, profilesRoot: string | undefined): Promise<string> {
@@ -95,7 +96,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       maxPosts: 14,
       mode: 'abck',
       interactionSeed,
-    });
+    }, options.capturePool);
     if (abckCapture.bodies.length === 0) throw new Error('no _abck bodies captured');
 
     const bodiesToPost = selectBodies(abckCapture.bodies, options.postCount);
@@ -120,7 +121,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       scriptTimeoutMs: 16_000,
       maxPosts: 1,
       mode: 'bms',
-    });
+    }, options.capturePool);
     if (bmsCapture.bodies[0] !== undefined) {
       await request.postBms(scripts.bms, bmsCapture.bodies[0]);
       bmsPosted = true;

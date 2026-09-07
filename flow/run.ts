@@ -1,4 +1,5 @@
 import { createLumiProxy, createLumiRelayProxy } from './proxy.js';
+import { CapturePool } from './capture.js';
 import { runAnaFlow, type AnaFlowOptions, type AnaFlowResult } from './suppliers/ana/flow.js';
 import { runCebuFlow, type CebuFlowOptions, type CebuFlowResult } from './suppliers/cebu/flow.js';
 
@@ -41,8 +42,9 @@ function summarize(result: AnaFlowResult | CebuFlowResult) {
   };
 }
 
-async function runAna(proxyMode: ProxyMode, log: Log): Promise<FlowExecution> {
+async function runAna(proxyMode: ProxyMode, log: Log, capturePool: CapturePool): Promise<FlowExecution> {
   const options: AnaFlowOptions = {
+    capturePool,
     profilesRoot: './profiles',
     verify: true,
     log,
@@ -90,8 +92,9 @@ async function runAna(proxyMode: ProxyMode, log: Log): Promise<FlowExecution> {
   };
 }
 
-async function runCebu(proxyMode: ProxyMode, log: Log): Promise<FlowExecution> {
+async function runCebu(proxyMode: ProxyMode, log: Log, capturePool: CapturePool): Promise<FlowExecution> {
   const options: CebuFlowOptions = {
+    capturePool,
     profilesRoot: './profiles',
     search: true,
     log,
@@ -184,15 +187,15 @@ function parseArguments(args: readonly string[]): CliOptions | undefined {
   return { supplier, proxyMode, total, concurrency, batch };
 }
 
-function runSupplier(supplier: Supplier, proxyMode: ProxyMode, log: Log): Promise<FlowExecution> {
-  return supplier === 'ana' ? runAna(proxyMode, log) : runCebu(proxyMode, log);
+function runSupplier(supplier: Supplier, proxyMode: ProxyMode, log: Log, capturePool: CapturePool): Promise<FlowExecution> {
+  return supplier === 'ana' ? runAna(proxyMode, log, capturePool) : runCebu(proxyMode, log, capturePool);
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
-async function runBatch(options: CliOptions): Promise<void> {
+async function runBatch(options: CliOptions, capturePool: CapturePool): Promise<void> {
   const startedAt = Date.now();
   let nextIndex = 0;
   let completed = 0;
@@ -211,6 +214,7 @@ async function runBatch(options: CliOptions): Promise<void> {
           options.supplier,
           options.proxyMode,
           (message) => console.error(`[#${index + 1}] ${message}`),
+          capturePool,
         );
         status = execution.status;
         success = execution.success;
@@ -252,11 +256,16 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (options.batch) {
-    await runBatch(options);
-  } else {
-    const execution = await runSupplier(options.supplier, options.proxyMode, (message) => console.error(message));
-    console.log(JSON.stringify(execution.summary, null, 2));
+  const capturePool = new CapturePool(Math.min(options.concurrency, options.total));
+  try {
+    if (options.batch) {
+      await runBatch(options, capturePool);
+    } else {
+      const execution = await runSupplier(options.supplier, options.proxyMode, (message) => console.error(message), capturePool);
+      console.log(JSON.stringify(execution.summary, null, 2));
+    }
+  } finally {
+    await capturePool.close();
   }
 }
 

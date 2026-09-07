@@ -1,20 +1,51 @@
 import { createHash } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
+import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { ProfileRecord, ProfilesPort } from '../app/types.js';
 import { MimicError } from '../core/error.js';
-import { jsonCopy } from '../core/json.js';
+import { deepFreeze, jsonCopy } from '../core/json.js';
 import type { Data, Hash, JsonValue, Source, Target } from '../core/types.js';
 import { normalizeIdentity, targetShape, identityTarget, type ImportedProfile } from '../collect/identity.js';
 
 const RAW_ROOT = '_fp-env';
 const RAW_FILE = /^z__env_(\d+)\.json$/;
+const ROOT_CACHE_LIMIT = 8;
+const PROFILE_CACHE_LIMIT = 128;
 
 interface IndexedRaw {
   profileId: string;
   recordId: string;
   file: string;
   sourceFile: string;
+  stamp: string;
+}
+
+interface ProfileCache {
+  files: Map<string, IndexedRaw>;
+  index?: Map<string, IndexedRaw>;
+  refreshing?: Promise<Map<string, IndexedRaw>>;
+  loaded: Map<IndexedRaw, Promise<ProfileRecord>>;
+}
+
+const CACHES = new Map<string, ProfileCache>();
+
+function sharedCache(root: string): ProfileCache {
+  const cache = CACHES.get(root) ?? { files: new Map(), loaded: new Map() };
+  CACHES.delete(root);
+  CACHES.set(root, cache);
+  while (CACHES.size > ROOT_CACHE_LIMIT) CACHES.delete(CACHES.keys().next().value!);
+  return cache;
+}
+
+async function fileStamp(file: string): Promise<string | undefined> {
+  try {
+    const info = await lstat(file, { bigint: true });
+    if (!info.isFile()) return undefined;
+    return `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    return bad(`fp-env 文件不可读取:${file}`, cause);
+  }
 }
 
 function isData(value: unknown): value is Data {
@@ -180,37 +211,62 @@ export async function normalizeFpEnv(
 export class FpEnvProfiles implements ProfilesPort {
   readonly root: string;
   readonly rawRoot: string;
-  private indexPromise: Promise<Map<string, IndexedRaw>> | undefined;
-  private readonly loaded = new Map<string, Promise<ProfileRecord>>();
+  private indexed = false;
+  private readonly cache: ProfileCache;
 
   constructor(root: string) {
     this.root = path.resolve(root);
     this.rawRoot = path.join(this.root, RAW_ROOT);
+    this.cache = sharedCache(this.root);
   }
 
   async list(): Promise<string[]> {
-    return [...(await this.index()).keys()].sort();
+    return [...(await this.index(true)).keys()].sort();
   }
 
   async load(id: string): Promise<ProfileRecord> {
     if (typeof id !== 'string' || id.length === 0) bad('Profile id 必须是非空字符串');
-    const entry = (await this.index()).get(id);
+    let entry = (await this.index()).get(id);
+    if (!entry || await fileStamp(entry.file) !== entry.stamp) {
+      entry = (await this.index(true)).get(id);
+    }
     if (!entry) bad(`fp-env Profile 不存在:${id}; 数据目录:${this.rawRoot}`);
-    let loading = this.loaded.get(id);
+    const { loaded } = this.cache;
+    let loading = loaded.get(entry);
     if (!loading) {
       loading = this.loadRaw(entry);
-      this.loaded.set(id, loading);
     }
-    return loading;
+    loaded.delete(entry);
+    loaded.set(entry, loading);
+    while (loaded.size > PROFILE_CACHE_LIMIT) loaded.delete(loaded.keys().next().value!);
+    try {
+      return await loading;
+    } catch (cause) {
+      if (loaded.get(entry) === loading) loaded.delete(entry);
+      throw cause;
+    }
   }
 
-  private index(): Promise<Map<string, IndexedRaw>> {
-    this.indexPromise ??= this.buildIndex();
-    return this.indexPromise;
+  private async index(refresh = false): Promise<Map<string, IndexedRaw>> {
+    const cache = this.cache;
+    // Share in-flight scans; new loaders and list() check disk without reparsing unchanged files.
+    if (cache.refreshing) {
+      await cache.refreshing;
+    } else if (refresh || !this.indexed || !cache.index) {
+      cache.refreshing = this.buildIndex();
+      try {
+        await cache.refreshing;
+      } finally {
+        delete cache.refreshing;
+      }
+    }
+    this.indexed = true;
+    return cache.index!;
   }
 
   private async buildIndex(): Promise<Map<string, IndexedRaw>> {
     const output = new Map<string, IndexedRaw>();
+    const files = new Map<string, IndexedRaw>();
     const walk = async (directory: string): Promise<void> => {
       let entries;
       try {
@@ -229,18 +285,32 @@ export class FpEnvProfiles implements ProfilesPort {
         const match = RAW_FILE.exec(entry.name);
         if (!entry.isFile() || !match) continue;
         const recordId = match[1]!;
-        const raw = await this.readRaw(file, recordId);
-        const identified = profileId(raw.value, recordId);
-        if (output.has(identified.id)) bad(`fp-env Profile id 重复:${identified.id}`);
-        output.set(identified.id, {
-          profileId: identified.id,
-          recordId,
-          file,
-          sourceFile: path.relative(this.root, file).split(path.sep).join('/'),
-        });
+        const stamp = await fileStamp(file);
+        if (stamp === undefined) continue;
+        let indexed = this.cache.files.get(file);
+        if (!indexed || indexed.stamp !== stamp) {
+          const raw = await this.readRaw(file, recordId);
+          if (await fileStamp(file) !== stamp) bad(`fp-env 文件在读取期间变化:${file}`);
+          const identified = profileId(raw.value, recordId);
+          indexed = {
+            profileId: identified.id,
+            recordId,
+            file,
+            sourceFile: path.relative(this.root, file).split(path.sep).join('/'),
+            stamp,
+          };
+        }
+        if (output.has(indexed.profileId)) bad(`fp-env Profile id 重复:${indexed.profileId}`);
+        output.set(indexed.profileId, indexed);
+        files.set(file, indexed);
       }
     };
     await walk(this.rawRoot);
+    this.cache.files = files;
+    this.cache.index = output;
+    for (const entry of this.cache.loaded.keys()) {
+      if (files.get(entry.file) !== entry) this.cache.loaded.delete(entry);
+    }
     return output;
   }
 
@@ -263,11 +333,12 @@ export class FpEnvProfiles implements ProfilesPort {
 
   private async loadRaw(entry: IndexedRaw): Promise<ProfileRecord> {
     const raw = await this.readRaw(entry.file, entry.recordId);
+    if (await fileStamp(entry.file) !== entry.stamp) bad(`fp-env 文件在读取期间变化:${entry.file}`);
     const hash = createHash('sha256').update(raw.text).digest('hex') as Hash;
     const imported = await normalizeFpEnv(entry.recordId, raw.value, {
       kind: 'fp-env', hash, file: entry.sourceFile,
     });
     if (imported.profile.id !== entry.profileId) bad(`fp-env Profile 内容在索引后变化:${entry.profileId}`);
-    return imported;
+    return deepFreeze(imported);
   }
 }

@@ -1,4 +1,4 @@
-export { captureBodies, listAndroidChromeProfiles } from './capture.js';
+export { CapturePool, captureBodies, listAndroidChromeProfiles } from './capture.js';
 export type {
   CaptureBodiesOptions,
   CaptureBodiesResult,
