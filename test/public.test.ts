@@ -25,7 +25,7 @@ function child(cwd: string, source: string): Promise<{ code: number | null; stdo
 }
 
 test('public entry is narrow while advanced and HTTP stay explicit', () => {
-  assert.deepEqual(Object.keys(publicApi).sort(), ['MimicError', 'createMimic']);
+  assert.deepEqual(Object.keys(publicApi).sort(), ['MimicError', 'createMimic', 'listRegions', 'regionalCatalog', 'regionalRuntime', 'resolveEnvironment']);
   assert.equal(typeof advanced.Application, 'function');
   assert.equal(typeof advanced.Catalog, 'function');
   assert.equal(typeof advanced.JsdomEngine, 'function');
@@ -36,7 +36,7 @@ test('public entry is narrow while advanced and HTTP stay explicit', () => {
 test('public client is a runtime facade over only the stable SDK methods', async () => {
   const mimic = publicApi.createMimic({ size: 1, timeoutMs: 5_000 });
   try {
-    assert.deepEqual(Object.keys(mimic).sort(), ['capture', 'close', 'list', 'plan', 'run']);
+    assert.deepEqual(Object.keys(mimic).sort(), ['capture', 'close', 'environment', 'list', 'plan', 'run']);
     assert.equal('probe' in mimic, false);
     assert.equal('diagnose' in mimic, false);
     assert.equal('executor' in mimic, false);

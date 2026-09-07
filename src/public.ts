@@ -1,11 +1,18 @@
 import { MimicError } from './core/error.js';
-import type { Job, Plan, Result } from './core/types.js';
+import type { Job, Plan, Result, ResolvedEnvironment } from './core/types.js';
 import type { Op, PlanBind } from './shape/types.js';
 import { createMimic as createInternal, type MimicOptions } from './sdk.js';
 
 export { MimicError };
+export { resolveEnvironment } from './core/environment.js';
+export { listRegions, regionalCatalog, regionalRuntime } from './core/regions.js';
+export type { RegionPreset, RegionFilter } from './core/regions.js';
 export type {
   ErrorInfo,
+  EnvironmentOptions,
+  RegionalEnvironment,
+  RegionalSelection,
+  ResolvedEnvironment,
   Hash,
   InteractionAdapter,
   InteractionOptions,
@@ -24,10 +31,11 @@ export type {
 export type RunJob = Extract<Job, { kind: 'run' }>;
 export type CaptureJob = Extract<Job, { kind: 'capture' }>;
 export type PlanJob = RunJob | CaptureJob;
-export type ListKind = 'profiles' | 'shapes' | 'features' | 'drivers';
+export type ListKind = 'profiles' | 'shapes' | 'features' | 'drivers' | 'regions';
 export type MimicClientOptions = MimicOptions;
 
 export interface MimicClient {
+  readonly environment: ResolvedEnvironment | undefined;
   run(job: RunJob): Promise<Result>;
   capture(job: CaptureJob): Promise<Result>;
   plan(job: PlanJob): Promise<Plan<Op, PlanBind>>;
@@ -38,6 +46,7 @@ export interface MimicClient {
 export function createMimic(options: MimicClientOptions = {}): MimicClient {
   const mimic = createInternal(options);
   return Object.freeze({
+    environment: mimic.environment,
     run: mimic.run.bind(mimic),
     capture: mimic.capture.bind(mimic),
     plan: mimic.plan.bind(mimic),

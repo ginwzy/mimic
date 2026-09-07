@@ -5,6 +5,8 @@ import {
   type RequestOptions,
   type TextResponse,
 } from '../../client.js';
+import { environmentAcceptLanguage, parseEnvironment } from '../../../src/core/environment.js';
+import type { EnvironmentOptions } from '../../../src/core/types.js';
 
 export const ANA_SITE = 'https://www.ana.co.jp';
 export const ANA_SELECT_URL = 'https://aswbe.ana.co.jp/webapps/reservation/common/system-error';
@@ -58,6 +60,7 @@ export const ANA_DEFAULT_CREDENTIALS: AnaCredentials = {
 };
 
 export interface AnaRequestOptions {
+  environment?: EnvironmentOptions;
   proxy?: string;
   proxyHeaders?: HeadersInit;
   timeoutMs?: number;
@@ -111,6 +114,7 @@ class AnaRequestClient implements AnaRequest {
     private readonly client: RequestClient,
     private readonly credentials: AnaCredentials,
     private readonly log: (message: string) => void,
+    private readonly acceptLanguage?: string,
   ) {}
 
   async getLanding(): Promise<string> {
@@ -256,6 +260,7 @@ class AnaRequestClient implements AnaRequest {
   }
 
   private async get(url: string, headers: Record<string, string>, label: string): Promise<TextResponse> {
+    if (this.acceptLanguage !== undefined) headers['accept-language'] = this.acceptLanguage;
     this.log(`GET ${url}`);
     const response = await this.client.get(url, headers);
     this.log(`${label} HTTP ${response.status} body=${response.body.length}B`);
@@ -269,6 +274,7 @@ class AnaRequestClient implements AnaRequest {
     label: string,
     options?: RequestOptions,
   ): Promise<TextResponse> {
+    if (this.acceptLanguage !== undefined) headers['accept-language'] = this.acceptLanguage;
     this.log(`${label} ${url} body=${body.length}B`);
     const response = await this.client.post(url, body, headers, options);
     this.log(`${label} HTTP ${response.status} resp=${response.body.length}B`);
@@ -277,6 +283,8 @@ class AnaRequestClient implements AnaRequest {
 }
 
 export async function createAnaRequest(options: AnaRequestOptions = {}): Promise<AnaRequest> {
+  const acceptLanguage = options.environment === undefined ? undefined
+    : environmentAcceptLanguage(parseEnvironment(options.environment));
   const client = await createRequestClient({
     browser: 'chrome_145',
     os: 'android',
@@ -289,5 +297,6 @@ export async function createAnaRequest(options: AnaRequestOptions = {}): Promise
     client,
     options.credentials ?? ANA_DEFAULT_CREDENTIALS,
     options.log ?? (() => {}),
+    acceptLanguage,
   );
 }

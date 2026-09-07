@@ -4,6 +4,7 @@ import http, { type IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import test from 'node:test';
 import { startServer } from '../src/http/server.js';
+import { parseResult } from '../src/core/result.js';
 
 const profilesRoot = path.resolve('test/fixtures/fp-env');
 const probePath = path.resolve('resources/probe.js');
@@ -94,6 +95,22 @@ test('HTTP exposes the common TaskRequest/Result contract on loopback', async ()
     const profiles = await request(port, { path: '/profiles' });
     assert.equal(profiles.status, 200);
     assert.ok((profiles.body as string[]).includes('android-webview/unknown-v138-1'));
+
+    const regions = await request(port, { path: '/regions' });
+    assert.equal(regions.status, 200);
+    assert.ok((regions.body as { regions: { id: string }[] }).regions.some(({ id }) => id === 'jp-ja-tokyo'));
+    const regional = await request(port, {
+      method: 'POST', path: '/run', body: {
+        profile: 'android-webview/unknown-v138-1',
+        environment: { regional: { random: true, countries: ['JP'], seed: '\u65e5\u672c-http-region' } },
+        job: { kind: 'run', code: 'navigator.language' },
+      },
+    });
+    assert.equal((regional.body as { value: string }).value, 'ja-JP');
+    parseResult(regional.body);
+    const selection = (regional.body as { report: { environment: { selection: { preset: string; seed: string } } } }).report.environment.selection;
+    assert.equal(selection.preset, 'jp-ja-tokyo');
+    assert.equal(selection.seed, '\u65e5\u672c-http-region');
 
     const mismatch = await request(port, {
       method: 'POST',

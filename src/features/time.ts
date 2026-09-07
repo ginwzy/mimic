@@ -22,6 +22,15 @@ const RANDOM = 'window.Math.random';
 const FORMAT = 'window.Intl.DateTimeFormat';
 const FORMAT_PARTS = 'window.Intl.DateTimeFormat.prototype.formatToParts';
 const FORMAT_LOCALES = 'window.Intl.DateTimeFormat.supportedLocalesOf';
+const CANONICAL_LOCALES = 'window.Intl.getCanonicalLocales';
+const INTL_NAMES = ['NumberFormat', 'Collator', 'PluralRules', 'RelativeTimeFormat', 'ListFormat', 'DisplayNames', 'Segmenter'] as const;
+const LOCALE_METHODS = [
+  { owner: 'Number', key: 'toLocaleString', length: 0, index: 0 },
+  { owner: 'BigInt', key: 'toLocaleString', length: 0, index: 0 },
+  { owner: 'String', key: 'localeCompare', length: 1, index: 1 },
+  { owner: 'String', key: 'toLocaleLowerCase', length: 0, index: 0 },
+  { owner: 'String', key: 'toLocaleUpperCase', length: 0, index: 0 },
+] as const;
 
 const DATE_ZONE_METHODS = [
   { key: 'getTimezoneOffset', id: 'time.date.offset', slot: 'time.date.offset', mode: 'offset', path: DATE_OFFSET, length: 0 },
@@ -87,15 +96,35 @@ export function operations(): DraftOp[] {
     refProp(format, 'supportedLocalesOf', 'time.format.locales'),
     { op: 'order', target: date, keys: ['length', 'name', 'prototype', 'now', 'parse', 'UTC'] },
     { op: 'order', target: format, keys: ['length', 'name', 'prototype', 'supportedLocalesOf'] },
+    ...INTL_NAMES.flatMap<DraftOp>((name) => {
+      const id = `time.intl.${name}`;
+      const prototype = { path: `window.Intl.${name}.prototype` };
+      return [
+        { op: 'alloc', id, kind: 'function', slot: id, prototype, shape: fnShape(name, 0, true, true) },
+        { op: 'alloc', id: `${id}.locales`, kind: 'function', slot: `${id}.locales`, shape: fnShape('supportedLocalesOf', 1) },
+        refProp({ path: 'window.Intl' }, name, id),
+        refProp(prototype, 'constructor', id),
+        refProp({ node: id }, 'supportedLocalesOf', `${id}.locales`),
+        { op: 'order', target: { node: id }, keys: ['length', 'name', 'prototype', 'supportedLocalesOf'] },
+      ];
+    }),
+    ...LOCALE_METHODS.flatMap<DraftOp>(({ owner, key, length }) => {
+      const id = `time.locale.${owner}.${key}`;
+      return [
+        { op: 'alloc', id, kind: 'function', slot: id, shape: fnShape(key, length) },
+        refProp({ path: `window.${owner}.prototype` }, key, id),
+      ];
+    }),
   ];
 }
 
 export const timeFeature: Feature = {
   id: 'time',
-  rev: '1',
+  rev: '2',
   build: ({ profile, page }) => {
     const now = page?.clock?.now ?? null;
     const timeZone = profile.timezone?.timeZone ?? null;
+    const locale = profile.locale ?? null;
     return {
       binds: [
         {
@@ -119,8 +148,8 @@ export const timeFeature: Feature = {
           sources: [RANDOM],
         },
         {
-          slot: 'time.format', driver: 'time', config: { op: 'format', timeZone },
-          sources: [FORMAT],
+          slot: 'time.format', driver: 'time', config: { op: 'format', timeZone, locale },
+          sources: [FORMAT, CANONICAL_LOCALES],
         },
         {
           slot: 'time.format.locales', driver: 'time', config: { op: 'apply', path: FORMAT_LOCALES },
@@ -130,17 +159,34 @@ export const timeFeature: Feature = {
           slot,
           driver: 'time',
           config: mode === 'locale'
-            ? { op: 'locale', path, timeZone }
+            ? { op: 'locale', path, timeZone, locale }
             : { op: 'timezone', method: mode, path, timeZone },
           sources: mode === 'locale'
-            ? [path]
+            ? [path, CANONICAL_LOCALES]
             : [path, DATE, DATE_GET_TIME, DATE_SET_TIME, DATE_UTC, DATE_UTC_DAY, DATE_UTC_MILLISECONDS, FORMAT, FORMAT_PARTS],
+        })),
+        ...INTL_NAMES.flatMap((name) => {
+          const slot = `time.intl.${name}`;
+          const path = `window.Intl.${name}`;
+          return [
+            { slot, driver: 'time', config: { op: 'intl', path, locale }, sources: [path, CANONICAL_LOCALES] },
+            {
+              slot: `${slot}.locales`, driver: 'time',
+              config: { op: 'apply', path: `${path}.supportedLocalesOf` }, sources: [`${path}.supportedLocalesOf`],
+            },
+          ];
+        }),
+        ...LOCALE_METHODS.map(({ owner, key, index }) => ({
+          slot: `time.locale.${owner}.${key}`, driver: 'time',
+          config: { op: 'locale-method', path: `window.${owner}.prototype.${key}`, index, locale },
+          sources: [`window.${owner}.prototype.${key}`, CANONICAL_LOCALES],
         })),
       ],
       support: {
         'time.clock': page?.clock ? 'emulated' : 'unsupported',
         'time.random': page?.clock ? 'emulated' : 'unsupported',
         'time.timezone': profile.timezone ? profile.evidence.timezone.support : 'unsupported',
+        'time.locale': profile.locale === undefined ? 'unsupported' : 'emulated',
       },
     };
   },
@@ -171,8 +217,18 @@ function nullableString(value: JsonValue | undefined, name: string): string | nu
   return value;
 }
 
-function formatArgs(args: readonly unknown[], timeZone: string | null): unknown[] {
-  if (timeZone === null || args[1] === null) return [...args];
+function localeArgs(port: Port, args: readonly unknown[], locale: string | null, index = 0): unknown[] {
+  const output = [...args];
+  if (locale === null) return output;
+  const locales = Reflect.apply(source(port, CANONICAL_LOCALES), undefined, [args[index]]) as string[];
+  // Native locale negotiation must fall back to the Profile, not the host locale.
+  output[index] = [...locales, locale];
+  return output;
+}
+
+function formatArgs(port: Port, args: readonly unknown[], timeZone: string | null, locale: string | null): unknown[] {
+  const output = localeArgs(port, args, locale);
+  if (timeZone === null || args[1] === null) return output;
   const target = args[1] === undefined ? Object.create(null) as object : Object(args[1]);
   const options = new Proxy(target, {
     get: (value, key) => {
@@ -180,7 +236,6 @@ function formatArgs(args: readonly unknown[], timeZone: string | null): unknown[
       return key === 'timeZone' && current === undefined ? timeZone : current;
     },
   });
-  const output = [...args];
   output[1] = options;
   return output;
 }
@@ -460,7 +515,11 @@ export const timeDriver: Driver = {
         }
         if (item.op === 'format') {
           const timeZone = nullableString(item.timeZone, 'timeZone');
-          return Reflect.apply(source(port, FORMAT), self, formatArgs(args, timeZone));
+          return Reflect.apply(source(port, FORMAT), self, formatArgs(port, args, timeZone, nullableString(item.locale, 'locale')));
+        }
+        if ((item.op === 'intl' || item.op === 'locale-method') && typeof item.path === 'string') {
+          return Reflect.apply(source(port, item.path), self, localeArgs(port, args, nullableString(item.locale, 'locale'),
+            item.op === 'locale-method' ? item.index as number : 0));
         }
         if (item.op === 'timezone') {
           const timeZone = nullableString(item.timeZone, 'timeZone');
@@ -484,7 +543,7 @@ export const timeDriver: Driver = {
         }
         if (item.op === 'locale' && typeof item.path === 'string') {
           const timeZone = nullableString(item.timeZone, 'timeZone');
-          return Reflect.apply(source(port, item.path), self, formatArgs(args, timeZone));
+          return Reflect.apply(source(port, item.path), self, formatArgs(port, args, timeZone, nullableString(item.locale, 'locale')));
         }
         throw new TypeError(`time Driver op invalid:${String(item.op)}`);
       },
@@ -503,7 +562,10 @@ export const timeDriver: Driver = {
         }
         if (item.op === 'format') {
           const timeZone = nullableString(item.timeZone, 'timeZone');
-          return Reflect.construct(source(port, FORMAT), formatArgs(args, timeZone), newTarget);
+          return Reflect.construct(source(port, FORMAT), formatArgs(port, args, timeZone, nullableString(item.locale, 'locale')), newTarget);
+        }
+        if (item.op === 'intl' && typeof item.path === 'string') {
+          return Reflect.construct(source(port, item.path), localeArgs(port, args, nullableString(item.locale, 'locale')), newTarget);
         }
         throw new TypeError(`time Driver construct invalid:${String(item.op)}`);
       },

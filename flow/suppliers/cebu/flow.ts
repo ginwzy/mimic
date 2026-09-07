@@ -1,4 +1,6 @@
 import { randomBytes, randomInt } from 'node:crypto';
+import { parseEnvironment } from '../../../src/core/environment.js';
+import type { ResolvedEnvironment } from '../../../src/core/types.js';
 import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
 import { CEBU_SELECT_URL, createCebuRequest } from './request.js';
@@ -20,6 +22,7 @@ export interface CebuFlowOptions {
 
 export interface CebuFlowResult {
   profile: string;
+  environment: ResolvedEnvironment;
   interactionSeed: string;
   cookies: string;
   abckBodyCount: number;
@@ -66,10 +69,13 @@ async function resolveProfile(explicit: string | undefined, profilesRoot: string
 }
 
 export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFlowResult> {
+  const environment = parseEnvironment({ regional: { random: true, countries: ['JP', 'GB', 'DE'] } });
   const log = options.log ?? (() => {});
+  log(`regional environment=${JSON.stringify(environment)}`);
   const interactionSeed = options.interactionSeed ?? randomBytes(16).toString('hex');
   const profile = await resolveProfile(options.profile, options.profilesRoot);
   const request = await createCebuRequest({
+    environment,
     ...(options.proxy === undefined ? {} : { proxy: options.proxy }),
     ...(options.proxyHeaders === undefined ? {} : { proxyHeaders: options.proxyHeaders }),
     timeoutMs: 60_000,
@@ -92,6 +98,7 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
       scriptSource: abckSource,
       cookies: splitCookies(request.cookies()),
       profile,
+      environment,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 8_000,
       scriptTimeoutMs: 16_000,
@@ -119,6 +126,7 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
         scriptSource: bmsSource,
         cookies: splitCookies(request.cookies()),
         profile,
+        environment,
         ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
         deadlineMs: 7_000,
         scriptTimeoutMs: 16_000,
@@ -136,6 +144,7 @@ export async function runCebuFlow(options: CebuFlowOptions = {}): Promise<CebuFl
     const search = options.search === true ? await request.search(options.searchBody) : undefined;
     return {
       profile,
+      environment,
       interactionSeed,
       cookies,
       abckBodyCount: abckCapture.bodies.length,

@@ -1,4 +1,6 @@
 import { randomBytes, randomInt } from 'node:crypto';
+import { parseEnvironment } from '../../../src/core/environment.js';
+import type { ResolvedEnvironment } from '../../../src/core/types.js';
 import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
 import { ANA_SELECT_URL, createAnaRequest } from './request.js';
@@ -20,6 +22,7 @@ export interface AnaFlowOptions {
 
 export interface AnaFlowResult {
   profile: string;
+  environment: ResolvedEnvironment;
   interactionSeed: string;
   cookies: string;
   abckBodyCount: number;
@@ -64,10 +67,13 @@ async function resolveProfile(explicit: string | undefined, profilesRoot: string
 }
 
 export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowResult> {
+  const environment = parseEnvironment({ regional: { random: true} });
   const log = options.log ?? (() => {});
+  log(`regional environment=${JSON.stringify(environment)}`);
   const interactionSeed = options.interactionSeed ?? randomBytes(16).toString('hex');
   const profile = await resolveProfile(options.profile, options.profilesRoot);
   const request = await createAnaRequest({
+    environment,
     ...(options.proxy === undefined ? {} : { proxy: options.proxy }),
     ...(options.proxyHeaders === undefined ? {} : { proxyHeaders: options.proxyHeaders }),
     timeoutMs: 60_000,
@@ -90,6 +96,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       scriptSource: abckSource,
       cookies: splitCookies(request.cookies()),
       profile,
+      environment,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 8_000,
       scriptTimeoutMs: 16_000,
@@ -116,6 +123,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       scriptSource: bmsSource,
       cookies: splitCookies(request.cookies()),
       profile,
+      environment,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 7_000,
       scriptTimeoutMs: 16_000,
@@ -133,6 +141,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
     const verify = options.verify === true ? await request.verify(options.verifyBody) : undefined;
     return {
       profile,
+      environment,
       interactionSeed,
       cookies,
       abckBodyCount: abckCapture.bodies.length,

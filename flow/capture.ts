@@ -3,7 +3,7 @@ import { WorkerExecutor } from '../src/executor/pool.js';
 import { DEFAULT_PROFILES_ROOT } from '../src/node/assets.js';
 import { FpEnvProfiles } from '../src/node/fp-env.js';
 import { digest, seal } from '../src/core/seal.js';
-import type { Page } from '../src/core/types.js';
+import type { EnvironmentOptions, Page } from '../src/core/types.js';
 
 export type CaptureMode = 'abck' | 'bms';
 
@@ -14,6 +14,7 @@ export interface CaptureBodiesOptions {
   scriptSource: string;
   cookies?: readonly string[];
   profile: string;
+  environment?: EnvironmentOptions;
   profilesRoot?: string;
   deadlineMs: number;
   scriptTimeoutMs: number;
@@ -129,6 +130,7 @@ export class CapturePool {
 
     const result = await executor.run({
       profile: options.profile,
+      ...(options.environment === undefined ? {} : { environment: options.environment }),
       page: capturePage(options),
       job: {
         kind: 'capture',
