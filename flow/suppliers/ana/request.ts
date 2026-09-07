@@ -6,7 +6,7 @@ import {
   type TextResponse,
 } from '../../client.js';
 import { environmentAcceptLanguage, parseEnvironment } from '../../../src/core/environment.js';
-import type { EnvironmentOptions } from '../../../src/core/types.js';
+import type { EnvironmentOptions, Profile } from '../../../src/core/types.js';
 
 export const ANA_SITE = 'https://www.ana.co.jp';
 export const ANA_SELECT_URL = 'https://aswbe.ana.co.jp/webapps/reservation/common/system-error';
@@ -24,6 +24,7 @@ const BROWSER_HEADERS = {
   'sec-ch-ua': SEC_CH_UA,
   'sec-ch-ua-mobile': '?1',
   'sec-ch-ua-platform': '"Android"',
+  'accept-encoding': 'gzip, deflate, br, zstd',
 } as const;
 
 const FLIGHT_SEARCH_HEADER_ORDER = [
@@ -60,6 +61,7 @@ export const ANA_DEFAULT_CREDENTIALS: AnaCredentials = {
 };
 
 export interface AnaRequestOptions {
+  profile?: Profile;
   environment?: EnvironmentOptions;
   proxy?: string;
   proxyHeaders?: HeadersInit;
@@ -114,12 +116,13 @@ class AnaRequestClient implements AnaRequest {
     private readonly client: RequestClient,
     private readonly credentials: AnaCredentials,
     private readonly log: (message: string) => void,
+    private readonly browserHeaders: Readonly<Record<string, string>>,
     private readonly acceptLanguage?: string,
   ) {}
 
   async getLanding(): Promise<string> {
     const response = await this.get(ANA_SELECT_URL, {
-      ...BROWSER_HEADERS,
+      ...this.browserHeaders,
       'upgrade-insecure-requests': '1',
       accept: DOC_ACCEPT,
       'sec-fetch-site': 'same-origin',
@@ -155,7 +158,7 @@ class AnaRequestClient implements AnaRequest {
 
   async getScript(url: string): Promise<string> {
     const response = await this.get(url, {
-      ...BROWSER_HEADERS,
+      ...this.browserHeaders,
       accept: '*/*',
       'sec-fetch-site': 'same-origin',
       'sec-fetch-mode': 'no-cors',
@@ -168,10 +171,10 @@ class AnaRequestClient implements AnaRequest {
 
   async postAbck(url: string, body: string): Promise<void> {
     const response = await this.post(withoutQuery(url), body, {
-      ...BROWSER_HEADERS,
+      ...this.browserHeaders,
       'content-type': 'text/plain;charset=UTF-8',
-      accept: DOC_ACCEPT,
-      origin: ANA_SITE,
+      accept: '*/*',
+      origin: ASWBE_ORIGIN,
       'sec-fetch-site': 'same-origin',
       'sec-fetch-mode': 'cors',
       'sec-fetch-dest': 'empty',
@@ -183,10 +186,10 @@ class AnaRequestClient implements AnaRequest {
 
   async postBms(url: string, body: string): Promise<void> {
     const response = await this.post(withoutQuery(url), body, {
-      ...BROWSER_HEADERS,
+      ...this.browserHeaders,
       'content-type': 'application/json',
       accept: 'application/json',
-      origin: ANA_SITE,
+      origin: ASWBE_ORIGIN,
       'sec-fetch-site': 'same-origin',
       'sec-fetch-mode': 'cors',
       'sec-fetch-dest': 'empty',
@@ -198,13 +201,10 @@ class AnaRequestClient implements AnaRequest {
 
   async postFlightSearch(): Promise<void> {
     const response = await this.post(ANA_FLIGHT_SEARCH_URL, ANA_FLIGHT_SEARCH_BODY, {
+      ...this.browserHeaders,
       'cache-control': 'max-age=0',
-      'sec-ch-ua': '"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
-      'sec-ch-ua-mobile': '?1',
-      'sec-ch-ua-platform': '"Android"',
       'upgrade-insecure-requests': '1',
       'content-type': 'application/x-www-form-urlencoded',
-      'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36',
       origin: ANA_SITE,
       accept: DOC_ACCEPT,
       'sec-fetch-site': 'same-site',
@@ -225,7 +225,7 @@ class AnaRequestClient implements AnaRequest {
       return index < 0 ? [] : [cookie.slice(0, index)];
     });
     const response = await this.post(ANA_VERIFY_URL, body, {
-      ...BROWSER_HEADERS,
+      ...this.browserHeaders,
       accept: 'application/json',
       'accept-encoding': 'gzip, deflate, br, zstd',
       'accept-language': ACCEPT_LANG,
@@ -262,7 +262,7 @@ class AnaRequestClient implements AnaRequest {
   private async get(url: string, headers: Record<string, string>, label: string): Promise<TextResponse> {
     if (this.acceptLanguage !== undefined) headers['accept-language'] = this.acceptLanguage;
     this.log(`GET ${url}`);
-    const response = await this.client.get(url, headers);
+    const response = await this.client.get(url, headers, { disableDefaultHeaders: true });
     this.log(`${label} HTTP ${response.status} body=${response.body.length}B`);
     return response;
   }
@@ -276,7 +276,7 @@ class AnaRequestClient implements AnaRequest {
   ): Promise<TextResponse> {
     if (this.acceptLanguage !== undefined) headers['accept-language'] = this.acceptLanguage;
     this.log(`${label} ${url} body=${body.length}B`);
-    const response = await this.client.post(url, body, headers, options);
+    const response = await this.client.post(url, body, headers, { ...options, disableDefaultHeaders: true });
     this.log(`${label} HTTP ${response.status} resp=${response.body.length}B`);
     return response;
   }
@@ -285,6 +285,16 @@ class AnaRequestClient implements AnaRequest {
 export async function createAnaRequest(options: AnaRequestOptions = {}): Promise<AnaRequest> {
   const acceptLanguage = options.environment === undefined ? undefined
     : environmentAcceptLanguage(parseEnvironment(options.environment));
+  const navigator = options.profile?.navigator;
+  const browserHeaders = navigator === undefined ? BROWSER_HEADERS : {
+    ...BROWSER_HEADERS,
+    'user-agent': navigator.userAgent,
+    'sec-ch-ua': navigator.userAgentData.brands.map(({ brand, version }) => (
+      `${JSON.stringify(brand)};v=${JSON.stringify(version)}`
+    )).join(', '),
+    'sec-ch-ua-mobile': navigator.userAgentData.mobile ? '?1' : '?0',
+    'sec-ch-ua-platform': JSON.stringify(navigator.userAgentData.platform),
+  };
   const client = await createRequestClient({
     browser: 'chrome_145',
     os: 'android',
@@ -297,6 +307,7 @@ export async function createAnaRequest(options: AnaRequestOptions = {}): Promise
     client,
     options.credentials ?? ANA_DEFAULT_CREDENTIALS,
     options.log ?? (() => {}),
+    browserHeaders,
     acceptLanguage,
   );
 }

@@ -1,6 +1,8 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { parseEnvironment } from '../../../src/core/environment.js';
 import type { ResolvedEnvironment } from '../../../src/core/types.js';
+import { DEFAULT_PROFILES_ROOT } from '../../../src/node/assets.js';
+import { FpEnvProfiles } from '../../../src/node/fp-env.js';
 import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
 import { ANA_SELECT_URL, createAnaRequest } from './request.js';
@@ -53,7 +55,7 @@ function cookieNames(cookieHeader: string): string[] {
 function selectBodies(bodies: readonly string[], postCount: number | undefined): string[] {
   if (postCount !== undefined) return bodies.slice(0, Math.max(0, postCount));
   if (bodies.length <= 2) return [...bodies];
-  return [...bodies.slice(0, 2), ...bodies.slice(-1)];
+  return [...bodies.slice(0, 2), ...bodies.slice(-2)];
 }
 
 async function resolveProfile(explicit: string | undefined, profilesRoot: string | undefined): Promise<string> {
@@ -72,7 +74,9 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
   log(`regional environment=${JSON.stringify(environment)}`);
   const interactionSeed = options.interactionSeed ?? randomBytes(16).toString('hex');
   const profile = await resolveProfile(options.profile, options.profilesRoot);
+  const { profile: browserProfile } = await new FpEnvProfiles(options.profilesRoot ?? DEFAULT_PROFILES_ROOT).load(profile);
   const request = await createAnaRequest({
+    profile: browserProfile,
     environment,
     ...(options.proxy === undefined ? {} : { proxy: options.proxy }),
     ...(options.proxyHeaders === undefined ? {} : { proxyHeaders: options.proxyHeaders }),
