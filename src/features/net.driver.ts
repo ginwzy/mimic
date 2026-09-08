@@ -194,6 +194,18 @@ export const createNetDriver = (live = false): Driver => ({
         }
         if (item.via === 'xhr') instance(port, self, XHR);
         if (item.via === 'beacon') instance(port, self, NAV);
+        if (item.via === 'fetch' && !requests
+          && (item.mode === 'capture' || !callable(port, FETCH))) {
+          // Synthetic responses must not make unsupported schemes look reachable.
+          try {
+            const url = new URL(String(args[0]), String(port.evaluate('document.baseURI')));
+            if (!['http:', 'https:', 'data:', 'blob:'].includes(url.protocol)) throw new Error('Unsupported scheme');
+          } catch {
+            return port.resolve().then(() => {
+              throw port.error('TypeError', 'Failed to fetch');
+            });
+          }
+        }
         if (item.mode === 'capture') {
           const entry = post(item.via, requestBody(item.via, args));
           posts.push(entry);

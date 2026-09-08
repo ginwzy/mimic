@@ -160,6 +160,48 @@ test('net capture fetch resolves a minimal Realm Response with native body metho
   assert.equal(engine.active, 0);
 });
 
+test('net synthetic fetch rejects unsupported schemes before capture in both modes', async () => {
+  for (const kind of ['capture', 'run'] as const) {
+    const { engine, runtime } = await open(kind);
+    try {
+      const result = runtime.run(`(async () => {
+        const inputs = [
+          'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/missing.js',
+          '  CHROME-EXTENSION://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/missing.js  ',
+          new URL('chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/missing.js'),
+          'ftp://example.test/file', 'file:///missing.js', 'javascript:void(0)',
+          'about:blank', 'unsupported:resource', 'http://[invalid-host/',
+        ];
+        const rejected = [];
+        for (const input of inputs) {
+          const pending = fetch(input, { method: 'HEAD' });
+          rejected.push(await pending.then(
+            () => [false],
+            error => [pending instanceof Promise, error instanceof TypeError, error.name, error.message],
+          ));
+        }
+        const successful = [];
+        for (const url of ['/sensor', 'https://example.test/sensor', 'http://example.test/sensor']) {
+          const response = await fetch(url, { method: 'POST', body: 'sensor-body' });
+          successful.push([response instanceof Response, response.status, response.ok]);
+        }
+        return JSON.stringify({ rejected, successful });
+      })()`);
+      assert.equal(result.ok, true);
+      const value = JSON.parse(String(await result.value));
+      assert.deepEqual(value.rejected, Array.from({ length: 9 }, () => [true, true, 'TypeError', 'Failed to fetch']));
+      assert.deepEqual(value.successful, Array.from({ length: 3 }, () => [true, 200, true]));
+      const report = runtime.report() as { net: { posts: { body: string | null }[] } };
+      assert.deepEqual(report.net.posts.map(entry => entry.body), kind === 'capture'
+        ? ['sensor-body', 'sensor-body', 'sensor-body']
+        : []);
+    } finally {
+      runtime.dispose();
+    }
+    assert.equal(engine.active, 0);
+  }
+});
+
 test('net captures requests after an event and report snapshots cannot mutate Driver state', async () => {
   const { engine, runtime } = await open('capture');
   try {

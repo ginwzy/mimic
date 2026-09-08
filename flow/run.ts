@@ -1,5 +1,6 @@
+import { randomInt } from 'node:crypto';
 import { createLumiProxy, createLumiRelayProxy } from './proxy.js';
-import { CapturePool } from './capture.js';
+import { CapturePool, listAndroidChromeProfiles } from './capture.js';
 import { runAnaFlow, type AnaFlowOptions, type AnaFlowResult } from './suppliers/ana/flow.js';
 import { runCebuFlow, type CebuFlowOptions, type CebuFlowResult } from './suppliers/cebu/flow.js';
 
@@ -13,11 +14,13 @@ interface CliOptions {
   total: number;
   concurrency: number;
   batch: boolean;
+  profile?: string;
 }
 
 interface FlowExecution {
   success: boolean;
   status?: number;
+  classification?: string;
   summary: object;
 }
 
@@ -26,6 +29,7 @@ function usage(): string {
     'Usage: npm run flow -- <ana|cebu> [none|reqable|lumi|mitm] [options]',
     '',
     'Options:',
+    '  --profile <id>         Full Android Chrome Profile ID (default: random)',
     '  --total <number>        Total runs (default: 1)',
     '  --concurrency <number>  Maximum concurrent runs (default: 1)',
   ].join('\n');
@@ -43,10 +47,11 @@ function summarize(result: AnaFlowResult | CebuFlowResult) {
   };
 }
 
-async function runAna(proxyMode: ProxyMode, log: Log, capturePool: CapturePool): Promise<FlowExecution> {
+async function runAna(proxyMode: ProxyMode, log: Log, capturePool: CapturePool, profile?: string): Promise<FlowExecution> {
   const options: AnaFlowOptions = {
     capturePool,
     profilesRoot: './profiles',
+    ...(profile === undefined ? {} : { profile }),
     verify: true,
     log,
   };
@@ -78,7 +83,7 @@ async function runAna(proxyMode: ProxyMode, log: Log, capturePool: CapturePool):
   const result = await runAnaFlow(options);
   return {
     success: result.verify?.success ?? false,
-    ...(result.verify === undefined ? {} : { status: result.verify.status }),
+    ...(result.verify === undefined ? {} : { status: result.verify.status, classification: result.verify.class }),
     summary: {
       supplier: 'ana',
       proxy: proxyMode,
@@ -93,10 +98,11 @@ async function runAna(proxyMode: ProxyMode, log: Log, capturePool: CapturePool):
   };
 }
 
-async function runCebu(proxyMode: ProxyMode, log: Log, capturePool: CapturePool): Promise<FlowExecution> {
+async function runCebu(proxyMode: ProxyMode, log: Log, capturePool: CapturePool, profile?: string): Promise<FlowExecution> {
   const options: CebuFlowOptions = {
     capturePool,
     profilesRoot: './profiles',
+    ...(profile === undefined ? {} : { profile }),
     search: true,
     log,
   };
@@ -165,6 +171,7 @@ function parseArguments(args: readonly string[]): CliOptions | undefined {
   let total = 1;
   let concurrency = 1;
   let batch = false;
+  let profile: string | undefined;
   for (let index = offset; index < rest.length; index += 1) {
     const argument = rest[index];
     if (argument === '--total') {
@@ -181,15 +188,20 @@ function parseArguments(args: readonly string[]): CliOptions | undefined {
     } else if (argument?.startsWith('--concurrency=')) {
       concurrency = parsePositiveInteger(argument.slice('--concurrency='.length), '--concurrency');
       batch = true;
+    } else if (argument === '--profile' || argument?.startsWith('--profile=')) {
+      profile = argument === '--profile' ? rest[++index] : argument.slice('--profile='.length);
+      if (profile === undefined || profile.trim() === '' || profile.startsWith('--')) {
+        throw new Error(`--profile requires a full Android Chrome Profile ID\n\n${usage()}`);
+      }
     } else {
       throw new Error(`unknown option: ${argument ?? ''}\n\n${usage()}`);
     }
   }
-  return { supplier, proxyMode, total, concurrency, batch };
+  return { supplier, proxyMode, total, concurrency, batch, ...(profile === undefined ? {} : { profile }) };
 }
 
-function runSupplier(supplier: Supplier, proxyMode: ProxyMode, log: Log, capturePool: CapturePool): Promise<FlowExecution> {
-  return supplier === 'ana' ? runAna(proxyMode, log, capturePool) : runCebu(proxyMode, log, capturePool);
+function runSupplier(supplier: Supplier, proxyMode: ProxyMode, log: Log, capturePool: CapturePool, profile?: string): Promise<FlowExecution> {
+  return supplier === 'ana' ? runAna(proxyMode, log, capturePool, profile) : runCebu(proxyMode, log, capturePool, profile);
 }
 
 function errorMessage(error: unknown): string {
@@ -198,14 +210,21 @@ function errorMessage(error: unknown): string {
 
 async function runBatch(options: CliOptions, capturePool: CapturePool): Promise<void> {
   const startedAt = Date.now();
+  const profiles = options.profile === undefined ? [...await listAndroidChromeProfiles('./profiles')] : undefined;
+  if (profiles?.length === 0) {
+    throw new Error('no Android Chrome fp-env records; configure profilesRoot and download data first');
+  }
   let nextIndex = 0;
+  let roundEnd = 0;
   let completed = 0;
   let successful = 0;
+  const errorCounts = new Map<string, number>();
 
   const worker = async (): Promise<void> => {
-    while (nextIndex < options.total) {
+    while (nextIndex < roundEnd) {
       const index = nextIndex;
       nextIndex += 1;
+      const profile = profiles === undefined ? options.profile : profiles[index % profiles.length]!;
       const itemStartedAt = Date.now();
       let success = false;
       let status: number | undefined;
@@ -216,15 +235,25 @@ async function runBatch(options: CliOptions, capturePool: CapturePool): Promise<
           options.proxyMode,
           (message) => console.error(`[#${index + 1}] ${message}`),
           capturePool,
+          profile,
         );
         status = execution.status;
         success = execution.success;
+        if (!success) {
+          failure = status === undefined ? 'unsuccessful result' : `HTTP ${status}`;
+          if (execution.classification) failure += ` (${execution.classification})`;
+        }
       } catch (error) {
         failure = errorMessage(error).replace(/\s+/g, ' ').trim();
       }
       const elapsedMs = Date.now() - itemStartedAt;
       completed += 1;
-      if (success) successful += 1;
+      if (success) {
+        successful += 1;
+      } else {
+        const reason = failure ?? 'unsuccessful result';
+        errorCounts.set(reason, (errorCounts.get(reason) ?? 0) + 1);
+      }
       const failed = completed - successful;
       const rate = ((successful / completed) * 100).toFixed(2);
       const statusText = status === undefined ? '' : ` status=${status}`;
@@ -236,16 +265,32 @@ async function runBatch(options: CliOptions, capturePool: CapturePool): Promise<
     }
   };
 
-  const workerCount = Math.min(options.concurrency, options.total);
-  await Promise.all(Array.from({ length: workerCount }, worker));
+  const roundSize = profiles?.length ?? options.total;
+  const workerCount = Math.min(options.concurrency, options.total, roundSize);
+  if (profiles !== undefined) console.error(`Profile pool=${profiles.length} effectiveConcurrency=${workerCount}`);
+  while (nextIndex < options.total) {
+    if (profiles !== undefined) {
+      for (let index = profiles.length - 1; index > 0; index -= 1) {
+        const other = randomInt(index + 1);
+        [profiles[index], profiles[other]] = [profiles[other]!, profiles[index]!];
+      }
+    }
+    roundEnd = Math.min(nextIndex + roundSize, options.total);
+    // Finish the round before reusing any Profile, including ones held by slower workers.
+    await Promise.all(Array.from({ length: workerCount }, worker));
+  }
+  const failed = options.total - successful;
   console.log(JSON.stringify({
     supplier: options.supplier,
     proxy: options.proxyMode,
     total: options.total,
     concurrency: options.concurrency,
     successful,
-    failed: options.total - successful,
+    failed,
     successRate: `${((successful / options.total) * 100).toFixed(2)}%`,
+    errorDistribution: [...errorCounts]
+      .sort(([leftError, leftCount], [rightError, rightCount]) => rightCount - leftCount || leftError.localeCompare(rightError))
+      .map(([error, count]) => ({ error, count, percentage: `${((count / failed) * 100).toFixed(2)}%` })),
     elapsedMs: Date.now() - startedAt,
   }, null, 2));
 }
@@ -262,7 +307,7 @@ async function main(): Promise<void> {
     if (options.batch) {
       await runBatch(options, capturePool);
     } else {
-      const execution = await runSupplier(options.supplier, options.proxyMode, (message) => console.error(message), capturePool);
+      const execution = await runSupplier(options.supplier, options.proxyMode, (message) => console.error(message), capturePool, options.profile);
       console.log(JSON.stringify(execution.summary, null, 2));
     }
   } finally {
