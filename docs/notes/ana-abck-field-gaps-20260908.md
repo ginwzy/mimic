@@ -39,9 +39,14 @@ re-decoded. Do not treat those early field placements as runtime defects.
 | Order | Issue | Fields | Status |
 | --- | --- | --- | --- |
 | 1 | Unsupported fetch schemes resolve successfully | `sww.ext` | Fixed; verified offline |
-| 2 | Missing browser capabilities and incorrect permission queries | `mst.nfas`, `s162`, `s173`, `per` | Pending |
-| 3 | Incorrect iframe Chrome surface and getter appearance | `dsi.ico`, `dsi.ift` | Pending |
-| 4 | Audio uses ID-derived values instead of matching captured evidence | `s158` | Pending |
+| 2 | Missing browser capabilities and incorrect permission queries | `mst.nfas`, `s162`, `s173`, `per` | Compared fields match offline on Android Chrome 152; backend/API limits below |
+| 3 | Incorrect iframe Chrome surface and getter appearance | `dsi.ico`, `dsi.ift` | Fixed; compared fields match offline |
+| 4 | Audio uses ID-derived values instead of matching captured evidence | `s158` | Ignored for now by user decision; research retained below |
+| 5 | Plugin methods are incorrectly non-writable | `wsl` index 6 | Pending; confirmed in latest payload and Realm |
+| 6 | File input lacks the `capture` IDL attribute | `s150` | Pending; decoded capability and Realm agree |
+| 7 | Generated motion bypasses Chromium sensor quantization | `dme` | Pending; payload, real samples and Chromium source agree |
+
+The next active repair sequence is 5, 6, then 7. Audio remains ignored.
 
 Capability exposure and permission semantics are separate defects, grouped into
 one repair stage because they share the navigator capability surface. Each
@@ -89,7 +94,7 @@ The `mst.nfas` XOR is `4194309`: bits 0, 2 and 22 correspond to
 
 The six `s162` probes are `PublicKeyCredential`, `AuthenticatorResponse`,
 `AuthenticatorAttestationResponse`, `AuthenticatorAssertionResponse`,
-`MediaMetadata` and `navigator.mediaSession`. A current production Realm probe
+`MediaMetadata` and `navigator.mediaSession`. The baseline production Realm probe
 confirmed all ten missing surfaces above.
 
 Repair boundary: follow the existing Feature/Shape ownership and use browser
@@ -106,11 +111,12 @@ The query order is `speaker`, `device-info`, `bluetooth`,
 `ambient-light-sensor`, `accelerometer`, `gyroscope`, `magnetometer`,
 `clipboard`, `accessibility-events`.
 
-`src/features/nav.compile.ts` currently resolves every query with
+Previously, `src/features/nav.compile.ts` resolved every query with
 `{ state: 'prompt', onchange: null }`. Real Chrome rejects unsupported names
 and distinguishes granted and denied states. Its accelerometer, gyroscope and
 magnetometer queries return granted in this capture. All nine mimic queries
-returned prompt in the production Realm probe.
+returned prompt in the baseline production Realm probe. The permission query
+correction below replaces this constant binding with argument-aware behavior.
 
 Repair boundary: distinguish invalid descriptors and unsupported permission
 names from supported permissions and their states. Origin policy and user
@@ -123,11 +129,12 @@ grants cannot be inferred universally from one site's capture.
 - mimic: `loadTimes,csi,app`, hash `070f409b82df3bdd2f51a6415c7895353c153c47fe6dd8a0f87f3d14c46ccb2b`.
 - Real: `loadTimes,csi`, hash `b5b4950fcbc155e529ffb37ecd035deb7544874d291670dcb7632b336318fffd`.
 
-Both hashes were reproduced exactly. `src/features/chrome.compile.ts` installs
-the extra `chrome.app` property for this target.
+Both hashes were reproduced exactly. Before stage 3,
+`src/features/chrome.compile.ts` installed the extra `chrome.app` property for
+this target.
 
-`dsi.ift` is 2 in mimic and 3 in real. Both create a distinct iframe Window,
-but the mimic `HTMLIFrameElement.prototype.contentWindow` getter prints
+The baseline `dsi.ift` is 2 in mimic and 3 in real. Both create a distinct iframe
+Window, but the mimic `HTMLIFrameElement.prototype.contentWindow` getter printed
 `function () { [native code] }` and fails the script's named-native-getter
 check. This was reproduced in the production Realm.
 
@@ -138,6 +145,11 @@ absence of `chrome.app` on this Android Chrome 152 capture must not be applied
 blindly to other browser versions or desktop Chrome.
 
 ## 5. Audio values still come from the Profile ID
+
+Status: ignored for now at the user's request. This is not fixed or validated
+as browser-faithful, but is excluded from the current repair queue and subsequent
+comparisons' actionable findings. No audio implementation or capture-data changes
+were made during this research.
 
 - mimic `s158`: `d4d77615`.
 - Real `s158`: `37c4a1fb`.
@@ -158,6 +170,156 @@ rounding and sum definitions before mapping audio into a normalized Profile.
 The classic 5000-sample tail absolute sum is not interchangeable with the
 ABCK four-tuple. Recollect matching measurements if necessary; do not replace
 the runtime result with the real hash or infer raw samples from a hash.
+
+### Audio research retained for later
+
+Both archived original ABCK scripts were executed in the same phone-Profile
+Realm with diagnostic observations inserted after audio measurement. They use
+the same recipe and both produce the four-tuple above and `d4d77615` in mimic:
+
+- `OfflineAudioContext(1, 44100, 44100)`: one channel, one second of audio.
+- Triangle oscillator at 10000 Hz; compressor threshold/knee/ratio/attack/release
+  of `-50 / 40 / 12 / 0 / 0.25`.
+- `sampleSum` is the signed sum of all channel samples, not a tail or absolute sum.
+- After rendering resolves, the script creates an analyser and buffer source in
+  that same offline context. FFT size is 2048, frequency-bin count 1024; frequency
+  and time samples are also summed without taking absolute values.
+- The four measurements use six-decimal rounding followed by ordered JSON and
+  the DJB2/XOR hash with seed 5381. Reducers do not filter nonfinite values:
+  `-Infinity` would serialize as `null`, not zero. Whether the real tuple contains
+  such a value is unmeasured; it cannot be inferred from `37c4a1fb`.
+
+Current runtime probes confirm that a 44100-frame output has only one nonzero
+sample, `90.4117660522461`. Triangle 10000 Hz, sine 440 Hz and a disconnected graph
+all return the same array. Even `createBuffer()` receives this fill instead of
+zeros. The analyser arrays use the same single-value aggregation shortcut.
+Changing graph parameters therefore does not produce corresponding audio changes.
+
+The phone's original `z__env_1788833327264.capture.json` contains 5000 native
+samples. Its `124.08075415677013` measurement sums absolute values of frames
+4500..4999; its full signed 5000-frame sum is `0.07146980640618494` and compressor
+reduction is `-20.535268783569336`. These are not the longer ABCK recipe's inputs.
+The current identity policy also casts aggregate values to Float32 for single-point
+replay, which can alter a real double-precision aggregate before six-decimal
+rounding. Merely importing four measurements would not address that issue.
+
+Risk assessment: the uploaded hash does not directly expose the sparse waveform
+or uniquely identify its four inputs. A service could compare audio hashes with
+real-browser distributions and other environment fields, but its actual scoring
+rules, this hash's acceptance and a causal link to edge 403 are unknown. The
+observed runtime defect is not proof that this field caused a block.
+
+If explicitly reopened, first collect the identical recipe and call sequence,
+including raw PCM, analyser arrays, reduction, parameters and browser provenance.
+A scoped repair could normalize those records into Profile/Plan and replay exact
+arrays for the measured configuration, leaving aggregation and hashing to the
+original script. Do not overwrite `s158`, infer samples from its hash, distribute
+one phone's evidence across all Profiles, or claim a complete DSP implementation.
+This is a deferred direction, not an implemented change or a current task.
+
+## Post-repair payload comparison
+
+The subsequent tfdev capture contains fourteen flows, including five ABCK POSTs
+at IDs 4-8. Complete fingerprint fields are compared from IDs 6-8, decoded with
+`fileHash=6828387`, against the same twenty real exports and reference flow 108.
+These flow IDs refer to this capture, not a permanent tfdev identifier space.
+
+This run uses `android-chrome/sm-f956b-v152-1776955`, a Samsung Profile, whereas
+the real reference is the M2012K11AC. Screen size, DPR, GPU and OS-version
+differences are therefore not defects by themselves. Continue to exclude flow,
+regional and timing differences, and the explicitly ignored `s158`.
+
+The latest complete payloads match real on all previously repaired fields:
+`sww.ext=0|0,0,0`, `mst.nfas=30228925`, `s162=000000`, `s173=1`,
+`per=99999944949322244999`, `dsi.ico=b5b4950f...18fffd` and `dsi.ift=3`.
+The three remaining defects below were investigated without implementation
+changes or new supplier requests.
+
+Flow 6, the third ABCK POST, sets `_abck` to `~0~`. Flow 13 sends that cookie
+but receives HTML Access Denied, HTTP 403. This is not a missing-final-sensor
+outcome, but it does not establish which, if any, of these defects caused the
+edge block.
+
+## 6. Plugin methods are incorrectly non-writable
+
+Status: pending; next repair.
+
+- `wsl` zero-based index 6 (the seventh comma-separated item): mimic `-1`, real `1`.
+- Both scripts probe whether `navigator.plugins.refresh` can be temporarily
+  replaced with a string, then restore the original function. A successful
+  overwrite returns `1`; an exception returns `-1`.
+- The current Realm exposes the method but declares it `writable:false`.
+  Strict-mode assignment throws `TypeError: Cannot assign to read only property
+  'refresh' of object '[object PluginArray]'`, reproducing the payload result.
+
+There are two enforcing paths: `src/features/plugins.compile.ts` declares
+PluginArray/MimeTypeArray methods non-writable, and
+`src/features/plugins.driver.ts` calls `lockArrayMethods()` on first navigator
+access. The Driver also removes own overrides. Fixing only the compiled
+descriptor would leave the runtime lock in place.
+
+Repair boundary: correct the browser object's descriptor and assignment
+semantics in both paths, using target evidence for related methods. Do not
+overwrite `wsl`, alter plugin counts, or treat a successful descriptor change
+alone as proof that the ABCK overwrite probe now succeeds.
+
+## 7. File input lacks the capture IDL attribute
+
+Status: pending; follows the plugin-method repair.
+
+`s150` is a randomized capability encoding, not an arbitrary random field or
+a directly comparable magnitude. Both audited scripts create an input, set
+`type=file` and `capture=user`, then test whether `input.capture` is defined.
+The encoding was checked through diagnostic observations after computation:
+support produces a random multiple of 862; absence produces a nonmultiple.
+
+- Latest mimic: `7470 % 862 = 574`, meaning absent.
+- Real reference: `65512 % 862 = 0`, meaning present.
+- Every nonempty `s150` across the twenty real exports is a multiple of 862.
+- In the current Samsung-Profile Realm, `getAttribute('capture')` returns
+  `user`, but `input.capture` is undefined and
+  `HTMLInputElement.prototype` has no `capture` descriptor.
+
+The missing DOM property, rather than attribute storage or numeric randomness,
+is the confirmed cause. Recheck the encoding constants for future script
+versions instead of assuming that 862 is universal.
+
+Repair boundary: implement the target's reflected DOM attribute through the
+existing DOM Feature/Shape ownership. Do not hard-code `s150`, substitute a real
+encoded number, or claim to implement camera access merely by exposing the
+file-input attribute.
+
+## 8. Generated motion bypasses Chromium sensor quantization
+
+Status: pending; follows the file-input repair.
+
+The latest `dme` contains values such as `-0.01`, `7.21` and `20.26`, whereas
+the real samples lie on a 0.1 grid. Counts exclude event indices and timestamps:
+
+| Sample | Motion numbers | Numbers off the 0.1 grid |
+| --- | --- | --- |
+| Latest complete payload | 90 | 84 |
+| All real exports, deduplicated to fourteen motion rows | 126 | 0 |
+
+The same ten motion rows occur in flows 6-8; these are not three independent
+samples. This is also not merely inferred from different phone hardware:
+[Chromium's sensor constants](https://raw.githubusercontent.com/chromium/chromium/main/services/device/generic_sensor/platform_sensor_util.h)
+specify privacy rounding of acceleration, gravity and linear acceleration to
+0.1 m/s^2, and gyro readings to `0.00174532925199432963` rad/s, equivalent to
+0.1 deg/s. `platform_sensor_util.cc` implements nearest-multiple rounding with
+half ties away from zero.
+
+`src/interaction/dispatch.ts` currently forwards synthesized acceleration,
+accelerationIncludingGravity and rotationRate values directly into events,
+bypassing the native sensor service's quantization. The latest observed
+gravity/tilt values no longer show the earlier fixed-gravity/changing-tilt
+contradiction; this defect concerns output precision, not trajectory diversity.
+
+Repair boundary: reproduce native precision at generated sensor emission while
+preserving the joint latent sample and model precision. Do not quantize arbitrary
+page-created DeviceMotionEvent values, alter ABCK formatting, or recompile the
+model solely to mimic this browser output step. Payload parity would not prove
+full physical fidelity or explain the edge 403.
 
 ## Verification log
 
@@ -201,3 +363,189 @@ the runtime result with the real hash or infer raw samples from a hash.
 
   This is consistent with shared build-artifact interference, but its source
   has not been established. No unrelated build or harness code was modified.
+
+### Stage 2: permission query correction
+
+The preceding flow and offline-fetch changes were committed as `a3c5b35` before
+this stage. Permission-query behavior is handled independently of capability
+exposure; the missing WebAuthn, Bluetooth, storage and media surfaces remain
+pending rather than being replaced with empty objects.
+
+Additional evidence was collected from the connected M2012K11AC, Chrome
+152.0.7977.75, using a USB-only localhost page in a secure context. The capture
+includes constructor/prototype descriptors, navigator getter signatures,
+permission-name queries and invalid-descriptor results. No prompts, credential
+requests or Bluetooth device selection were invoked.
+
+- Local artifact: `profiles/_fp-env/android_152/z__env_1788833327264.capabilities.capture.json`.
+- Capture SHA-256: `728a83fd6cc169940a54dff1f5afb5e4d265e9172e5c98d0fb7ced5a710a8d2e`.
+- This artifact is Git-ignored and does not replace or alter the original fp-env
+  record. Temporary USB reverse mappings and the local server were removed.
+
+`navFeature` revision 5 binds `permissions.query` to a dedicated operation in
+`nav.driver.ts`; other navigator operations still delegate to the existing data
+driver. The query reads its descriptor synchronously, including inherited
+properties and string conversion, but returns invalid receiver, argument and
+permission-name errors through a Realm Promise. Page-thrown descriptor errors
+are preserved. Unsupported names and disabled features have distinct errors.
+
+The operation returns modeled Chromium default states instead of a universal
+prompt, including granted motion-sensor permissions and Android-specific
+restrictions. It also distinguishes required push/fullscreen descriptor flags
+and clipboard writes without a gesture. These are emulated defaults, not an
+origin's recorded grants. `permissions.data` now describes partial behavior,
+while its provenance remains `emulated`.
+
+Verification:
+
+- Ten navigator/UA tests pass, including three new query regressions for the
+  nine compared names, Realm errors, descriptor conversion timing, fresh result
+  snapshots and platform/descriptor branches.
+- The archived original ABCK script was run twice with the same phone Profile
+  and page, once with the old constant-query behavior and once with the new
+  operation. A diagnostic event was inserted after its permission-string
+  assignment, without changing query or encoding logic. Results were exactly
+  `99999911919111111999` before and `99999944949322244999` after, matching the
+  original mimic and real exports respectively.
+- This observes the value before encryption. It is not a new-body decryption
+  or an online acceptance check; no supplier requests were sent.
+- Type checking, production/test builds and the thirteen-shape reproducibility
+  check pass. Generated Shape files did not change.
+- The complete existing suite was run serially with a 45-second per-test
+  timeout: 334 tests passed, zero failed, process exit code 0.
+
+Remaining boundaries:
+
+- Result objects still use the existing lightweight Realm `{ state, onchange }`
+  representation, not a full `PermissionStatus` EventTarget. Real Chrome's
+  additional name accessor, branding, readonly state and change-event behavior
+  were captured but are not implemented by this correction.
+- Saved user grants, Permissions-Policy, delegated iframe policy and dynamic
+  permission changes are not modeled. In particular, default granted states
+  must not be described as known grants for every origin.
+- The default table and platform restrictions are not a captured behavior matrix
+  for every browser version. The direct phone comparison covers Chrome 152;
+  unmeasured configurations remain emulated.
+- At the end of the permission correction, Android Chrome still selected the
+  WebView member table and some capability getters remained unbound. The
+  target-specific capability correction follows below.
+
+### Stage 2: capability correction for Android Chrome 152
+
+The ten compared missing surfaces are now installed for
+`host=chrome, platform=android, version=152`. Other versions, desktop Chrome and
+WebView retain their previous behavior. The remaining generic DOM fallback is
+not replaced wholesale with a desktop Chrome table.
+
+`nav.capabilities.compile.ts` contributes these interfaces through the existing
+nav Shape/Feature, with nav revision 6 binding their operations to the nav driver.
+Runtime code does not load the collector-private JSON. Implemented navigator
+getters take ownership before the generic missing-member pass; this target's
+modeled navigator members follow the captured key order. Unmodeled members are
+retained, not silently removed or advertised as newly implemented.
+
+- WebAuthn interfaces have named constructors, prototype inheritance, accessors
+  and methods. Non-public constructors reject construction. Credentials,
+  Bluetooth and ContentIndex coverage is explicitly structural, not a working
+  authenticator, device connection or content-index service. Unsupported backend
+  calls reject/throw `NotSupportedError`; they do not fabricate credentials or
+  successful device operations.
+- Navigator objects are stable, prototype-backed and branded. Bluetooth inherits
+  EventTarget. The two legacy quota objects have a `DeprecatedStorageQuota`
+  prototype without inventing a global constructor that Chrome does not expose.
+- Legacy quota callbacks are asynchronous and use the same 10 GiB quota as the
+  existing StorageManager model. Temporary and persistent accessors remain
+  distinct objects; this is not persistent disk storage.
+- MediaMetadata implements title/artist/album updates, URL-resolved artwork and
+  fresh frozen snapshots. MediaSession retains local metadata, playback state
+  and action handlers. It does not control system media playback or device
+  camera/microphone state. Nonempty chapter information and position-state
+  emulation remain unsupported; cross-Realm borrowing of metadata objects is
+  not modeled.
+
+Additional USB-only evidence for constructor errors, navigator order, quota
+callbacks and media defaults is stored in the Git-ignored file
+`profiles/_fp-env/android_152/z__env_1788833327264.interfaces.capture.json`.
+SHA-256: `c6e4f8638501a280fc288503947748c633c74c8b6952e4628c92c4b196226797`.
+The original fp-env record and earlier evidence artifacts are unchanged.
+
+Verification (no tests added in this stage):
+
+| Field | Before | After | Real export |
+| --- | --- | --- | --- |
+| `mst.nfas` | `26034616` | `30228925` | `30228925` |
+| `s162` | `111111` | `000000` | `000000` |
+| `s173` | `0` | `1` | `1` |
+
+- The archived original ABCK script produced these values with diagnostic events
+  inserted after their computation. Probe logic was unchanged. This observes
+  pre-encryption values, not a re-decryption or online acceptance result.
+- The first observation disposed the Realm immediately after the synchronous
+  values arrived, leaving an asynchronous script continuation that attempted to
+  call a released timer binding. Repeating with the asynchronous phase allowed
+  to finish exited cleanly with zero active Realms; no timer code was changed.
+- The completely unmodified original script also ran through the shared
+  `captureBodies` Worker path with seeded interaction: 11 nonempty bodies,
+  12 total recorded posts, clean completion, and no supplier requests.
+- Direct Realm execution verified constructor rejection, getter branding,
+  metadata updates/frozen artwork, quota callbacks and unsupported backend
+  errors. A child iframe has separate constructors, prototypes and media state;
+  objects created inside it retain the child Realm's types.
+- Production build, type checking, data validation and the thirteen-shape
+  reproducibility check pass. Those existing Shape artifacts are unchanged.
+  No test files were added or modified in this stage, and the full test suite
+  was not rerun.
+
+### Stage 3: iframe Chrome surface and getter Realm identity
+
+`chromeFeature` revision 4 omits `chrome.app` for Android Chrome 152. The same
+target predicate controls its object/method allocations, property order and
+four driver bindings, so no references to removed function slots remain.
+`loadTimes` and `csi` retain their existing implementations and anonymous native
+function signatures. Other Chrome targets retain the existing app surface.
+
+The getter failure was a Realm identity error, not an incorrect function name.
+Before the fix, both iframe getters already had the correct name and a registered
+named native source. However, their Proxy targets were jsdom's host functions:
+
+- `getter instanceof window.Function` was false.
+- `getter.toString()` used the inherited host intrinsic and returned
+  `function () { [native code] }`.
+- `window.Function.prototype.toString.call(getter)` already returned the named
+  native source.
+
+`Installer.bootChildRealms()` now creates each Proxy with a target-Realm getter
+as its target, while its apply handler continues to delegate to the original
+jsdom getter and install the returned child Realm. This fixes `contentWindow`
+and `contentDocument` together. It does not change global native formatting,
+relax the script's check or overwrite jsdom's original function prototype.
+
+Verification (no tests added or modified in this stage):
+
+| Field | Before | After / real export |
+| --- | --- | --- |
+| `dsi.ico` | `070f409b82df3bdd2f51a6415c7895353c153c47fe6dd8a0f87f3d14c46ccb2b` | `b5b4950fcbc155e529ffb37ecd035deb7544874d291670dcb7632b336318fffd` |
+| `dsi.ift` | `2` | `3` |
+
+- The archived original ABCK script produced these values with one diagnostic
+  event inserted after both computations; neither probe nor encoding logic was
+  changed. This observes pre-encryption values, not newly decrypted bodies or
+  an online acceptance result. The Realm exited with zero active instances.
+- The completely unmodified script also completed through the shared
+  `captureBodies` Worker path with seeded interaction: 11 nonempty bodies and
+  12 total recorded posts. No supplier requests were sent.
+- Direct execution checked the page, child and nested iframe Realms and the
+  existing detached-frame path. Getters now inherit their own Realm's
+  Function.prototype; direct, own-Realm and parent-Realm stringification agree.
+  Names, lengths, own keys, descriptor flags, non-constructibility and invalid
+  receiver TypeErrors are preserved. Window/document access, named/indexed frame
+  access and separate Chrome objects remain intact.
+- All 39 existing Chrome/touch, Engine, security, time and environment tests pass
+  in serial execution. The full suite was not rerun.
+- Production/test builds, type checking, data validation and the thirteen-shape
+  reproducibility check pass. Existing generated Shape files are unchanged.
+
+The existing detached-frame auto-parenting workaround, navigation handling and
+cross-origin access behavior were not changed or newly claimed as browser-faithful.
+Audio evidence for `s158` remains uncorrected but is now explicitly ignored by
+user decision; its research and possible future scope are recorded in section 5.

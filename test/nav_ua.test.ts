@@ -232,6 +232,119 @@ test('nav exposes a Realm-correct StorageManager with promise APIs', async () =>
   assert.equal(engine.active, 0);
 });
 
+test('permissions query distinguishes unsupported names, disabled features and modeled defaults', async () => {
+  const { engine, runtime, plan } = await open('android-chrome/gpu-adreno-tm-610-v139-57987');
+  try {
+    const names = ['speaker', 'device-info', 'bluetooth', 'ambient-light-sensor',
+      'accelerometer', 'gyroscope', 'magnetometer', 'clipboard', 'accessibility-events'];
+    const result = runtime.run(`(async () => {
+      const results = [];
+      for (const name of ${JSON.stringify(names)}) {
+        const pending = navigator.permissions.query({name});
+        results.push(await pending.then(
+          value => [name, pending instanceof Promise, value instanceof Object, value.state],
+          error => [name, pending instanceof Promise, error instanceof TypeError, error.message],
+        ));
+      }
+      return JSON.stringify(results);
+    })()`);
+    assert.equal(result.ok, true);
+    const values = JSON.parse(String(await result.value));
+    for (let index = 0; index < names.length; index++) {
+      const name = names[index]!;
+      assert.deepEqual(values[index].slice(0, 3), [name, true, true]);
+      if (['accelerometer', 'gyroscope', 'magnetometer'].includes(name)) {
+        assert.equal(values[index][3], 'granted');
+      } else if (name === 'ambient-light-sensor') {
+        assert.equal(values[index][3], "Failed to execute 'query' on 'Permissions': GenericSensorExtraClasses flag is not enabled.");
+      } else {
+        assert.equal(values[index][3], `Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value '${name}' is not a valid enum value of type PermissionName.`);
+      }
+    }
+    assert.equal(plan.support['permissions.data'], 'emulated');
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
+test('permissions validates descriptors synchronously and rejects errors through Realm Promises', async () => {
+  const { engine, runtime } = await open('macos-chrome-v149');
+  try {
+    const result = runtime.run(`(async () => {
+      const permissions = navigator.permissions;
+      const invalid = [];
+      for (const args of [[], [undefined], [null], [3], ['geolocation'], [{}], [{name:null}], [{name:Symbol()}], [{name:'constructor'}]]) {
+        let pending;
+        try { pending = permissions.query(...args); } catch { invalid.push(['synchronous']); continue; }
+        invalid.push(await pending.then(() => ['accepted'], error => [pending instanceof Promise, error instanceof TypeError]));
+      }
+      const borrowed = await permissions.query.call({}, {name:'geolocation'}).catch(error => [error instanceof TypeError, error.message]);
+      const sentinel = new RangeError('descriptor getter');
+      const preserved = await permissions.query({get name(){throw sentinel}}).catch(error => error === sentinel);
+      let reads = 0;
+      const descriptor = {get name(){reads++;return {toString(){return 'geolocation'}}}};
+      const pending = permissions.query(descriptor);
+      const readsBeforeAwait = reads;
+      const mutable = {name:'geolocation'};
+      const snapshot = permissions.query(mutable);
+      mutable.name = 'invalid-name';
+      const first = await pending;
+      const second = await permissions.query({name:'geolocation'});
+      first.state = 'denied';
+      return JSON.stringify({invalid, borrowed, preserved, readsBeforeAwait,
+        snapshot:(await snapshot).state, fresh:first !== second, second,
+        shape:[permissions.query.name, permissions.query.length, permissions.query.toString()]});
+    })()`);
+    assert.equal(result.ok, true);
+    const value = JSON.parse(String(await result.value));
+    assert.deepEqual(value.invalid, Array.from({ length: 9 }, () => [true, true]));
+    assert.deepEqual(value.borrowed, [true, "Failed to execute 'query' on 'Permissions': Illegal invocation"]);
+    assert.equal(value.preserved, true);
+    assert.equal(value.readsBeforeAwait, 1);
+    assert.equal(value.snapshot, 'prompt');
+    assert.equal(value.fresh, true);
+    assert.deepEqual(value.second, { state: 'prompt', onchange: null });
+    assert.deepEqual(value.shape, ['query', 1, 'function query() { [native code] }']);
+  } finally {
+    runtime.dispose();
+  }
+  assert.equal(engine.active, 0);
+});
+
+test('permissions honors descriptor flags and Android-only feature restrictions', async () => {
+  for (const id of ['android-webview-v138', 'macos-chrome-v149']) {
+    const { engine, runtime } = await open(id);
+    try {
+      const result = runtime.run(`(async () => {
+        const results = [];
+        for (const descriptor of [{name:'push'}, {name:'push',userVisibleOnly:true},
+          {name:'fullscreen'}, {name:'fullscreen',allowWithoutGesture:true},
+          {name:'local-fonts'}, {name:'keyboard-lock'}, {name:'pointer-lock'}, {name:'window-management'},
+          {name:'clipboard-write'}, {name:'clipboard-read'}, {name:'clipboard-write',allowWithoutGesture:true},
+          {name:'top-level-storage-access'}, {name:'top-level-storage-access',requestedOrigin:'https://example.test'}]) {
+          results.push(await navigator.permissions.query(descriptor).then(value => value.state, error => ({name:error.name,realm:error instanceof Error || error instanceof DOMException})));
+        }
+        return JSON.stringify(results);
+      })()`);
+      assert.equal(result.ok, true);
+      const value = JSON.parse(String(await result.value));
+      const typeError = { name: 'TypeError', realm: true };
+      const android = id === 'android-webview-v138';
+      assert.deepEqual(value, [
+        { name: 'NotSupportedError', realm: true }, 'prompt', typeError,
+        android ? 'denied' : 'prompt',
+        ...Array(3).fill(android ? typeError : 'prompt'),
+        android ? 'denied' : 'prompt',
+        'granted', 'prompt', 'prompt', typeError, 'prompt',
+      ]);
+    } finally {
+      runtime.dispose();
+    }
+    assert.equal(engine.active, 0);
+  }
+});
+
 test('ua preserves captured edge cases and returns target-Realm Promise/data', async () => {
   const { imported, engine, runtime } = await open('android-webview-v138');
   try {

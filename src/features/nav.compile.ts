@@ -1,8 +1,9 @@
 import { describeCoverage } from './capabilities.js';
-import type { Support } from '../core/types.js';
+import type { Support, Target } from '../core/types.js';
 import type { DraftOp } from '../shape/types.js';
 import type { BuiltinFeature } from './types.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
+import { capabilitySurface, hasAndroidChromeCapabilities, STORAGE_QUOTA } from './nav.capabilities.compile.js';
 
 const SCALARS = [
   'userAgent', 'appVersion', 'platform', 'vendor', 'language', 'languages',
@@ -15,7 +16,7 @@ const FIXED = ['webdriver', 'pdfViewerEnabled', 'doNotTrack', 'onLine'] as const
 
 const CONNECTION = ['effectiveType', 'downlink', 'rtt', 'saveData', 'type'] as const;
 
-export function operations(): DraftOp[] {
+export function operations(target: Target): DraftOp[] {
   return [
     { op: 'alloc', id: 'nav.instance', kind: 'proxy', source: { path: 'window.navigator' }, symbols: ['impl'] },
     fn('nav.window.get', 'nav.window', 'get navigator'),
@@ -24,6 +25,7 @@ export function operations(): DraftOp[] {
     ...SCALARS.map((name) => accessor({ path: 'window.Navigator.prototype' }, name, `nav.${name}.get`)),
     ...FIXED.map((name) => accessor({ path: 'window.Navigator.prototype' }, name, `nav.${name}.get`)),
     accessor({ path: 'window' }, 'navigator', 'nav.window.get'),
+    ...capabilitySurface(target).operations,
   ];
 }
 
@@ -247,11 +249,16 @@ export const navFeature: BuiltinFeature = {
     'mediadevices.data': 'constant',
     'connection.data': 'constant',
     'serviceworker.data': 'partial',
-    'permissions.data': 'constant',
+    'permissions.data': 'partial',
     'caches.data': 'partial',
     'fonts.data': 'constant',
+    'credentials.api': 'structure',
+    'bluetooth.api': 'structure',
+    'contentindex.api': 'structure',
+    'legacy-storage.data': 'partial',
+    'mediasession.data': 'partial',
   }),
-  rev: '4',
+  rev: '6',
   requires: ['touch'],
   reserves: [
     ...['connection', 'storage', 'mediaDevices', 'serviceWorker', 'permissions'].map(key => ({
@@ -273,6 +280,7 @@ export const navFeature: BuiltinFeature = {
         ...(connection ? connectionOperations() : []),
       ],
       binds: [
+        ...capabilitySurface(shape.target).binds,
         { slot: 'nav.window', driver: 'nav', config: { op: 'node', id: 'nav.instance' } },
         ...SCALARS.map((name) => ({ slot: `nav.${name}`, driver: 'nav', config: { op: 'value', value: profile.navigator[name] } })),
         { slot: 'nav.webdriver', driver: 'nav', config: { op: 'value', value: false } },
@@ -281,7 +289,7 @@ export const navFeature: BuiltinFeature = {
         { slot: 'nav.onLine', driver: 'nav', config: { op: 'value', value: true } },
         { slot: 'nav.storage.ctor', driver: 'nav', config: { op: 'illegal' } },
         { slot: 'nav.storage', driver: 'nav', config: { op: 'node', id: 'nav.storage.instance' } },
-        { slot: 'nav.storage.estimate', driver: 'nav', config: { op: 'resolve', value: { quota: 10_737_418_240, usage: 0 } } },
+        { slot: 'nav.storage.estimate', driver: 'nav', config: { op: 'resolve', value: { quota: STORAGE_QUOTA, usage: 0 } } },
         { slot: 'nav.storage.getDirectory', driver: 'nav', config: { op: 'resolve', value: null } },
         { slot: 'nav.storage.persist', driver: 'nav', config: { op: 'resolve', value: false } },
         { slot: 'nav.storage.persisted', driver: 'nav', config: { op: 'resolve', value: false } },
@@ -318,7 +326,7 @@ export const navFeature: BuiltinFeature = {
         {
           slot: 'nav.permissions.query',
           driver: 'nav',
-          config: { op: 'resolve', value: { state: 'prompt', onchange: null } },
+          config: { op: 'permissions-query', android: shape.target.platform === 'android' },
         },
         { slot: 'nav.caches.ctor', driver: 'nav', config: { op: 'illegal' } },
         { slot: 'nav.caches.open', driver: 'nav', config: { op: 'resolve', value: null } },
@@ -369,6 +377,13 @@ export const navFeature: BuiltinFeature = {
         'permissions.data': 'emulated',
         'caches.data': 'emulated',
         'fonts.data': 'emulated',
+        ...(hasAndroidChromeCapabilities(shape.target) ? {
+          'credentials.api': 'shape-only' as const,
+          'bluetooth.api': 'shape-only' as const,
+          'contentindex.api': 'shape-only' as const,
+          'legacy-storage.data': 'emulated' as const,
+          'mediasession.data': 'emulated' as const,
+        } : {}),
       },
     };
   },

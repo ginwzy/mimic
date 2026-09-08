@@ -6,6 +6,7 @@ import { callableWrite, operationWrites } from '../shape/writes.js';
 import { accessor, fn, fnShape, refProp, tag } from './ops.js';
 import { PROTOS } from './dom.data.js';
 import { SURFACES, type SurfaceId } from './dom.missing.data.js';
+import { ANDROID_CHROME_NAVIGATOR_ORDER, hasAndroidChromeCapabilities } from './nav.capabilities.compile.js';
 
 const NODE_KEYS = [
   'length', 'name', 'prototype',
@@ -262,9 +263,17 @@ function missingOps(shape: Shape, writes: ReadonlySet<string>): DraftOp[] {
         },
       });
     }
+    let keys: readonly string[] = proto.keys;
+    if (proto.owner === 'window.Navigator.prototype' && hasAndroidChromeCapabilities(shape.target)) {
+      // Retain unmodeled members; only supplement this target's implemented capabilities.
+      const members = new Set([...keys, 'bluetooth', 'mediaSession']);
+      const orderedKeys = ANDROID_CHROME_NAVIGATOR_ORDER.filter(key => members.has(key));
+      for (const key of orderedKeys) members.delete(key);
+      keys = [...orderedKeys, ...members];
+    }
     ops.push({
       op: 'order', target: { path: proto.owner },
-      keys: [...proto.keys, ...proto.symbols.map((symbol) => ({ symbol }))],
+      keys: [...keys, ...proto.symbols.map((symbol) => ({ symbol }))],
     });
   }
   return ops;

@@ -3,7 +3,7 @@ import { extendShape, shapeSupport } from './extend.js';
 import { operations } from './nav.compile.js';
 
 export function navShape(shape: Shape): Shape {
-  return extendShape(shape, 'nav', operations(), {
+  return extendShape(shape, 'nav', operations(shape.target), {
     'nav.shape': shapeSupport(shape),
     'nav.api': 'emulated',
   });

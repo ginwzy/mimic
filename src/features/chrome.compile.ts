@@ -5,34 +5,44 @@ import { accessor, fn, fnShape, refProp, tag, valueProp } from './ops.js';
 
 const TOUCH = ['ontouchstart', 'ontouchend', 'ontouchmove', 'ontouchcancel'] as const;
 
-function chromeOps(): DraftOp[] {
+// The Android Chrome 152 capture has no chrome.app; retain other targets' surfaces.
+function hasApp(shape: Shape): boolean {
+  return shape.target.platform !== 'android' || shape.target.version !== 152;
+}
+
+function chromeOps(shape: Shape): DraftOp[] {
   const chrome = { node: 'chrome.instance' } as const;
   const app = { node: 'chrome.app' } as const;
+  const includeApp = hasApp(shape);
   return [
     { op: 'alloc', id: 'chrome.instance', kind: 'object' },
-    { op: 'alloc', id: 'chrome.app', kind: 'object' },
+    ...(includeApp ? [{ op: 'alloc', id: 'chrome.app', kind: 'object' } satisfies DraftOp] : []),
     { op: 'alloc', id: 'chrome.load', kind: 'function', slot: 'chrome.load', shape: fnShape('', 0, true, true) },
     { op: 'alloc', id: 'chrome.csi', kind: 'function', slot: 'chrome.csi', shape: fnShape('', 0, true, true) },
-    fn('chrome.details', 'chrome.details', 'getDetails'),
-    fn('chrome.installed', 'chrome.installed', 'getIsInstalled'),
-    fn('chrome.install-state', 'chrome.install-state', 'installState'),
-    fn('chrome.running-state', 'chrome.running-state', 'runningState'),
+    ...(includeApp ? [
+      fn('chrome.details', 'chrome.details', 'getDetails'),
+      fn('chrome.installed', 'chrome.installed', 'getIsInstalled'),
+      fn('chrome.install-state', 'chrome.install-state', 'installState'),
+      fn('chrome.running-state', 'chrome.running-state', 'runningState'),
+    ] : []),
     refProp(chrome, 'loadTimes', 'chrome.load', true),
     refProp(chrome, 'csi', 'chrome.csi', true),
-    refProp(chrome, 'app', 'chrome.app', true),
-    valueProp(app, 'isInstalled', false, true, true),
-    valueProp(app, 'InstallState', { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' }, true, true),
-    valueProp(app, 'RunningState', { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' }, true, true),
-    refProp(app, 'getDetails', 'chrome.details', true),
-    refProp(app, 'getIsInstalled', 'chrome.installed', true),
-    refProp(app, 'installState', 'chrome.install-state', true),
-    refProp(app, 'runningState', 'chrome.running-state', true),
+    ...(includeApp ? [
+      refProp(chrome, 'app', 'chrome.app', true),
+      valueProp(app, 'isInstalled', false, true, true),
+      valueProp(app, 'InstallState', { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' }, true, true),
+      valueProp(app, 'RunningState', { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' }, true, true),
+      refProp(app, 'getDetails', 'chrome.details', true),
+      refProp(app, 'getIsInstalled', 'chrome.installed', true),
+      refProp(app, 'installState', 'chrome.install-state', true),
+      refProp(app, 'runningState', 'chrome.running-state', true),
+    ] : []),
     refProp({ path: 'window' }, 'chrome', 'chrome.instance', true),
-    { op: 'order', target: chrome, keys: ['loadTimes', 'csi', 'app'] },
-    {
+    { op: 'order', target: chrome, keys: includeApp ? ['loadTimes', 'csi', 'app'] : ['loadTimes', 'csi'] },
+    ...(includeApp ? [{
       op: 'order', target: app,
       keys: ['isInstalled', 'InstallState', 'RunningState', 'getDetails', 'getIsInstalled', 'installState', 'runningState'],
-    },
+    } satisfies DraftOp] : []),
   ];
 }
 
@@ -122,7 +132,7 @@ function bmsCapabilityOps(): DraftOp[] {
 export function operations(shape: Shape): DraftOp[] {
   const chrome = shape.target.host === 'chrome';
   return [
-    ...(chrome ? chromeOps() : [{ op: 'drop', target: { path: 'window' }, key: 'chrome' } as DraftOp]),
+    ...(chrome ? chromeOps(shape) : [{ op: 'drop', target: { path: 'window' }, key: 'chrome' } as DraftOp]),
     ...touchOps(shape),
     ...securityOps(),
     ...(chrome ? mediaSurfaceOps() : []),
@@ -167,7 +177,7 @@ export const chromeFeature: Feature = {
     'chrome.bms-capability': 'partial',
     'chrome.media-surface': 'structure',
   }),
-  rev: '3',
+  rev: '4',
   requires: ['screen'],
   build: ({ shape }) => ({
     // Only chrome host; webview keeps lean surface.
@@ -181,10 +191,12 @@ export const chromeFeature: Feature = {
     binds: [
       { slot: 'chrome.load', driver: 'chrome', config: { op: 'load' } },
       { slot: 'chrome.csi', driver: 'chrome', config: { op: 'csi' } },
-      { slot: 'chrome.details', driver: 'chrome', config: { op: 'value', value: null } },
-      { slot: 'chrome.installed', driver: 'chrome', config: { op: 'value', value: false } },
-      { slot: 'chrome.install-state', driver: 'chrome', config: { op: 'value', value: 'disabled' } },
-      { slot: 'chrome.running-state', driver: 'chrome', config: { op: 'value', value: 'cannot_run' } },
+      ...(hasApp(shape) ? [
+        { slot: 'chrome.details', driver: 'chrome', config: { op: 'value', value: null } },
+        { slot: 'chrome.installed', driver: 'chrome', config: { op: 'value', value: false } },
+        { slot: 'chrome.install-state', driver: 'chrome', config: { op: 'value', value: 'disabled' } },
+        { slot: 'chrome.running-state', driver: 'chrome', config: { op: 'value', value: 'cannot_run' } },
+      ] : []),
       { slot: 'chrome.speech.getVoices', driver: 'chrome', config: { op: 'value', value: [] } },
       ...(shape.target.host === 'chrome'
         ? [

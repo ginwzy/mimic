@@ -571,8 +571,10 @@ class Installer {
       const desc = Object.getOwnPropertyDescriptor(prototype, name);
       if (!desc?.get) continue;
       const original = desc.get;
-      const getter = new this.window.Proxy(original, {
-        apply: (target, self, args) => {
+      // jsdom getters inherit host intrinsics; the wrapper must belong to this Realm.
+      const realmGetter = this.evaluate(`Object.getOwnPropertyDescriptor({get ${name}() {}}, '${name}').get`) as Callable;
+      const getter = new this.window.Proxy(realmGetter, {
+        apply: (_target, self, args) => {
           // Detached about:blank iframes (Akamai BMS): jsdom leaves
           // contentWindow.document undefined until the frame is parented.
           // Chrome still exposes a full window+document for detached frames.
@@ -591,7 +593,7 @@ class Installer {
               }
             }
           }
-          const value = Reflect.apply(target, self, args) as unknown;
+          const value = Reflect.apply(original, self, args) as unknown;
           const child = name === 'contentWindow'
             ? value
             : value !== null && typeof value === 'object'
