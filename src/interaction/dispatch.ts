@@ -126,14 +126,30 @@ export function createInteractionSource(
       Object.defineProperty(click, 'which', { configurable: true, value: 1 });
       dispatch(target, click, compatibilityPoint);
     };
+    // Chromium rounds these motion channels to 0.1, with half ties away from zero.
+    const quantizeSensor = (value) => {
+      if (!Number.isFinite(value)) return value;
+      const scaled = value / 0.1;
+      const units = scaled < 0 ? -Math.round(-scaled) : Math.round(scaled);
+      return Number((units * 0.1).toFixed(1));
+    };
+    const sensorVector = (values) => ({
+      x: quantizeSensor(values[0]),
+      y: quantizeSensor(values[1]),
+      z: quantizeSensor(values[2]),
+    });
     const emit = (frame) => {
       try {
         switch (frame.kind) {
           case 'motion': {
             const fields = {
-              acceleration: { x: frame.acceleration[0], y: frame.acceleration[1], z: frame.acceleration[2] },
-              accelerationIncludingGravity: { x: frame.gravity[0], y: frame.gravity[1], z: frame.gravity[2] },
-              rotationRate: { alpha: frame.rotation[0], beta: frame.rotation[1], gamma: frame.rotation[2] },
+              acceleration: sensorVector(frame.acceleration),
+              accelerationIncludingGravity: sensorVector(frame.gravity),
+              rotationRate: {
+                alpha: quantizeSensor(frame.rotation[0]),
+                beta: quantizeSensor(frame.rotation[1]),
+                gamma: quantizeSensor(frame.rotation[2]),
+              },
               interval: frame.interval,
             };
             dispatch(window, createEvent(globalThis.DeviceMotionEvent, 'devicemotion', fields, false));

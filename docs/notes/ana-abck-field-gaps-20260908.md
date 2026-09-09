@@ -42,11 +42,11 @@ re-decoded. Do not treat those early field placements as runtime defects.
 | 2 | Missing browser capabilities and incorrect permission queries | `mst.nfas`, `s162`, `s173`, `per` | Compared fields match offline on Android Chrome 152; backend/API limits below |
 | 3 | Incorrect iframe Chrome surface and getter appearance | `dsi.ico`, `dsi.ift` | Fixed; compared fields match offline |
 | 4 | Audio uses ID-derived values instead of matching captured evidence | `s158` | Ignored for now by user decision; research retained below |
-| 5 | Plugin methods are incorrectly non-writable | `wsl` index 6 | Pending; confirmed in latest payload and Realm |
-| 6 | File input lacks the `capture` IDL attribute | `s150` | Pending; decoded capability and Realm agree |
-| 7 | Generated motion bypasses Chromium sensor quantization | `dme` | Pending; payload, real samples and Chromium source agree |
+| 5 | Plugin methods are incorrectly non-writable | `wsl` index 6 | Fixed; Android Chrome 152 overwrite probe succeeds |
+| 6 | File input lacks the `capture` IDL attribute | `s150` | Fixed; Android Chrome 152 reflected attribute |
+| 7 | Generated motion bypasses Chromium sensor quantization | `dme` | Fixed; generated motion emission uses Chromium 0.1 grid |
 
-The next active repair sequence is 5, 6, then 7. Audio remains ignored.
+Audio remains ignored. There is no further active repair in this note.
 
 Capability exposure and permission semantics are separate defects, grouped into
 one repair stage because they share the navigator capability surface. Each
@@ -242,30 +242,29 @@ edge block.
 
 ## 6. Plugin methods are incorrectly non-writable
 
-Status: pending; next repair.
+Status: fixed for Android Chrome 152.
 
 - `wsl` zero-based index 6 (the seventh comma-separated item): mimic `-1`, real `1`.
 - Both scripts probe whether `navigator.plugins.refresh` can be temporarily
   replaced with a string, then restore the original function. A successful
   overwrite returns `1`; an exception returns `-1`.
-- The current Realm exposes the method but declares it `writable:false`.
-  Strict-mode assignment throws `TypeError: Cannot assign to read only property
-  'refresh' of object '[object PluginArray]'`, reproducing the payload result.
+- Before the fix, the Realm exposed the method as `writable:false`.
+  Strict-mode assignment threw `TypeError: Cannot assign to read only property
+  'refresh' of object '[object PluginArray]'`.
 
-There are two enforcing paths: `src/features/plugins.compile.ts` declares
-PluginArray/MimeTypeArray methods non-writable, and
-`src/features/plugins.driver.ts` calls `lockArrayMethods()` on first navigator
-access. The Driver also removes own overrides. Fixing only the compiled
-descriptor would leave the runtime lock in place.
+Two paths enforced that lock: `src/features/plugins.compile.ts` declared
+PluginArray/MimeTypeArray/Plugin methods non-writable, and
+`src/features/plugins.driver.ts` called `lockArrayMethods()` on first navigator
+access and deleted own overrides.
 
-Repair boundary: correct the browser object's descriptor and assignment
-semantics in both paths, using target evidence for related methods. Do not
-overwrite `wsl`, alter plugin counts, or treat a successful descriptor change
-alone as proof that the ABCK overwrite probe now succeeds.
+Android Chrome 152 compiles those methods writable, without re-locking them on
+first access. Older stored Shapes retain their non-writable ops unchanged.
+The 152 Realm overwrite probe now returns `1` without throwing. Plugin counts
+and `wsl` encoding were not hard-coded.
 
 ## 7. File input lacks the capture IDL attribute
 
-Status: pending; follows the plugin-method repair.
+Status: fixed for Android Chrome 152.
 
 `s150` is a randomized capability encoding, not an arbitrary random field or
 a directly comparable magnitude. Both audited scripts create an input, set
@@ -273,32 +272,36 @@ a directly comparable magnitude. Both audited scripts create an input, set
 The encoding was checked through diagnostic observations after computation:
 support produces a random multiple of 862; absence produces a nonmultiple.
 
-- Latest mimic: `7470 % 862 = 574`, meaning absent.
+- Latest mimic before the fix: `7470 % 862 = 574`, meaning absent.
 - Real reference: `65512 % 862 = 0`, meaning present.
 - Every nonempty `s150` across the twenty real exports is a multiple of 862.
-- In the current Samsung-Profile Realm, `getAttribute('capture')` returns
-  `user`, but `input.capture` is undefined and
-  `HTMLInputElement.prototype` has no `capture` descriptor.
+- Before the fix, `getAttribute('capture')` returned `user`, but
+  `input.capture` was undefined and `HTMLInputElement.prototype` had no
+  `capture` descriptor.
 
-The missing DOM property, rather than attribute storage or numeric randomness,
-is the confirmed cause. Recheck the encoding constants for future script
-versions instead of assuming that 862 is universal.
+Android Chrome 152 now exposes a reflected `capture` accessor through the DOM
+Feature/Shape path. `setAttribute('capture','user')` yields `input.capture ===
+'user'`; a missing attribute yields `''`; a non-input receiver throws
+`TypeError`. `s150` is not hard-coded, and this does not implement camera
+capture. Recheck the encoding constants for future script versions instead of
+assuming that 862 is universal. Other targets remain unchanged.
 
-Repair boundary: implement the target's reflected DOM attribute through the
-existing DOM Feature/Shape ownership. Do not hard-code `s150`, substitute a real
-encoded number, or claim to implement camera access merely by exposing the
-file-input attribute.
+Receiver validation uses the saved native input `type` getter instead of
+`instanceof`: cross-Realm inputs and inputs with modified JS prototypes remain
+usable, while forged objects are rejected. Attribute access uses functions saved
+at Driver installation, so page overrides cannot redirect it. The native setter
+handles DOMString conversion.
 
 ## 8. Generated motion bypasses Chromium sensor quantization
 
-Status: pending; follows the file-input repair.
+Status: fixed at generated sensor emission.
 
-The latest `dme` contains values such as `-0.01`, `7.21` and `20.26`, whereas
+The latest `dme` contained values such as `-0.01`, `7.21` and `20.26`, whereas
 the real samples lie on a 0.1 grid. Counts exclude event indices and timestamps:
 
 | Sample | Motion numbers | Numbers off the 0.1 grid |
 | --- | --- | --- |
-| Latest complete payload | 90 | 84 |
+| Latest complete payload before the fix | 90 | 84 |
 | All real exports, deduplicated to fourteen motion rows | 126 | 0 |
 
 The same ten motion rows occur in flows 6-8; these are not three independent
@@ -309,17 +312,15 @@ specify privacy rounding of acceleration, gravity and linear acceleration to
 0.1 deg/s. `platform_sensor_util.cc` implements nearest-multiple rounding with
 half ties away from zero.
 
-`src/interaction/dispatch.ts` currently forwards synthesized acceleration,
-accelerationIncludingGravity and rotationRate values directly into events,
-bypassing the native sensor service's quantization. The latest observed
-gravity/tilt values no longer show the earlier fixed-gravity/changing-tilt
-contradiction; this defect concerns output precision, not trajectory diversity.
-
-Repair boundary: reproduce native precision at generated sensor emission while
-preserving the joint latent sample and model precision. Do not quantize arbitrary
-page-created DeviceMotionEvent values, alter ABCK formatting, or recompile the
-model solely to mimic this browser output step. Payload parity would not prove
-full physical fidelity or explain the edge 403.
+`src/interaction/dispatch.ts` now applies that 0.1 grid, with half ties away
+from zero, to generated acceleration, accelerationIncludingGravity and
+rotationRate (already deg/s) when emitting DeviceMotionEvent. rotationRate keeps
+the `alpha`/`beta`/`gamma` keys required by jsdom's DeviceMotionEvent
+constructor; using `x`/`y`/`z` leaves those components null. Joint samples and
+model precision are unchanged; page-created events are not quantized. A probe
+with the previously off-grid values `-0.01`, `7.21` and `20.26` emitted nine
+on-grid numbers, while raw synthesized frames remained off-grid. This does not
+claim full physical fidelity or explain the edge 403.
 
 ## Verification log
 
@@ -549,3 +550,43 @@ The existing detached-frame auto-parenting workaround, navigation handling and
 cross-origin access behavior were not changed or newly claimed as browser-faithful.
 Audio evidence for `s158` remains uncorrected but is now explicitly ignored by
 user decision; its research and possible future scope are recorded in section 5.
+
+### Stages 5-7: plugin writability, input.capture, motion quantization
+
+These three repairs were implemented together after the latest payload
+comparison. No new tests were added. No supplier requests were sent.
+
+- Profile `android-chrome/m2012k11ac-v152-1788833327264` ran the ABCK overwrite
+  itself under `'use strict'`: `navigator.plugins.refresh = 'x'` succeeded and
+  restored. `setAttribute('capture','user')` yielded `input.capture === 'user'`;
+  a missing attribute yielded `''`; a non-input receiver threw `TypeError`.
+- The WebView 138 fixture kept `refresh` non-writable. Strict assignment threw
+  `TypeError: Cannot assign to read only property 'refresh'`. `input.capture`
+  stayed undefined while `getAttribute('capture')` still stored `user`.
+- Generated DeviceMotionEvent emission of `-0.01`, `7.21` and `20.26` produced
+  nine on-grid values, including rotationRate. A live 152 Realm swipe emitted
+  on-grid acceleration, gravity and rotationRate. A 16-frame synthesized swipe
+  still had 143 of 144 raw numbers off the 0.1 grid, so model precision was not
+  collapsed.
+- Production/test builds, type checking and `git diff --check` pass. The
+  thirteen-shape reproducibility check reports `changed: false`.
+- Focused plugins, interaction, DOM, navigator/UA, Application and runtime-task
+  tests pass (42). A serial full-suite run passes 334 tests.
+
+### Stage 6 review follow-up
+
+- The Android Chrome 152 phone Profile passed 34 live Realm checks covering
+  bidirectional parent/iframe calls, detached-iframe inputs, changed input
+  prototypes and rejection of forged/non-input receivers. Accessors remain
+  functional after own/prototype method overrides or global HTMLInputElement
+  constructor replacement.
+- Reflection preserves missing/removal behavior and raw string values.
+  DOMString conversion occurs once; Symbol assignment throws a Realm TypeError
+  without changing the stored attribute. Realm disposal leaves zero active
+  instances.
+- Production/test builds, type checking and the 23 existing DOM, plugins,
+  interaction and runtime-task tests pass. The thirteen-shape reproducibility
+  check reports `changed: false`.
+- This follow-up changes only the DOM Driver and this note. No new tests,
+  full-suite rerun, ABCK-script rerun or supplier requests were added; plugin
+  writability and motion quantization remain unchanged.

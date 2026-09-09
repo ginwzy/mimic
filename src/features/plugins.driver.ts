@@ -6,46 +6,12 @@ function config(value: JsonValue | undefined): Record<string, JsonValue> {
   return value;
 }
 
-/** Chrome PluginArray/MimeTypeArray methods are non-writable; BMS MU tests overwrite. */
-function lockArrayMethods(array: object): void {
-  const proto = Object.getPrototypeOf(array) as object | null;
-  if (proto === null) return;
-  for (const key of ['item', 'namedItem', 'refresh'] as const) {
-    const desc = Object.getOwnPropertyDescriptor(proto, key);
-    if (!desc || !('value' in desc) || desc.writable !== true) continue;
-    Object.defineProperty(proto, key, {
-      value: desc.value,
-      writable: false,
-      enumerable: desc.enumerable === true,
-      configurable: desc.configurable !== false,
-    });
-  }
-  // Drop own overrides so prototype non-writable wins (sloppy assign must not stick).
-  for (const key of ['item', 'namedItem', 'refresh'] as const) {
-    if (Object.prototype.hasOwnProperty.call(array, key)) {
-      try {
-        Reflect.deleteProperty(array, key);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-}
-
 export const pluginsDriver: Driver = {
   open: (port) => {
-    const locked = new WeakSet<object>();
     return {
       call: (raw, self, args) => {
         const item = config(raw);
-        if (item.op === 'node') {
-          const node = port.node(String(item.id));
-          if (node !== null && (typeof node === 'object' || typeof node === 'function') && !locked.has(node as object)) {
-            lockArrayMethods(node as object);
-            locked.add(node as object);
-          }
-          return node;
-        }
+        if (item.op === 'node') return port.node(String(item.id));
         if (item.op === 'void') return undefined;
         if (item.op === 'length') {
           let length = 0;

@@ -55,7 +55,17 @@ function operations(shape: Shape, reserved: ReadonlySet<string>): DraftOp[] {
   ops.push(...interfaceOps(shape));
   ops.push(...globalOps(shape));
   ops.push(...missingOps(shape, writes));
+  ops.push(...inputCaptureOps(shape));
   return ops;
+}
+
+function inputCaptureOps(shape: Shape): DraftOp[] {
+  if (!hasAndroidChromeCapabilities(shape.target)) return [];
+  return [
+    fn('dom.input.capture.get', 'dom.input.capture.get', 'get capture'),
+    fn('dom.input.capture.set', 'dom.input.capture.set', 'set capture', 1),
+    accessor({ path: 'window.HTMLInputElement.prototype' }, 'capture', 'dom.input.capture.get', 'dom.input.capture.set'),
+  ];
 }
 
 function globalOps(shape: Shape): DraftOp[] {

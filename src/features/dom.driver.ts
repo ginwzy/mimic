@@ -95,6 +95,16 @@ function createDomSession(): DriverSession {
       const fn = Reflect.construct(FunctionCtor, [`return (${expression});`]) as () => T;
       return Reflect.apply(fn, undefined, []) as T;
     };
+    // Preserve DOM brand checks and attribute access before page code can override them.
+    const inputAccess = port.evaluate(`({
+      getType: Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'type').get,
+      getAttribute: Element.prototype.getAttribute,
+      setAttribute: Element.prototype.setAttribute,
+    })`) as {
+      getType: () => string;
+      getAttribute: (name: string) => string | null;
+      setAttribute: (name: string, value: unknown) => void;
+    };
 
     /** Create a canvas element; prefer this realm, else shared factory (detached iframe). */
     const makeCanvas = (): object => {
@@ -533,6 +543,18 @@ function createDomSession(): DriverSession {
         }
         if (item.op === 'can-play-type') {
           return canPlayTypeChrome(String(args[0] ?? ''));
+        }
+        if (item.op === 'input-capture-get' || item.op === 'input-capture-set') {
+          try {
+            Reflect.apply(inputAccess.getType, self, []);
+          } catch {
+            throw port.error('TypeError', 'Illegal invocation');
+          }
+          if (item.op === 'input-capture-get') {
+            return Reflect.apply(inputAccess.getAttribute, self, ['capture']) ?? '';
+          }
+          Reflect.apply(inputAccess.setAttribute, self, ['capture', args[0]]);
+          return undefined;
         }
         throw new TypeError(`dom Driver op invalid:${String(item.op)}`);
       },

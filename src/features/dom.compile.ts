@@ -1,5 +1,6 @@
 import { describeCoverage } from './capabilities.js';
 import type { Feature } from '../shape/types.js';
+import { hasAndroidChromeCapabilities } from './nav.capabilities.compile.js';
 
 export const domFeature: Feature = {
   id: 'dom',
@@ -12,9 +13,9 @@ export const domFeature: Feature = {
     'dom.rtc': 'partial',
     'dom.canplaytype': 'constant',
   }, page?.layout ? { 'dom.api': 'mixed' } : {}),
-  rev: '3',
+  rev: '4',
   requires: ['globals'],
-  build: () => ({
+  build: ({ shape }) => ({
     binds: [
       {
         slot: 'dom.Worker.ctor', driver: 'dom', config: { op: 'worker' },
@@ -62,6 +63,10 @@ export const domFeature: Feature = {
       { slot: 'dom.OffscreenCanvas.height.get', driver: 'dom', config: { op: 'offscreen-dim-get', name: 'height' } },
       { slot: 'dom.OffscreenCanvas.height.set', driver: 'dom', config: { op: 'offscreen-dim-set', name: 'height' } },
       { slot: 'dom.media.canPlayType', driver: 'dom', config: { op: 'can-play-type' } },
+      ...(hasAndroidChromeCapabilities(shape.target) ? [
+        { slot: 'dom.input.capture.get', driver: 'dom', config: { op: 'input-capture-get' } },
+        { slot: 'dom.input.capture.set', driver: 'dom', config: { op: 'input-capture-set' } },
+      ] : []),
     ],
     support: {
       'dom.worker': 'emulated', // blob:/data: scripts run same-process; no OS thread

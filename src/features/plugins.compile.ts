@@ -1,6 +1,7 @@
 import { describeCoverage } from './capabilities.js';
 import type { JsonValue, Shape } from '../core/types.js';
 import type { DraftOp, Feature, Ref } from '../shape/types.js';
+import { hasAndroidChromeCapabilities } from './nav.capabilities.compile.js';
 import { accessor, ctor, fn, refProp, tag } from './ops.js';
 
 const DESCRIPTION = 'Portable Document Format';
@@ -15,13 +16,13 @@ const dataRef = (target: Ref, key: string, node: string, enumerable: boolean): D
   desc: { kind: 'data', value: { ref: { node } }, writable: false, enumerable, configurable: true },
 });
 
-/** Data property whose value is a function node; default non-writable like Chrome PluginArray methods. */
+/** Data property whose value is a function node. Android Chrome 152 methods are writable. */
 const fnRef = (target: Ref, key: string, node: string, enumerable: boolean, writable = false): DraftOp => ({
   op: 'prop', target, key,
   desc: { kind: 'data', value: { ref: { node } }, writable, enumerable, configurable: true },
 });
 
-function baseOps(): DraftOp[] {
+function baseOps(writableMethods: boolean): DraftOp[] {
   const plugin = { node: 'plugins.plugin.proto' } as const;
   const mime = { node: 'plugins.mime.proto' } as const;
   const plugins = { node: 'plugins.array.proto' } as const;
@@ -70,19 +71,18 @@ function baseOps(): DraftOp[] {
     accessor({ path: 'window.Navigator.prototype' }, 'plugins', 'plugins.window.get'),
     accessor({ path: 'window.Navigator.prototype' }, 'mimeTypes', 'plugins.mime-window.get'),
     accessor(plugins, 'length', 'plugins.array.length.get'),
-    // Chrome: PluginArray methods are non-writable; BMS HD/MU tests refresh overwrite.
-    fnRef(plugins, 'item', 'plugins.array.item', true, false),
-    fnRef(plugins, 'namedItem', 'plugins.array.named', true, false),
-    fnRef(plugins, 'refresh', 'plugins.array.refresh', true, false),
+    fnRef(plugins, 'item', 'plugins.array.item', true, writableMethods),
+    fnRef(plugins, 'namedItem', 'plugins.array.named', true, writableMethods),
+    fnRef(plugins, 'refresh', 'plugins.array.refresh', true, writableMethods),
     accessor(mimes, 'length', 'plugins.mime-array.length.get'),
-    fnRef(mimes, 'item', 'plugins.mime-array.item', true, false),
-    fnRef(mimes, 'namedItem', 'plugins.mime-array.named', true, false),
+    fnRef(mimes, 'item', 'plugins.mime-array.item', true, writableMethods),
+    fnRef(mimes, 'namedItem', 'plugins.mime-array.named', true, writableMethods),
     accessor(plugin, 'name', 'plugins.plugin.name.get'),
     accessor(plugin, 'filename', 'plugins.plugin.filename.get'),
     accessor(plugin, 'description', 'plugins.plugin.description.get'),
     accessor(plugin, 'length', 'plugins.plugin.length.get'),
-    fnRef(plugin, 'item', 'plugins.plugin.item', true, false),
-    fnRef(plugin, 'namedItem', 'plugins.plugin.named', true, false),
+    fnRef(plugin, 'item', 'plugins.plugin.item', true, writableMethods),
+    fnRef(plugin, 'namedItem', 'plugins.plugin.named', true, writableMethods),
     accessor(mime, 'type', 'plugins.mime.type.get'),
     accessor(mime, 'suffixes', 'plugins.mime.suffixes.get'),
     accessor(mime, 'description', 'plugins.mime.description.get'),
@@ -141,7 +141,7 @@ export function operations(shape: Shape): DraftOp[] {
   const pluginOps = shape.target.host === 'chrome' && shape.target.form !== 'mobile'
     ? chromeOps()
     : [];
-  return [...baseOps(), ...pluginOps];
+  return [...baseOps(hasAndroidChromeCapabilities(shape.target)), ...pluginOps];
 }
 
 function records(values: readonly string[], prefix: string): Record<string, JsonValue> {
@@ -154,7 +154,7 @@ export const pluginsFeature: Feature = {
     'plugins.api': 'partial',
     'plugins.data': 'constant',
   }),
-  rev: '1',
+  rev: '2',
   requires: ['ua'],
   build: ({ shape }) => {
     const chrome = shape.target.host === 'chrome';
