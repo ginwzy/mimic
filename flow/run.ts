@@ -39,7 +39,6 @@ function summarize(result: AnaFlowResult | CebuFlowResult) {
   return {
     profile: result.profile,
     interactionSeed: result.interactionSeed,
-    environment: result.environment,
     abckBodyCount: result.abckBodyCount,
     abckPostCount: result.abckPostCount,
     bmsPosted: result.bmsPosted,

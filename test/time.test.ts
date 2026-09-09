@@ -16,7 +16,6 @@ import {
 import { timeDriver } from '../src/features/time.driver.js';
 import { timeFeature } from '../src/features/time.compile.js';
 import { shape as composeShape } from '../src/features/shape.js';
-import { digest } from '../src/core/seal.js';
 
 const source = { kind: 'manual' as const, hash: 'a'.repeat(64) };
 const parts = ['navigator', 'screen', 'window', 'timezone', 'webgl', 'canvas', 'audio', 'fonts'] as const;
@@ -119,36 +118,6 @@ function open(options: {
   });
   return { engine, plan, runtime: engine.open(plan, { time: timeDriver }) };
 }
-
-test('time accepts pre-regional bindings without a locale field', () => {
-  const { engine, plan, runtime } = open();
-  runtime.dispose();
-  const { id, ...body } = plan;
-  let migrated = 0;
-  const binds = plan.binds.map(bind => {
-    const config = bind.config;
-    if (!config || typeof config !== 'object' || Array.isArray(config)
-      || !['format', 'locale'].includes(String(config.op))) return bind;
-    const { locale, ...legacyConfig } = config;
-    migrated++;
-    return { ...bind, config: legacyConfig };
-  });
-  assert.ok(migrated > 0);
-  const legacyBody = { ...body, binds };
-  const legacy = engine.open({ ...legacyBody, id: digest(legacyBody) }, { time: timeDriver });
-  try {
-    const result = legacy.run(`JSON.stringify([
-      new Intl.DateTimeFormat().resolvedOptions().timeZone,
-      Intl.DateTimeFormat().resolvedOptions().timeZone,
-      typeof new Date(0).toLocaleString()
-    ])`);
-    assert.equal(result.ok, true, JSON.stringify(result));
-    assert.deepEqual(JSON.parse(String(result.value)), ['UTC', 'UTC', 'string']);
-  } finally {
-    legacy.dispose();
-  }
-  assert.equal(engine.active, 0);
-});
 
 test('time fixes Date zero-argument time while preserving Date semantics and shape', () => {
   const now = 1_735_689_600_123;

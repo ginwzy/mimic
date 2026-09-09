@@ -9,7 +9,7 @@
 | 执行脚本并返回值 | `run` | `run` | `POST /run` |
 | 捕获 fetch/XHR/sendBeacon 请求体 | `capture` | `capture` | `POST /capture` |
 | 查看安装计划 | `plan` | `plan` | - |
-| 列出 Profile/Shape/Feature/Driver/区域 | `list` | `list` | `GET /profiles`、`GET /regions` |
+| 列出 Profile/Shape/Feature/Driver | `list` | `list` | `GET /profiles` |
 | 运行结构探针 | 高级入口 | `probe` | `POST /probe` |
 | 诊断动态代码与缺失面 | 高级入口 | `diagnose` | `POST /diagnose` |
 | 对比真机结构基线 | - | `diff` | - |
@@ -50,7 +50,6 @@ try {
 |---|---:|---|
 | `profile` | 无 | 执行任务必须指定本地 fp-env ID;仅 list/close 可省略 |
 | `profilesRoot` | 当前工作目录的 `./profiles` | 本地数据根目录,包含 `_fp-env` 子目录 |
-| `environment` | 无 | 创建 client 时固定区域配置,不修改原始 fp-env 或设备身份 |
 | `size` | 最多 4 个 worker | 按需启动的最大并行 worker 数 |
 | `timeoutMs` | `5000` | worker watchdog;设为 `null` 可关闭 |
 | `maxQueue` | `100` | 所有 worker 忙碌时允许等待的任务数 |
@@ -60,85 +59,6 @@ try {
 | `capture` | 见下文 | 请求捕获的等待时间、轮询间隔和目标 POST 数 |
 
 `shapesRoot`、`probePath` 保留结构资源和探针路径配置;`profilesRoot` 不再指向包内设备库。
-
-### 内置区域与随机选择
-
-区域数据和选择逻辑由 mimic 内置。`createMimic({ environment, ... })` 和 HTTP 任务体的
-`environment` 支持以下三种互斥形式：
-
-```js
-// 指定预设。ID 可由 listRegions() 或 mimic.list('regions') 查询。
-const environment = { regional: { preset: 'jp-ja-tokyo' } };
-
-// 限定国家/地区。省略 countries 时使用全部运行时可用地区。
-const randomEnvironment = {
-  regional: { random: true, countries: ['JP', 'GB', 'DE'], seed: 'run-001' },
-};
-```
-
-`seed` 可省略,此时每次解析生成独立随机 seed。相同目录、运行时、国家范围和 seed 重现相同预设。
-随机时先均匀选择地区,再均匀选择该地区的可用预设;这不是人口或真人浏览器配置频率分布。
-国家代码不区分大小写。未知国家、空列表、未知预设或无运行时可用预设均报错,不会切换到其他地区。
-
-SDK 每个 client 只解析一次,可通过 `mimic.environment` 读取并保存完整解析结果。
-ANA 内部从全部可用地区随机选择,Cebu 固定从 `['JP', 'GB', 'DE']` 随机选择。
-两者均不接受外部 `environment` 参数或 flow CLI 的 `--environment` 选项。
-每条 flow 独立选择一次,ABCK、BMS、verify/search 共享结果;
-返回值的 `environment` 包含实际字段及 `selection` 中的预设、目录版本/哈希、运行时版本、seed 和范围。
-区域选择也在加载设备之前写入 flow 日志,后续异常仍可从日志重放。CLI 在 stderr 输出解析结果。
-HTTP 每个任务解析一次,在 Result 的 `report.environment` 中返回完整解析结果,保留其他报告内容;
-选择信息不写入 HTTP 响应头,因此 seed 可以包含 Unicode。
-可以保存完整解析结果再作为 mimic SDK/HTTP 的 `environment` 传入;目录或运行时版本不符时报错,不静默重选。
-
-```js
-import { listRegions, regionalCatalog, regionalRuntime, resolveEnvironment } from 'mimic';
-
-const japanesePresets = listRegions({ countries: ['JP'] });
-const all = listRegions({ supportedOnly: false }); // 含 supported/unsupported 原因
-const resolved = resolveEnvironment({ regional: { random: true, countries: ['CA'] } });
-console.log(regionalCatalog.version, regionalRuntime, resolved.selection);
-```
-
-当前内置目录由 CLDR 48.0.0 与 IANA tzdb 2026c 生成,包含 596 个预设、246 个国家/地区。
-语言选择基于 CLDR 官方语言资料,无官方语言记录时选使用比例最高的已记录语言,并要求 CLDR
-具备该语言/文字系统的格式化数据。多时区国家的区域性语言不自动配对到全国所有时区;
-南极和省略的关联列于 `regionalCatalog`。所有预设均标为 `derived`,不是设备采集或真实用户分布。
-内置语言列表只含所选 locale,不编造英语备用偏好;多语言组合请用下面的自定义形式。
-
-可用列表根据当前 ICU 对 Intl 构造器和时区的支持过滤,不支持项仍可在完整目录中查看。
-`regionalRuntime` 和目录来源版本分别记录;IANA 数据用于地区/时区映射,实际日期规则来自运行时 ICU,
-不会因目录更新而自动升级宿主时区规则。来源 URL、SHA-256、生成规则和许可证均随包保留。
-构建、运行和安装不联网。只有显式运行 `npm run generate:regions` 才下载固定版本源数据并校验哈希;
-`node scripts/generate-regions.mjs --check --input <directory>` 可用原始四份文件进行离线再生成检查。
-
-也可继续显式指定全部字段：
-
-```js
-const environment = {
-  regional: {
-    languages: ['ja-JP', 'ja', 'en-US', 'en'],
-    locale: 'ja-JP',
-    timeZone: 'Asia/Tokyo',
-  },
-};
-```
-
-自定义形式的三个字段均必填。`languages[0]` 是 `navigator.language`;`locale` 控制默认 Intl 和本地格式化,
-`timeZone` 控制默认时区与按日期计算的夏令时。脚本显式传入的 locale/timeZone 保持有效。
-ANA/Cebu 所有请求的 `Accept-Language` 按 Chromium 145 规则扩展基础语言、去重并逐项递减 q 值,
-最低为 0.1;例如 `['en-US','en-CA','fr']` 生成 `en-US,en-CA;q=0.9,en;q=0.8,fr;q=0.7`。
-这与 `navigator.languages` 的原始偏好列表不必逐项相同。mimic SDK/HTTP 不传配置则保留原行为。
-代理/IP、站点 URL/业务语言、设备型号和硬件字段不随区域配置改变。
-派生 Profile 保留基础 ID,生成新哈希与来源记录;`timezone.offset` 是 Unix epoch 时刻的兼容快照,
-运行时偏移始终由 IANA 时区和具体日期计算。无需修改磁盘上的 fp-env。
-
-执行 CLI 支持区域 JSON 参数;flow CLI 无需传入区域配置：
-
-```bash
-node dist/src/cli.js list regions
-node dist/src/cli.js run script.js --profile <fp-env-ID> --environment '{"regional":{"preset":"jp-ja-tokyo"}}'
-npm run flow -- ana none
-```
 
 ### 唯一数据源 fp-env
 

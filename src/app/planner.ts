@@ -4,8 +4,6 @@ import { compileWithCapabilities, type Compilation } from '../compile/index.js';
 import { assertCapabilities, type CapabilityRequirements } from '../core/capabilities.js';
 import { canonical } from '../core/canonical.js';
 import { MimicError } from '../core/error.js';
-import { parseEnvironment, regionalProfile } from '../core/environment.js';
-import { listRegions } from '../core/regions.js';
 import { parsePage, parseShape } from '../core/parse.js';
 import { digest, seal } from '../core/seal.js';
 import { isTrustedPage, isTrustedProfile, isTrustedShape } from '../core/trusted.js';
@@ -107,11 +105,7 @@ export class Planner implements PlannerPort {
     if (typeof request.profile !== 'string' || request.profile.length === 0) {
       throw new MimicError({ phase: 'parse', code: 'BAD_PROFILE', message: 'Task profile must be a non-empty id' });
     }
-    const environment = request.environment === undefined ? undefined : parseEnvironment(request.environment);
-    const loaded = await this.profiles.load(request.profile);
-    const imported = environment === undefined ? loaded : {
-      ...loaded, profile: regionalProfile(loaded.profile, environment),
-    };
+    const imported = await this.profiles.load(request.profile);
     const job = normalizedJob(request.job);
     const page = overlayPage(imported.page, request.page);
     const selected = requestShape(request.shape);
@@ -202,7 +196,6 @@ export class Planner implements PlannerPort {
   }
 
   async list(kind: ListKind): Promise<readonly string[]> {
-    if (kind === 'regions') return listRegions().map(({ id }) => id);
     if (kind === 'profiles') return this.profiles.list();
     if (kind === 'features') return this.features.map((feature) => feature.id).sort();
     if (kind === 'drivers') return [...this.drivers].sort();

@@ -1,8 +1,5 @@
 export { MimicError } from './core/error.js';
 export { digest, seal } from './core/seal.js';
-export { parseEnvironment, parseEnvironmentOptions, resolveEnvironment, regionalProfile } from './core/environment.js';
-export { listRegions, regionalCatalog, regionalRuntime } from './core/regions.js';
-export type { RegionPreset, RegionFilter } from './core/regions.js';
 export { parseCatalog, parseCollect, parseJob, parsePage, parseProfile, parseShape } from './core/parse.js';
 export { encodeResult, parseResult } from './core/result.js';
 export { Catalog } from './catalog/index.js';
@@ -70,10 +67,6 @@ export type {
   Boot,
   ErrorCode,
   ErrorInfo,
-  EnvironmentOptions,
-  RegionalEnvironment,
-  RegionalSelection,
-  ResolvedEnvironment,
   Form,
   Hash,
   Host,

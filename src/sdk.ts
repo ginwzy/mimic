@@ -1,15 +1,13 @@
 import type { ListKind, TaskRequest } from './app/index.js';
 import { parseJob } from './core/job.js';
 import { parseCaptureResult, type CaptureResult } from './core/capture.js';
-import { resolveEnvironment } from './core/environment.js';
-import type { EnvironmentOptions, ResolvedEnvironment, Job, Page, Plan, Result, Shape, SupportMap } from './core/types.js';
+import type { Job, Page, Plan, Result, Shape, SupportMap } from './core/types.js';
 import { WorkerExecutor, type ExecutorOptions } from './executor/pool.js';
 import { createNodePlanner } from './node/planner.js';
 import type { Op, PlanBind } from './shape/types.js';
 
 export interface MimicOptions extends Omit<ExecutorOptions, 'planner'> {
   profile?: string;
-  environment?: EnvironmentOptions;
   page?: Page;
   shape?: Shape;
   require?: SupportMap;
@@ -25,14 +23,11 @@ function kind(input: unknown, expected: Job['kind']): Job {
 export class Mimic {
   readonly executor: WorkerExecutor;
   private readonly planner: ReturnType<typeof createNodePlanner>;
-  readonly environment: ResolvedEnvironment | undefined;
   private readonly context: Omit<TaskRequest, 'job'>;
 
   constructor(options: MimicOptions = {}) {
-    this.environment = options.environment === undefined ? undefined : resolveEnvironment(options.environment);
     this.context = {
       profile: options.profile ?? '',
-      ...(this.environment === undefined ? {} : { environment: this.environment }),
       ...(options.page === undefined ? {} : { page: structuredClone(options.page) }),
       ...(options.shape === undefined ? {} : { shape: structuredClone(options.shape) }),
       ...(options.require === undefined ? {} : { require: structuredClone(options.require) }),

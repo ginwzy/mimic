@@ -1,6 +1,4 @@
 import { randomBytes, randomInt } from 'node:crypto';
-import { parseEnvironment } from '../../../src/core/environment.js';
-import type { ResolvedEnvironment } from '../../../src/core/types.js';
 import { DEFAULT_PROFILES_ROOT } from '../../../src/node/assets.js';
 import { FpEnvProfiles } from '../../../src/profiles/fp-env.js';
 import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
@@ -26,7 +24,6 @@ export interface AnaFlowOptions {
 
 export interface AnaFlowResult {
   profile: string;
-  environment: ResolvedEnvironment;
   interactionSeed: string;
   cookies: string;
   abckBodyCount: number;
@@ -76,15 +73,12 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
   if (networkMode === 'closed-loop' && options.postCount !== undefined) {
     throw new TypeError('postCount is only supported in offline ANA mode');
   }
-  const environment = parseEnvironment({ regional: { random: true} });
   const log = options.log ?? (() => {});
-  log(`regional environment=${JSON.stringify(environment)}`);
   const interactionSeed = options.interactionSeed ?? randomBytes(16).toString('hex');
   const profile = await resolveProfile(options.profile, options.profilesRoot);
   const { profile: browserProfile } = await new FpEnvProfiles(options.profilesRoot ?? DEFAULT_PROFILES_ROOT).load(profile);
   const request = await createAnaRequest({
     profile: browserProfile,
-    environment,
     ...(options.proxy === undefined ? {} : { proxy: options.proxy }),
     ...(options.proxyHeaders === undefined ? {} : { proxyHeaders: options.proxyHeaders }),
     timeoutMs: 60_000,
@@ -143,7 +137,6 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       cookies: networkMode === 'offline' ? splitCookies(request.cookies()) : [],
       ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.abck, () => abckPostCount++) } : {}),
       profile,
-      environment,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 8_000,
       scriptTimeoutMs: 16_000,
@@ -176,7 +169,6 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       cookies: networkMode === 'offline' ? splitCookies(request.cookies()) : [],
       ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.bms, () => { bmsPosted = true; }) } : {}),
       profile,
-      environment,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 7_000,
       scriptTimeoutMs: 16_000,
@@ -201,7 +193,6 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
     const abckTilde0 = cookieValue(cookies, '_abck')?.includes('~0~') ?? false;
     return {
       profile,
-      environment,
       interactionSeed,
       cookies,
       abckBodyCount: abckCapture.bodies.length,

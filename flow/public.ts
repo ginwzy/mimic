@@ -1,8 +1,4 @@
 export { CapturePool, captureBodies, listAndroidChromeProfiles } from './capture.js';
-export { resolveEnvironment } from '../src/core/environment.js';
-export { listRegions, regionalCatalog, regionalRuntime } from '../src/core/regions.js';
-export type { RegionPreset, RegionFilter } from '../src/core/regions.js';
-export type { EnvironmentOptions, RegionalEnvironment, RegionalSelection, ResolvedEnvironment } from '../src/core/types.js';
 export type {
   CaptureBodiesOptions,
   CaptureBodiesResult,

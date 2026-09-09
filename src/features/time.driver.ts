@@ -1,7 +1,6 @@
 import type { JsonValue } from '../core/types.js';
 import type { Driver, Port } from '../engine/types.js';
 import {
-  CANONICAL_LOCALES,
   DATE_TEXT,
   DATE,
   DATE_NOW,
@@ -40,18 +39,8 @@ function nullableString(value: JsonValue | undefined, name: string): string | nu
   return value;
 }
 
-function localeArgs(port: Port, args: readonly unknown[], locale: string | null, index = 0): unknown[] {
-  const output = [...args];
-  if (locale === null) return output;
-  const locales = Reflect.apply(source(port, CANONICAL_LOCALES), undefined, [args[index]]) as string[];
-  // Native locale negotiation must fall back to the Profile, not the host locale.
-  output[index] = [...locales, locale];
-  return output;
-}
-
-function formatArgs(port: Port, args: readonly unknown[], timeZone: string | null, locale: string | null): unknown[] {
-  const output = localeArgs(port, args, locale);
-  if (timeZone === null || args[1] === null) return output;
+function formatArgs(args: readonly unknown[], timeZone: string | null): unknown[] {
+  if (timeZone === null || args[1] === null) return [...args];
   const target = args[1] === undefined ? Object.create(null) as object : Object(args[1]);
   const options = new Proxy(target, {
     get: (value, key) => {
@@ -59,6 +48,7 @@ function formatArgs(port: Port, args: readonly unknown[], timeZone: string | nul
       return key === 'timeZone' && current === undefined ? timeZone : current;
     },
   });
+  const output = [...args];
   output[1] = options;
   return output;
 }
@@ -338,11 +328,7 @@ export const timeDriver: Driver = {
         }
         if (item.op === 'format') {
           const timeZone = nullableString(item.timeZone, 'timeZone');
-        return Reflect.apply(source(port, FORMAT), self, formatArgs(port, args, timeZone, nullableString(item.locale ?? null, 'locale')));
-        }
-        if ((item.op === 'intl' || item.op === 'locale-method') && typeof item.path === 'string') {
-          return Reflect.apply(source(port, item.path), self, localeArgs(port, args, nullableString(item.locale, 'locale'),
-            item.op === 'locale-method' ? item.index as number : 0));
+          return Reflect.apply(source(port, FORMAT), self, formatArgs(args, timeZone));
         }
         if (item.op === 'timezone') {
           const timeZone = nullableString(item.timeZone, 'timeZone');
@@ -366,7 +352,7 @@ export const timeDriver: Driver = {
         }
         if (item.op === 'locale' && typeof item.path === 'string') {
           const timeZone = nullableString(item.timeZone, 'timeZone');
-        return Reflect.apply(source(port, item.path), self, formatArgs(port, args, timeZone, nullableString(item.locale ?? null, 'locale')));
+          return Reflect.apply(source(port, item.path), self, formatArgs(args, timeZone));
         }
         throw new TypeError(`time Driver op invalid:${String(item.op)}`);
       },
@@ -385,10 +371,7 @@ export const timeDriver: Driver = {
         }
         if (item.op === 'format') {
           const timeZone = nullableString(item.timeZone, 'timeZone');
-        return Reflect.construct(source(port, FORMAT), formatArgs(port, args, timeZone, nullableString(item.locale ?? null, 'locale')), newTarget);
-        }
-        if (item.op === 'intl' && typeof item.path === 'string') {
-          return Reflect.construct(source(port, item.path), localeArgs(port, args, nullableString(item.locale, 'locale')), newTarget);
+          return Reflect.construct(source(port, FORMAT), formatArgs(args, timeZone), newTarget);
         }
         throw new TypeError(`time Driver construct invalid:${String(item.op)}`);
       },

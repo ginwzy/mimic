@@ -6,8 +6,7 @@ import {
   type TextResponse,
 } from '../../client.js';
 import type { CaptureNetworkOptions, ResponseCookie } from '../../../src/network/types.js';
-import { environmentAcceptLanguage, parseEnvironment } from '../../../src/core/environment.js';
-import type { EnvironmentOptions, Profile } from '../../../src/core/types.js';
+import type { Profile } from '../../../src/core/types.js';
 
 export const ANA_SITE = 'https://www.ana.co.jp';
 export const ANA_SELECT_URL = 'https://aswbe.ana.co.jp/webapps/reservation/common/system-error';
@@ -73,7 +72,6 @@ export const ANA_DEFAULT_CREDENTIALS: AnaCredentials = {
 
 export interface AnaRequestOptions {
   profile?: Profile;
-  environment?: EnvironmentOptions;
   proxy?: string;
   proxyHeaders?: HeadersInit;
   timeoutMs?: number;
@@ -136,7 +134,6 @@ class AnaRequestClient implements AnaRequest {
     private readonly log: (message: string) => void,
     private readonly closedLoop: boolean,
     private readonly browserHeaders: Readonly<Record<string, string>>,
-    private readonly acceptLanguage?: string,
   ) {}
 
   captureNetwork(url: string, pageUrl: string): CaptureNetworkOptions {
@@ -152,7 +149,6 @@ class AnaRequestClient implements AnaRequest {
         const requestHeaders = Object.fromEntries(request.headers);
         const response = await this.client.request(request.method, request.url, requestBody, {
           ...requestHeaders, ...this.browserHeaders,
-          ...(this.acceptLanguage === undefined ? {} : { 'accept-language': this.acceptLanguage }),
           cookie: requestHeaders.cookie ?? '',
         }, { signal: request.signal, redirect: 'manual', disableDefaultHeaders: true });
         this.rememberCookies(response);
@@ -405,7 +401,6 @@ class AnaRequestClient implements AnaRequest {
   }
 
   private async get(url: string, headers: Record<string, string>, label: string): Promise<TextResponse> {
-    if (this.acceptLanguage !== undefined) headers['accept-language'] = this.acceptLanguage;
     if (this.closedLoop) {
       for (let redirects = 0; redirects <= 10; redirects++) {
         this.log(`GET ${url}`);
@@ -435,7 +430,6 @@ class AnaRequestClient implements AnaRequest {
     label: string,
     options?: RequestOptions,
   ): Promise<TextResponse> {
-    if (this.acceptLanguage !== undefined) headers['accept-language'] = this.acceptLanguage;
     this.log(`${label} ${url} body=${body.length}B`);
     const response = await this.client.post(url, body, headers, { ...options, disableDefaultHeaders: true });
     this.log(`${label} HTTP ${response.status} resp=${response.body.length}B`);
@@ -444,8 +438,6 @@ class AnaRequestClient implements AnaRequest {
 }
 
 export async function createAnaRequest(options: AnaRequestOptions = {}): Promise<AnaRequest> {
-  const acceptLanguage = options.environment === undefined ? undefined
-    : environmentAcceptLanguage(parseEnvironment(options.environment));
   const navigator = options.profile?.navigator;
   const browserHeaders = navigator === undefined ? BROWSER_HEADERS : {
     ...BROWSER_HEADERS,
@@ -470,6 +462,5 @@ export async function createAnaRequest(options: AnaRequestOptions = {}): Promise
     options.log ?? (() => {}),
     options.closedLoop ?? false,
     browserHeaders,
-    acceptLanguage,
   );
 }

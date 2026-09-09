@@ -62,12 +62,7 @@ test('ANA uses one Profile identity and explicit navigation versus sensor header
   ) {
     return originalFetch.call(this, url, init);
   });
-  const request = await createAnaRequest({
-    profile,
-    environment: {
-      regional: { languages: ['fr-BJ'], locale: 'fr-BJ', timeZone: 'Africa/Porto-Novo' },
-    },
-  });
+  const request = await createAnaRequest({ profile });
   t.after(() => request.close());
   await request.getLanding();
   await request.getScript('https://aswbe.ana.co.jp/sensor');
@@ -80,9 +75,12 @@ test('ANA uses one Profile identity and explicit navigation versus sensor header
     assert.equal(headers['sec-ch-ua'], '"Not)A;Brand";v="8", "Chromium";v="138", "Android WebView";v="138"');
     assert.equal(headers['sec-ch-ua-mobile'], '?1');
     assert.equal(headers['sec-ch-ua-platform'], '"Android"');
-    assert.equal(headers['accept-language'], 'fr-BJ,fr;q=0.9');
     assert.equal(headers['accept-encoding'], 'gzip, deflate, br, zstd');
   }
+  for (const index of [0, 1, 2, 3]) {
+    assert.equal(received[index]!['accept-language'], 'en-US,en;q=0.9,ja;q=0.8');
+  }
+  assert.equal(received[4]!['accept-language'], 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7');
   for (const index of [0, 4]) {
     assert.equal(received[index]!['sec-fetch-user'], '?1');
     assert.equal(received[index]!['upgrade-insecure-requests'], '1');

@@ -145,31 +145,6 @@ export interface TimezoneData {
   offset: number;
 }
 
-export interface RegionalEnvironment {
-  languages: readonly string[];
-  locale: string;
-  timeZone: string;
-}
-
-export interface EnvironmentOptions {
-  regional: RegionalEnvironment | { preset: string } | { random: true; countries?: readonly string[]; seed?: string };
-  selection?: RegionalSelection;
-}
-
-export interface RegionalSelection {
-  preset: string;
-  country: string;
-  catalog: string;
-  catalogHash: string;
-  runtime: string;
-  seed?: string;
-  countries?: readonly string[];
-}
-
-export interface ResolvedEnvironment extends EnvironmentOptions {
-  regional: RegionalEnvironment;
-}
-
 export type GlValue = JsonPrimitive | JsonPrimitive[];
 
 export interface Precision {
@@ -232,8 +207,6 @@ export interface Profile {
   screen: ScreenData;
   window?: WindowData;
   timezone?: TimezoneData;
-  /** Explicit default formatting locale; absent preserves the engine default. */
-  locale?: string;
   webgl?: WebGlData;
   /** Optional OfflineAudio 4-tuple; absence is resolved by the compile-time identity policy. */
   audio?: AudioData;

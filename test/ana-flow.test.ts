@@ -23,8 +23,7 @@ test('ANA flow posts each selected capture position once in order', async (t) =>
     await writeFile(path.join(root, 'package.json'), '{"type":"module"}');
     // Execute the compiled production flow unchanged, with local input/output adapters.
     await copyFile(new URL('../flow/suppliers/ana/flow.js', import.meta.url), path.join(supplier, 'flow.js'));
-    for (const dir of ['core', 'node', 'profiles']) await mkdir(path.join(root, 'src', dir), { recursive: true });
-    await writeFile(path.join(root, 'src/core/environment.js'), 'export const parseEnvironment = () => ({});');
+    for (const dir of ['node', 'profiles']) await mkdir(path.join(root, 'src', dir), { recursive: true });
     await writeFile(path.join(root, 'src/node/assets.js'), 'export const DEFAULT_PROFILES_ROOT = "unused";');
     await writeFile(path.join(root, 'src/profiles/fp-env.js'), 'export class FpEnvProfiles { async load() { return { profile: {} }; } }');
     await writeFile(path.join(flowRoot, 'capture.js'), `

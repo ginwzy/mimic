@@ -1,4 +1,4 @@
-import type { EnvironmentOptions, Job, Page, Plan, Profile, Shape, SupportMap } from '../core/types.js';
+import type { Job, Page, Plan, Profile, Shape, SupportMap } from '../core/types.js';
 import type { Drivers, Engine } from '../engine/types.js';
 import type { EngineManifest, Feature, Op, PlanBind } from '../shape/types.js';
 
@@ -24,7 +24,6 @@ export type CaptureLifecycle = 'auto' | 'none';
 
 export interface TaskRequest {
   profile: string;
-  environment?: EnvironmentOptions;
   job: Job;
   page?: Page;
   shape?: Shape;
@@ -32,7 +31,7 @@ export interface TaskRequest {
   synthetic?: boolean;
 }
 
-export type ListKind = 'profiles' | 'shapes' | 'features' | 'drivers' | 'regions';
+export type ListKind = 'profiles' | 'shapes' | 'features' | 'drivers';
 
 export interface RuntimeOptions {
   engine: Engine;
