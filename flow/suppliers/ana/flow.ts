@@ -5,7 +5,7 @@ import { DEFAULT_PROFILES_ROOT } from '../../../src/node/assets.js';
 import { FpEnvProfiles } from '../../../src/profiles/fp-env.js';
 import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
-import { ANA_SELECT_URL, createAnaRequest } from './request.js';
+import { ANA_FLIGHT_SEARCH_URL, ANA_SELECT_URL, createAnaRequest } from './request.js';
 import type { AnaCredentials, AnaVerifyResult } from './request.js';
 import type { CaptureNetworkOptions } from '../../../src/network/types.js';
 
@@ -57,7 +57,7 @@ function cookieNames(cookieHeader: string): string[] {
 function selectBodies(bodies: readonly string[], postCount: number | undefined): string[] {
   if (postCount !== undefined) return bodies.slice(0, Math.max(0, postCount));
   if (bodies.length <= 5) return [...bodies];
-  return [...bodies.slice(0, 2), ...bodies.slice(-3)];
+  return [...bodies.slice(0, 2), ...bodies.slice(-1)];
 }
 
 async function resolveProfile(explicit: string | undefined, profilesRoot: string | undefined): Promise<string> {
@@ -105,16 +105,38 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
   };
   try {
     log(`ANA flow start profile=${profile}`);
-    const html = await request.getLanding();
+    const shouldVerify = options.verify === true;
+    let pageUrl = ANA_SELECT_URL;
+    let html: string;
+
+    if (shouldVerify) {
+      // P1: seed www navigation + homepage-era sysdate before crossing to aswbe.
+      await request.getWwwHome();
+      log(`www-home cookies: ${cookieNames(request.cookies()).join(', ')}`);
+      await request.getSysdate('?ctryCod=jp');
+      // P1: flight-search document first; aswbe ABCK/BMS run against that page like the real SPA boot.
+      html = await request.postFlightSearch();
+      pageUrl = ANA_FLIGHT_SEARCH_URL;
+      try {
+        request.discoverScripts(html);
+      } catch {
+        log('flight-search HTML has no Akamai ABCK/BMS pair; falling back to system-error landing');
+        html = await request.getLanding();
+        pageUrl = ANA_SELECT_URL;
+      }
+    } else {
+      html = await request.getLanding();
+    }
+
     log(`landing cookies: ${cookieNames(request.cookies()).join(', ')}`);
     const scripts = request.discoverScripts(html);
     log(`ABCK=${scripts.abck}`);
     log(`BMS=${scripts.bms}`);
 
-    const abckSource = await request.getScript(scripts.abck);
+    const abckSource = await request.getScript(scripts.abck, pageUrl);
     let abckPostCount = 0;
     const abckCapture = await captureBodies({
-      pageUrl: ANA_SELECT_URL,
+      pageUrl,
       pageHtml: html,
       scriptUrl: scripts.abck,
       scriptSource: abckSource,
@@ -137,7 +159,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       for (const [index, body] of bodiesToPost.entries()) {
         await delay(250);
         log(`ABCK POST ${index + 1}/${bodiesToPost.length}`);
-        await request.postAbck(scripts.abck, body);
+        await request.postAbck(scripts.abck, body, pageUrl);
         abckPostCount++;
       }
     } else {
@@ -145,9 +167,9 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
     }
 
     let bmsPosted = false;
-    const bmsSource = await request.getScript(scripts.bms);
+    const bmsSource = await request.getScript(scripts.bms, pageUrl);
     const bmsCapture = await captureBodies({
-      pageUrl: ANA_SELECT_URL,
+      pageUrl,
       pageHtml: html,
       scriptUrl: scripts.bms,
       scriptSource: bmsSource,
@@ -162,14 +184,21 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       mode: 'bms',
     }, options.capturePool);
     if (networkMode === 'offline' && bmsCapture.bodies[0] !== undefined) {
-      await request.postBms(scripts.bms, bmsCapture.bodies[0]);
+      await request.postBms(scripts.bms, bmsCapture.bodies[0], pageUrl);
       bmsPosted = true;
     }
 
-    if (options.verify === true) await request.postFlightSearch();
+    let verifyResult: AnaVerifyResult | undefined;
+    if (shouldVerify) {
+      // P0: SPA bootstrap APIs that precede search in real traffic (placeholder bodies OK).
+      await request.postInitialization();
+      await request.getSysdate();
+      await request.postChangeOfficeAndLang();
+      verifyResult = await request.verify(options.verifyBody);
+    }
+
     const cookies = request.cookies();
     const abckTilde0 = cookieValue(cookies, '_abck')?.includes('~0~') ?? false;
-    const verify = options.verify === true ? await request.verify(options.verifyBody) : undefined;
     return {
       profile,
       environment,
@@ -179,7 +208,7 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       abckPostCount,
       bmsPosted,
       abckTilde0,
-      ...(verify === undefined ? {} : { verify }),
+      ...(verifyResult === undefined ? {} : { verify: verifyResult }),
     };
   } finally {
     await request.close();

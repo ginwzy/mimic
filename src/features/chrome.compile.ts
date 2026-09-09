@@ -2,6 +2,7 @@ import { describeCoverage } from './capabilities.js';
 import type { Shape } from '../core/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { accessor, fn, fnShape, refProp, tag, valueProp } from './ops.js';
+import { hasTouchSurface } from './touch.shared.js';
 
 const TOUCH = ['ontouchstart', 'ontouchend', 'ontouchmove', 'ontouchcancel'] as const;
 
@@ -52,8 +53,8 @@ function touchOps(shape: Shape): DraftOp[] {
   }
   return [
     { op: 'drop', target: { path: 'window' }, key: 'orientation' },
-    ...['window.Document.prototype', 'window.HTMLElement.prototype'].flatMap((path) =>
-      TOUCH.map((key): DraftOp => ({ op: 'drop', target: { path }, key }))),
+    ...(hasTouchSurface(shape.target) ? [] : ['window.Document.prototype', 'window.HTMLElement.prototype'].flatMap((path) =>
+      TOUCH.map((key): DraftOp => ({ op: 'drop', target: { path }, key })))),
   ];
 }
 

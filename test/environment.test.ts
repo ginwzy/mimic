@@ -43,6 +43,17 @@ test('regional profiles preserve device evidence and isolate deterministic Plan 
   assert.notEqual((await app.plan({ profile, job: request.job })).id, plan.id);
 });
 
+test('zero-offset regional profiles remain JSON round-trip safe', async () => {
+  const base = (await new FpEnvProfiles(profilesRoot).load(profile)).profile;
+  for (const timeZone of ['UTC', 'Africa/Abidjan']) {
+    const environment = parseEnvironment({ regional: { languages: ['en-US'], locale: 'en-US', timeZone } });
+    const derived = regionalProfile(base, environment);
+    assert.equal(derived.timezone?.offset, 0);
+    assert.ok(validHash(derived));
+    assert.ok(validHash(JSON.parse(JSON.stringify(derived))));
+  }
+});
+
 test('regional input rejects invalid or incomplete settings and derives ordered language headers', () => {
   assert.equal(environmentAcceptLanguage(japan), 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7');
   assert.deepEqual(parseEnvironment({ regional: { languages: ['ja-jp'], locale: 'ja-jp', timeZone: 'asia/tokyo' } }),
@@ -194,14 +205,16 @@ test('shared workers apply regional defaults across Intl, locale methods and chi
 test('capture pool forwards the environment per task without contaminating other captures', async (t) => {
   const pool = new CapturePool(2);
   t.after(() => pool.close());
-  const results = await Promise.all([japan, poland].map((environment) => captureBodies({
+  const environments = [japan, poland, ...['UTC', 'Africa/Abidjan'].map((timeZone) =>
+    parseEnvironment({ regional: { languages: ['en-US'], locale: 'en-US', timeZone } }))];
+  const results = await Promise.all(environments.map((environment) => captureBodies({
     profile, profilesRoot, environment,
     pageUrl: 'https://regional.test/', pageHtml: '<!doctype html><body></body>',
     scriptUrl: 'https://regional.test/script.js',
     scriptSource: 'navigator.sendBeacon("/capture", JSON.stringify([navigator.language,new Intl.DateTimeFormat().resolvedOptions()]))',
     mode: 'bms', deadlineMs: 300, scriptTimeoutMs: 5000, maxPosts: 1,
   }, pool)));
-  assert.deepEqual(results.map((result) => JSON.parse(result.bodies[0]!)), [japan, poland].map(({ regional }) => [
+  assert.deepEqual(results.map((result) => JSON.parse(result.bodies[0]!)), environments.map(({ regional }) => [
     regional.languages[0], new Intl.DateTimeFormat(regional.locale, { timeZone: regional.timeZone }).resolvedOptions(),
   ]));
 });

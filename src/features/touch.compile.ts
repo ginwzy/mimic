@@ -3,7 +3,7 @@ import type { Bind, Shape } from '../core/types.js';
 import type { DraftOp, Feature } from '../shape/types.js';
 import { accessor, fn, fnShape, refProp, tag } from './ops.js';
 
-import { TOUCH_FIELDS } from './touch.shared.js';
+import { hasTouchSurface, TOUCH_FIELDS } from './touch.shared.js';
 
 function shapeHasTouchSlots(shape: Shape): boolean {
   return shape.ops.some((raw) => {
@@ -66,7 +66,7 @@ function touchInterfaceOps(): DraftOp[] {
 }
 
 export function operations(shape: Shape): DraftOp[] {
-  return shape.target.form === 'mobile' ? touchInterfaceOps() : [];
+  return hasTouchSurface(shape.target) ? touchInterfaceOps() : [];
 }
 
 function touchBinds(): Bind[] {
@@ -84,12 +84,12 @@ function touchBinds(): Bind[] {
 export const touchFeature: Feature = {
   id: 'touch',
   describe: ({ shape }, support) => describeCoverage(support, {
-    'touch.api': shape.target.form === 'mobile' ? 'partial' : 'structure',
+    'touch.api': hasTouchSurface(shape.target) ? 'partial' : 'structure',
   }),
   rev: '2',
   requires: ['screen'],
   build: ({ shape }) => {
-    if (shape.target.form !== 'mobile') {
+    if (!hasTouchSurface(shape.target)) {
       return { support: { 'touch.api': 'shape-only' } };
     }
     return {

@@ -142,8 +142,9 @@ function epochOffset(timeZone: string): number {
     hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
   }).formatToParts(0);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return -Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day),
+  const offset = -Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day),
     Number(values.hour), Number(values.minute), Number(values.second)) / 60_000;
+  return offset === 0 ? 0 : offset;
 }
 
 export function regionalProfile(profile: Profile, environment: ResolvedEnvironment): Profile {

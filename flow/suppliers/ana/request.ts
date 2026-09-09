@@ -13,6 +13,9 @@ export const ANA_SITE = 'https://www.ana.co.jp';
 export const ANA_SELECT_URL = 'https://aswbe.ana.co.jp/webapps/reservation/common/system-error';
 export const ANA_FLIGHT_SEARCH_URL = 'https://aswbe.ana.co.jp/webapps/reservation/flight-search?CONNECTION_KIND=JPN&LANG=ja';
 export const ANA_VERIFY_URL = 'https://space.ana.co.jp/aswbe-search/api/v1/roundtrip-owd';
+export const ANA_SYSDATE_URL = 'https://space.ana.co.jp/sysdate/api/v1/sysdate';
+export const ANA_INITIALIZATION_URL = 'https://space.ana.co.jp/aswbe-initialization/api/v1/initialization';
+export const ANA_CHANGE_OFFICE_URL = 'https://space.ana.co.jp/aswbe-user/api/v1/change-office-and-lang';
 
 const ASWBE_ORIGIN = 'https://aswbe.ana.co.jp';
 const CHROME_MAJOR = 145;
@@ -44,6 +47,13 @@ const VERIFY_HEADER_ORDER = [
 
 export const ANA_DEFAULT_VERIFY_BODY = '{"itineraries":[{"originLocationCode":"TYO","destinationLocationCode":"HNL","departureDate":"2026-09-27"}],"travelers":{"ADT":1,"B15":0,"CHD":0,"INF":0},"fare":{"isMixedCabin":false,"cabinClass":"eco","fareOptionType":"0"},"searchPreferences":{"getAirCalendarOnly":false,"getLatestOperation":true}}';
 export const ANA_FLIGHT_SEARCH_BODY = 'search=true&trip=roundtrip&origin=HND&destination=NRT&cabinClass=eco&fareOption=21&departureDate=2026-09-03&returnDate=2026-09-04&ADT=1&B15=0&CHD=0&INF=0&promotionCode=&flexibleDates=false';
+/** SPA bootstrap bodies from HAR ana.co.jp_2026_09_08_13_38_57; userAgent follows this client's UA. */
+export const ANA_INITIALIZATION_BODY = JSON.stringify({
+  connectionKind: 'JPN',
+  lang: 'ja',
+  userAgent: UA,
+});
+export const ANA_CHANGE_OFFICE_BODY = '{"pointOfSaleId":"TYONH08DD"}';
 
 export interface AnaCredentials {
   authorization: string;
@@ -86,12 +96,16 @@ export interface AnaVerifyResult {
 
 export interface AnaRequest {
   captureNetwork(url: string, pageUrl: string): CaptureNetworkOptions;
+  getWwwHome(): Promise<string>;
   getLanding(): Promise<string>;
   discoverScripts(html: string): AnaScripts;
-  getScript(url: string): Promise<string>;
-  postAbck(url: string, body: string): Promise<void>;
-  postBms(url: string, body: string): Promise<void>;
-  postFlightSearch(): Promise<void>;
+  getScript(url: string, referer?: string): Promise<string>;
+  postAbck(url: string, body: string, referer?: string): Promise<void>;
+  postBms(url: string, body: string, referer?: string): Promise<void>;
+  postFlightSearch(): Promise<string>;
+  getSysdate(query?: string): Promise<void>;
+  postInitialization(body?: string): Promise<void>;
+  postChangeOfficeAndLang(body?: string): Promise<void>;
   verify(body?: string): Promise<AnaVerifyResult>;
   cookies(url?: string): string;
   close(): Promise<void>;
@@ -161,6 +175,20 @@ class AnaRequestClient implements AnaRequest {
     }
   }
 
+  async getWwwHome(): Promise<string> {
+    const response = await this.get(ANA_SITE, {
+      ...this.browserHeaders,
+      'upgrade-insecure-requests': '1',
+      accept: DOC_ACCEPT,
+      'sec-fetch-site': 'none',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-user': '?1',
+      'sec-fetch-dest': 'document',
+      'accept-language': ACCEPT_LANG,
+    }, 'www-home');
+    return requireStatus(response, 'www-home').body;
+  }
+
   async getLanding(): Promise<string> {
     const response = await this.get(ANA_SELECT_URL, {
       ...this.browserHeaders,
@@ -176,41 +204,65 @@ class AnaRequestClient implements AnaRequest {
   }
 
   discoverScripts(html: string): AnaScripts {
+    // Real Akamai pair only: BMS has ?v=/&v=, ABCK shares the same first path segment
+    // without a version query (and without a .js filename). Business pages like the
+    // ASW-0060 ご案内 shell expose com_optimize.js + font.js and must not match.
     const scripts = [...html.matchAll(/<script[^>]*\ssrc\s*=\s*["']([^"']+)["']/gi)]
       .map((match) => match[1])
       .filter((source): source is string => source !== undefined);
-    if (scripts.length < 2) throw new Error('landing page has fewer than two scripts');
-    let bmsIndex = scripts.length - 1;
+
+    let bmsPath: string | undefined;
     for (let index = scripts.length - 1; index >= 0; index -= 1) {
       const source = scripts[index];
-      if (source !== undefined && (source.includes('?v=') || source.includes('&v='))) {
-        bmsIndex = index;
+      if (source !== undefined && /[?&]v=/.test(source)) {
+        bmsPath = source;
         break;
       }
     }
-    const abckIndex = bmsIndex === scripts.length - 1 ? scripts.length - 2 : scripts.length - 1;
+    if (bmsPath === undefined) throw new Error('bms script not found');
+
+    const scriptPathname = (source: string): string => {
+      const bare = source.split(/[?#]/, 1)[0] ?? source;
+      try {
+        return bare.includes('://') ? new URL(bare).pathname : bare;
+      } catch {
+        return bare;
+      }
+    };
+
+    const firstSegment = scriptPathname(bmsPath).replace(/^\//, '').split('/', 1)[0];
+    if (!firstSegment) throw new Error('abck script not found');
+    const prefix = `/${firstSegment}/`;
+    const abckPath = scripts.find((source) => {
+      if (/[?&]v=/.test(source)) return false;
+      const pathname = scriptPathname(source);
+      const leaf = pathname.split('/').filter(Boolean).at(-1) ?? '';
+      return pathname.startsWith(prefix) && !leaf.includes('.');
+    });
+    if (abckPath === undefined) throw new Error('abck script not found');
+
     const baseMatch = /<base[^>]*\shref\s*=\s*["']([^"']+)["']/i.exec(html);
     const base = new URL(baseMatch?.[1] ?? ANA_SELECT_URL, ANA_SELECT_URL);
-    const bms = new URL(scripts[bmsIndex] as string, base).href;
-    const abck = new URL(scripts[abckIndex] as string, base).href;
+    const bms = new URL(bmsPath, base).href;
+    const abck = new URL(abckPath, base).href;
     if (bms === abck) throw new Error('landing page resolved identical BMS and ABCK scripts');
     return { abck, bms };
   }
 
-  async getScript(url: string): Promise<string> {
+  async getScript(url: string, referer = ANA_SELECT_URL): Promise<string> {
     const response = await this.get(url, {
       ...this.browserHeaders,
       accept: '*/*',
       'sec-fetch-site': 'same-origin',
       'sec-fetch-mode': 'no-cors',
       'sec-fetch-dest': 'script',
-      referer: ANA_SELECT_URL,
+      referer,
       'accept-language': ACCEPT_LANG,
     }, 'script');
     return requireStatus(response, 'script').body;
   }
 
-  async postAbck(url: string, body: string): Promise<void> {
+  async postAbck(url: string, body: string, referer = ANA_SELECT_URL): Promise<void> {
     const response = await this.post(withoutQuery(url), body, {
       ...this.browserHeaders,
       'content-type': 'text/plain;charset=UTF-8',
@@ -219,13 +271,13 @@ class AnaRequestClient implements AnaRequest {
       'sec-fetch-site': 'same-origin',
       'sec-fetch-mode': 'cors',
       'sec-fetch-dest': 'empty',
-      referer: ANA_SELECT_URL,
+      referer,
       'accept-language': ACCEPT_LANG,
     }, '_abck POST');
     requireStatus(response, '_abck POST');
   }
 
-  async postBms(url: string, body: string): Promise<void> {
+  async postBms(url: string, body: string, referer = ANA_SELECT_URL): Promise<void> {
     const response = await this.post(withoutQuery(url), body, {
       ...this.browserHeaders,
       'content-type': 'application/json',
@@ -234,13 +286,13 @@ class AnaRequestClient implements AnaRequest {
       'sec-fetch-site': 'same-origin',
       'sec-fetch-mode': 'cors',
       'sec-fetch-dest': 'empty',
-      referer: ANA_SELECT_URL,
+      referer,
       'accept-language': ACCEPT_LANG,
     }, 'BMS POST');
     requireStatus(response, 'BMS POST');
   }
 
-  async postFlightSearch(): Promise<void> {
+  async postFlightSearch(): Promise<string> {
     const response = await this.post(ANA_FLIGHT_SEARCH_URL, ANA_FLIGHT_SEARCH_BODY, {
       ...this.browserHeaders,
       'cache-control': 'max-age=0',
@@ -257,7 +309,59 @@ class AnaRequestClient implements AnaRequest {
       'accept-language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
       priority: 'u=0, i',
     }, 'flight-search POST', { headerOrder: FLIGHT_SEARCH_HEADER_ORDER });
-    requireStatus(response, 'flight-search POST');
+    return requireStatus(response, 'flight-search POST').body;
+  }
+
+  private spaceApiHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return {
+      ...this.browserHeaders,
+      accept: 'application/json',
+      'accept-language': ACCEPT_LANG,
+      authorization: this.credentials.authorization,
+      client_id: this.credentials.clientId,
+      client_secret: this.credentials.clientSecret,
+      identification_id: this.credentials.identificationId,
+      origin: ASWBE_ORIGIN,
+      referer: `${ASWBE_ORIGIN}/`,
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'same-site',
+      sys_id: this.credentials.sysId,
+      priority: 'u=1, i',
+      ...extra,
+    };
+  }
+
+  async getSysdate(query = ''): Promise<void> {
+    let url = ANA_SYSDATE_URL;
+    if (query.length > 0) {
+      url += query.startsWith('?') ? query : `?${query}`;
+    }
+    const response = await this.get(url, this.spaceApiHeaders({
+      accept: '*/*',
+    }), 'sysdate GET');
+    requireStatus(response, 'sysdate GET');
+  }
+
+  async postInitialization(body?: string): Promise<void> {
+    const payload = body ?? JSON.stringify({
+      connectionKind: 'JPN',
+      lang: 'ja',
+      userAgent: this.browserHeaders['user-agent'] ?? UA,
+    });
+    const response = await this.post(ANA_INITIALIZATION_URL, payload, this.spaceApiHeaders({
+      'content-type': 'application/json',
+    }), 'initialization POST');
+    // Soft: keep going for Akamai flow-gap probes even if SPA rejects the body.
+    this.log(`initialization POST class=${response.status >= 400 ? 'http_error' : 'ok'} status=${response.status}`);
+  }
+
+  async postChangeOfficeAndLang(body = ANA_CHANGE_OFFICE_BODY): Promise<void> {
+    const response = await this.post(ANA_CHANGE_OFFICE_URL, body, this.spaceApiHeaders({
+      'content-type': 'application/json',
+    }), 'change-office POST');
+    // Soft: same as initialization — non-2xx must not block verify.
+    this.log(`change-office POST class=${response.status >= 400 ? 'http_error' : 'ok'} status=${response.status}`);
   }
 
   async verify(body = ANA_DEFAULT_VERIFY_BODY): Promise<AnaVerifyResult> {
