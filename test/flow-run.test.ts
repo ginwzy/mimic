@@ -62,7 +62,7 @@ test('flow CLI batch statistics and Profile allocation', async (t) => {
         }
       }
     `);
-    for (const [supplier, name, key] of [['ana', 'runAnaFlow', 'verify'], ['cebu', 'runCebuFlow', 'search']] as const) {
+    for (const [supplier, name, key] of [['ana', 'runAnaFlow', 'verify'], ['cebu', 'runCebuFlow', 'search'], ['jetstar', 'runJetstarFlow', 'search']] as const) {
       const directory = path.join(root, 'suppliers', supplier);
       await mkdir(directory, { recursive: true });
       await writeFile(path.join(directory, 'flow.js'), `
@@ -157,7 +157,7 @@ test('flow CLI batch statistics and Profile allocation', async (t) => {
       assert.equal(summary.errorDistribution, undefined);
     });
 
-    for (const supplier of ['ana', 'cebu']) {
+    for (const supplier of ['ana', 'cebu', 'jetstar']) {
       await t.test(`${supplier} allocates distinct random Profiles within a round`, () => {
         const profiles = ['p0', 'p1', 'p2', 'p3', 'p4'];
         const outcomes = Array.from({ length: 4 }, () => ({ status: 200, success: true, delay: 10 }));
