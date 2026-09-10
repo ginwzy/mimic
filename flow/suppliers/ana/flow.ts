@@ -3,7 +3,7 @@ import { DEFAULT_PROFILES_ROOT } from '../../../src/node/assets.js';
 import { FpEnvProfiles } from '../../../src/profiles/fp-env.js';
 import { captureBodies, listAndroidChromeProfiles, type CapturePool } from '../../capture.js';
 import type { HeadersInit } from '../../client.js';
-import { ANA_FLIGHT_SEARCH_URL, ANA_SELECT_URL, createAnaRequest } from './request.js';
+import { ANA_FLIGHT_SEARCH_URL, ANA_SELECT_URL, ANA_SITE, createAnaRequest } from './request.js';
 import type { AnaCredentials, AnaVerifyResult } from './request.js';
 import type { CaptureNetworkOptions } from '../../../src/network/types.js';
 
@@ -86,13 +86,13 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
     log,
     ...(networkMode === 'closed-loop' ? { closedLoop: true } : {}),
   });
-  const networkFor = (url: string, posted: () => void): CaptureNetworkOptions => {
-    const network = request.captureNetwork(url, ANA_SELECT_URL);
+  const networkFor = (url: string, pageUrl: string, posted: (response: Response) => void): CaptureNetworkOptions => {
+    const network = request.captureNetwork(url, pageUrl);
     return {
       ...network,
       request: async (outgoing) => {
         const response = await network.request(outgoing);
-        if (outgoing.method === 'POST') posted();
+        if (outgoing.method === 'POST') posted(response);
         return response;
       },
     };
@@ -100,32 +100,47 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
   try {
     log(`ANA flow start profile=${profile}`);
     const shouldVerify = options.verify === true;
-    let pageUrl = ANA_SELECT_URL;
-    let html: string;
+    const homeUrl = `${ANA_SITE}/`;
+    const homeHtml = await request.getWwwHome();
+    log(`www-home cookies: ${cookieNames(request.cookies(homeUrl)).join(', ')}`);
+    const homeScripts = request.discoverScripts(homeHtml, homeUrl);
+    log(`homepage BMS=${homeScripts.bms}`);
+    let bmsPosted = false;
+    const bmsSource = await request.getScript(homeScripts.bms, homeUrl);
+    const bmsCapture = await captureBodies({
+      pageUrl: homeUrl,
+      pageHtml: homeHtml,
+      scriptUrl: homeScripts.bms,
+      scriptSource: bmsSource,
+      cookies: networkMode === 'offline' ? splitCookies(request.cookies(homeUrl)) : [],
+      ...(networkMode === 'closed-loop' ? { network: networkFor(homeScripts.bms, homeUrl, (response) => { if (response.ok) bmsPosted = true; }) } : {}),
+      profile,
+      ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
+      deadlineMs: 7_000,
+      scriptTimeoutMs: 16_000,
+      maxPosts: 1,
+      mode: 'bms',
+    }, options.capturePool);
+    if (networkMode === 'offline' && bmsCapture.bodies[0] !== undefined) {
+      await request.postBms(homeScripts.bms, bmsCapture.bodies[0], homeUrl);
+      bmsPosted = true;
+    }
+    if (!bmsPosted) throw new Error('homepage BMS did not complete successfully');
 
-    if (shouldVerify) {
-      // P1: seed www navigation + homepage-era sysdate before crossing to aswbe.
-      await request.getWwwHome();
-      log(`www-home cookies: ${cookieNames(request.cookies()).join(', ')}`);
-      await request.getSysdate('?ctryCod=jp');
-      // P1: flight-search document first; aswbe ABCK/BMS run against that page like the real SPA boot.
-      html = await request.postFlightSearch();
-      pageUrl = ANA_FLIGHT_SEARCH_URL;
-      try {
-        request.discoverScripts(html);
-      } catch {
-        log('flight-search HTML has no Akamai ABCK/BMS pair; falling back to system-error landing');
-        html = await request.getLanding();
-        pageUrl = ANA_SELECT_URL;
-      }
-    } else {
+    if (shouldVerify) await request.getSysdate('?ctryCod=jp');
+    let html = await request.postFlightSearch();
+    let pageUrl = ANA_FLIGHT_SEARCH_URL;
+    try {
+      request.discoverScripts(html, pageUrl);
+    } catch {
+      log('flight-search HTML has no Akamai ABCK/BMS pair; falling back to system-error landing');
       html = await request.getLanding();
+      pageUrl = ANA_SELECT_URL;
     }
 
-    log(`landing cookies: ${cookieNames(request.cookies()).join(', ')}`);
-    const scripts = request.discoverScripts(html);
+    log(`landing cookies: ${cookieNames(request.cookies(pageUrl)).join(', ')}`);
+    const scripts = request.discoverScripts(html, pageUrl);
     log(`ABCK=${scripts.abck}`);
-    log(`BMS=${scripts.bms}`);
 
     const abckSource = await request.getScript(scripts.abck, pageUrl);
     let abckPostCount = 0;
@@ -134,8 +149,8 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       pageHtml: html,
       scriptUrl: scripts.abck,
       scriptSource: abckSource,
-      cookies: networkMode === 'offline' ? splitCookies(request.cookies()) : [],
-      ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.abck, () => abckPostCount++) } : {}),
+      cookies: networkMode === 'offline' ? splitCookies(request.cookies(pageUrl)) : [],
+      ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.abck, pageUrl, () => abckPostCount++) } : {}),
       profile,
       ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
       deadlineMs: 8_000,
@@ -157,27 +172,6 @@ export async function runAnaFlow(options: AnaFlowOptions = {}): Promise<AnaFlowR
       }
     } else {
       log(`ABCK captured=${abckCapture.bodies.length} completedPOSTs=${abckPostCount}`);
-    }
-
-    let bmsPosted = false;
-    const bmsSource = await request.getScript(scripts.bms, pageUrl);
-    const bmsCapture = await captureBodies({
-      pageUrl,
-      pageHtml: html,
-      scriptUrl: scripts.bms,
-      scriptSource: bmsSource,
-      cookies: networkMode === 'offline' ? splitCookies(request.cookies()) : [],
-      ...(networkMode === 'closed-loop' ? { network: networkFor(scripts.bms, () => { bmsPosted = true; }) } : {}),
-      profile,
-      ...(options.profilesRoot === undefined ? {} : { profilesRoot: options.profilesRoot }),
-      deadlineMs: 7_000,
-      scriptTimeoutMs: 16_000,
-      maxPosts: 1,
-      mode: 'bms',
-    }, options.capturePool);
-    if (networkMode === 'offline' && bmsCapture.bodies[0] !== undefined) {
-      await request.postBms(scripts.bms, bmsCapture.bodies[0], pageUrl);
-      bmsPosted = true;
     }
 
     let verifyResult: AnaVerifyResult | undefined;

@@ -69,7 +69,8 @@ test('ANA uses one Profile identity and explicit navigation versus sensor header
   await request.postAbck('https://aswbe.ana.co.jp/sensor', '{}');
   await request.postBms('https://aswbe.ana.co.jp/bms', '{}');
   await request.postFlightSearch();
-  assert.equal(received.length, 5);
+  await request.postBms('https://www.ana.co.jp/bms', '{}', 'https://www.ana.co.jp/');
+  assert.equal(received.length, 6);
   for (const headers of received) {
     assert.equal(headers['user-agent'], profile.navigator.userAgent);
     assert.equal(headers['sec-ch-ua'], '"Not)A;Brand";v="8", "Chromium";v="138", "Android WebView";v="138"');
@@ -77,7 +78,7 @@ test('ANA uses one Profile identity and explicit navigation versus sensor header
     assert.equal(headers['sec-ch-ua-platform'], '"Android"');
     assert.equal(headers['accept-encoding'], 'gzip, deflate, br, zstd');
   }
-  for (const index of [0, 1, 2, 3]) {
+  for (const index of [0, 1, 2, 3, 5]) {
     assert.equal(received[index]!['accept-language'], 'en-US,en;q=0.9,ja;q=0.8');
   }
   assert.equal(received[4]!['accept-language'], 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7');
@@ -85,7 +86,7 @@ test('ANA uses one Profile identity and explicit navigation versus sensor header
     assert.equal(received[index]!['sec-fetch-user'], '?1');
     assert.equal(received[index]!['upgrade-insecure-requests'], '1');
   }
-  for (const index of [1, 2, 3]) {
+  for (const index of [1, 2, 3, 5]) {
     assert.equal(received[index]!['sec-fetch-user'], undefined);
     assert.equal(received[index]!['upgrade-insecure-requests'], undefined);
   }
@@ -97,4 +98,16 @@ test('ANA uses one Profile identity and explicit navigation versus sensor header
     assert.equal(received[index]!['sec-fetch-dest'], 'empty');
   }
   assert.equal(received[2]!.accept, '*/*');
+  assert.equal(received[5]!.origin, 'https://www.ana.co.jp');
+  assert.equal(received[5]!.referer, 'https://www.ana.co.jp/');
+  assert.equal(received[5]!['sec-fetch-site'], 'same-origin');
+  assert.equal(received[5]!['content-type'], 'application/json');
+
+  const html = '<script src="/sensor/base"></script><script src="/sensor/bms?v=1"></script>';
+  assert.deepEqual(request.discoverScripts(html, 'https://www.ana.co.jp/'), {
+    abck: 'https://www.ana.co.jp/sensor/base', bms: 'https://www.ana.co.jp/sensor/bms?v=1',
+  });
+  assert.deepEqual(request.discoverScripts(html), {
+    abck: 'https://aswbe.ana.co.jp/sensor/base', bms: 'https://aswbe.ana.co.jp/sensor/bms?v=1',
+  });
 });

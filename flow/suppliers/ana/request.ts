@@ -96,7 +96,7 @@ export interface AnaRequest {
   captureNetwork(url: string, pageUrl: string): CaptureNetworkOptions;
   getWwwHome(): Promise<string>;
   getLanding(): Promise<string>;
-  discoverScripts(html: string): AnaScripts;
+  discoverScripts(html: string, pageUrl?: string): AnaScripts;
   getScript(url: string, referer?: string): Promise<string>;
   postAbck(url: string, body: string, referer?: string): Promise<void>;
   postBms(url: string, body: string, referer?: string): Promise<void>;
@@ -199,7 +199,7 @@ class AnaRequestClient implements AnaRequest {
     return requireStatus(response, 'landing').body;
   }
 
-  discoverScripts(html: string): AnaScripts {
+  discoverScripts(html: string, pageUrl = ANA_SELECT_URL): AnaScripts {
     // Real Akamai pair only: BMS has ?v=/&v=, ABCK shares the same first path segment
     // without a version query (and without a .js filename). Business pages like the
     // ASW-0060 ご案内 shell expose com_optimize.js + font.js and must not match.
@@ -238,7 +238,7 @@ class AnaRequestClient implements AnaRequest {
     if (abckPath === undefined) throw new Error('abck script not found');
 
     const baseMatch = /<base[^>]*\shref\s*=\s*["']([^"']+)["']/i.exec(html);
-    const base = new URL(baseMatch?.[1] ?? ANA_SELECT_URL, ANA_SELECT_URL);
+    const base = new URL(baseMatch?.[1] ?? pageUrl, pageUrl);
     const bms = new URL(bmsPath, base).href;
     const abck = new URL(abckPath, base).href;
     if (bms === abck) throw new Error('landing page resolved identical BMS and ABCK scripts');
@@ -278,14 +278,14 @@ class AnaRequestClient implements AnaRequest {
       ...this.browserHeaders,
       'content-type': 'application/json',
       accept: 'application/json',
-      origin: ASWBE_ORIGIN,
+      origin: new URL(referer).origin,
       'sec-fetch-site': 'same-origin',
       'sec-fetch-mode': 'cors',
       'sec-fetch-dest': 'empty',
       referer,
       'accept-language': ACCEPT_LANG,
     }, 'BMS POST');
-    requireStatus(response, 'BMS POST');
+    if (response.status < 200 || response.status >= 300) throw new Error(`BMS POST HTTP ${response.status}`);
   }
 
   async postFlightSearch(): Promise<string> {

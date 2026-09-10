@@ -4,9 +4,8 @@ import { accessor, ctor, fn, refProp, tag } from './ops.js';
 
 export const STORAGE_QUOTA = 10_737_418_240;
 
-// M2012K11AC Chrome 152 captures; do not extrapolate this surface to other targets.
 export function hasAndroidChromeCapabilities(target: Target): boolean {
-  return target.host === 'chrome' && target.platform === 'android' && target.version === 152;
+  return target.host === 'chrome' && target.platform === 'android';
 }
 
 export const ANDROID_CHROME_NAVIGATOR_ORDER = [

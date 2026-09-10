@@ -6,9 +6,9 @@ import { hasTouchSurface } from './touch.shared.js';
 
 const TOUCH = ['ontouchstart', 'ontouchend', 'ontouchmove', 'ontouchcancel'] as const;
 
-// The Android Chrome 152 capture has no chrome.app; retain other targets' surfaces.
+// Android Chrome omits chrome.app; retain other platforms' surfaces.
 function hasApp(shape: Shape): boolean {
-  return shape.target.platform !== 'android' || shape.target.version !== 152;
+  return shape.target.platform !== 'android';
 }
 
 function chromeOps(shape: Shape): DraftOp[] {
