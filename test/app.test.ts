@@ -266,7 +266,7 @@ test('Application normalizes failures, plans, and profile listing without leakin
   assert.equal(engine.active, 0);
 });
 
-test('Application reuses an identical immutable Job plan without crossing Job boundaries', async () => {
+test('Application shares installation plans while executing each Job independently', async () => {
   const { app } = application();
   const request = {
     profile: 'android-webview/unknown-v138-1',
@@ -282,9 +282,18 @@ test('Application reuses an identical immutable Job plan without crossing Job bo
   });
 
   assert.equal(repeated, first);
-  assert.notEqual(differentCode, first);
-  assert.deepEqual(differentCode, first);
+  assert.equal(differentCode, first);
+  assert.equal(await app.plan({ ...request, job: { ...request.job, timeout: 2_000, scriptUrl: 'https://example.test/next.js' } }), first);
+  const traced = await app.plan({ ...request, job: { ...request.job, trace: true } });
+  assert.notEqual(traced.id, first.id);
   assert.notEqual(capture.id, first.id);
+  await assert.rejects(app.plan({ ...request, job: { ...request.job, timeout: 0 } }), { code: 'BAD_JOB' });
+  const original = await app.execute(request);
+  const changed = await app.execute({ ...request, job: { ...request.job, code: '2 + 2' } });
+  assert.equal(original.ok, true);
+  assert.equal(changed.ok, true);
+  assert.equal(original.value, 2);
+  assert.equal(changed.value, 4);
 });
 
 test('Application excludes the interaction seed from the Plan cache key', async () => {

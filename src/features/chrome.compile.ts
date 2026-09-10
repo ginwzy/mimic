@@ -172,6 +172,7 @@ function bmsCapabilityOpsFor(shape: Shape): DraftOp[] {
 
 export const chromeFeature: Feature = {
   id: 'chrome',
+  jobKeys: [],
   describe: (_context, support) => describeCoverage(support, {
     'chrome.api': 'partial',
     'chrome.bms-capability': 'partial',

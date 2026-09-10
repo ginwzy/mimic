@@ -4,6 +4,7 @@ import { hasAndroidChromeCapabilities } from './nav.capabilities.compile.js';
 
 export const domFeature: Feature = {
   id: 'dom',
+  jobKeys: [],
   describe: ({ page }, support) => describeCoverage(support, {
     'dom.api': 'partial',
     'dom.worker': 'partial',

@@ -45,6 +45,7 @@ function geometry(window: WindowData | undefined, name: typeof GEOMETRY[number])
 
 export const viewFeature: Feature = {
   id: 'view',
+  jobKeys: [],
   describe: ({ page }, support) => describeCoverage(support, {
     'view.api': 'partial',
     'view.data': page?.layout ? 'partial' : 'constant',

@@ -242,6 +242,7 @@ function cachesOperations(): DraftOp[] {
 
 export const navFeature: BuiltinFeature = {
   id: 'nav',
+  jobKeys: [],
   describe: (_context, support) => describeCoverage(support, {
     'nav.api': 'partial',
     'nav.data': 'constant',

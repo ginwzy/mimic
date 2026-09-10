@@ -83,6 +83,7 @@ function touchBinds(): Bind[] {
 
 export const touchFeature: Feature = {
   id: 'touch',
+  jobKeys: [],
   describe: ({ shape }, support) => describeCoverage(support, {
     'touch.api': shape.target.form === 'mobile' ? 'partial' : 'structure',
   }),

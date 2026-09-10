@@ -62,10 +62,14 @@ export interface Contribution {
   support?: SupportMap;
 }
 
+type JobKey = { [K in Job['kind']]: keyof Extract<Job, { kind: K }> }[Job['kind']];
+
 export interface Feature {
   id: string;
   rev?: string;
   requires?: readonly string[];
+  /** Job fields read by build AND describe. Omit to key on the entire Job; [] declares no Job dependency. */
+  jobKeys?: readonly JobKey[];
   build(context: BuildContext): Contribution;
   describe?(context: BuildContext, support: Readonly<SupportMap>): CapabilityClaims;
 }

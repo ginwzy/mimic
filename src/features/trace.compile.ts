@@ -22,6 +22,7 @@ function operations(): DraftOp[] {
 
 export const traceFeature: Feature = {
   id: 'trace',
+  jobKeys: ['trace'],
   describe: (_context, support) => describeCoverage(support, {
     'trace.feature': 'structure',
     'trace.capture': 'partial',

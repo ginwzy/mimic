@@ -221,6 +221,7 @@ function binds(fp: AudioData): Bind[] {
 
 export const audioFeature: Feature = {
   id: 'audio',
+  jobKeys: [],
   describe: ({ profile }, support) => describeCoverage(support, {
     'audio.samples': 'constant',
     'audio.fingerprint': 'none',

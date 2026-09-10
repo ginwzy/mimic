@@ -59,6 +59,7 @@ export function operations(): DraftOp[] {
 
 export const screenFeature: Feature = {
   id: 'screen',
+  jobKeys: [],
   describe: (_context, support) => describeCoverage(support, {
     'screen.api': 'partial',
     'screen.data': 'constant',

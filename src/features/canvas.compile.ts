@@ -180,6 +180,7 @@ export function operations(): DraftOp[] {
 
 export const canvasFeature: Feature = {
   id: 'canvas',
+  jobKeys: [],
   describe: ({ profile }, support) => describeCoverage(support, {
     'canvas.2d': 'partial',
     'canvas.runtime': 'partial',

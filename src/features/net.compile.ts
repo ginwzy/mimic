@@ -42,6 +42,7 @@ export function operations(): DraftOp[] {
 
 export const netFeature: BuiltinFeature = {
   id: 'net',
+  jobKeys: ['kind'],
   describe: (_context, support) => describeCoverage(support, {
     'net.api': 'partial',
     'net.capture': 'partial',

@@ -27,10 +27,11 @@ const CATALOG_CACHE_LIMIT = 32;
 const PLAN_CACHE_LIMIT = 128;
 const PAGE_OVERRIDE_RULE = 'page-field-override-v1';
 
-function jobForPlanKey(job: Job): JsonValue {
-  if (job.kind !== 'capture' || job.interaction?.seed === undefined) return job as unknown as JsonValue;
-  const { seed: _seed, ...interaction } = job.interaction;
-  return { ...job, interaction } as unknown as JsonValue;
+function jobForPlanKey(job: Job, features: readonly Feature[]): JsonValue {
+  if (features.some(feature => feature.jobKeys === undefined)) return job as unknown as JsonValue;
+  // The compiler always writes job.kind to Plan.task, independently of Features.
+  const keys = new Set(['kind', ...features.flatMap(feature => feature.jobKeys!)]);
+  return Object.fromEntries(Object.entries(job).filter(([key]) => keys.has(key))) as JsonValue;
 }
 
 function requestShape(input: unknown): Shape | undefined {
@@ -145,7 +146,7 @@ export class Planner implements PlannerPort {
     const planKey = cacheable ? this.planKey({
       profile: imported.profile,
       shapes,
-      job,
+      job: jobForPlanKey(job, catalog.resolve(selected ?? imported.profile.shape).features),
       require: normalizedRequire!,
       catalog: catalog.hash,
       ...(page === undefined ? {} : { page }),
@@ -179,7 +180,7 @@ export class Planner implements PlannerPort {
     profile: Profile;
     page?: Page;
     shapes: readonly Shape[];
-    job: Job;
+    job: JsonValue;
     require?: SupportMap;
     synthetic?: boolean;
     catalog: string;
@@ -188,7 +189,7 @@ export class Planner implements PlannerPort {
       profile: { id: input.profile.id, hash: input.profile.hash },
       page: input.page === undefined ? null : { id: input.page.id, hash: input.page.hash },
       shapes: input.shapes.map((shape) => ({ id: shape.id, hash: shape.hash })),
-      job: jobForPlanKey(input.job),
+      job: input.job,
       require: input.require ?? {},
       synthetic: input.synthetic ?? null,
       catalog: input.catalog,

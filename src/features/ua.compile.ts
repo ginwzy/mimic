@@ -34,6 +34,7 @@ export function operations(): DraftOp[] {
 
 export const uaFeature: Feature = {
   id: 'ua',
+  jobKeys: [],
   describe: (_context, support) => describeCoverage(support, {
     'ua.api': 'partial',
     'ua.data': 'constant',

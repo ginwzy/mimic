@@ -144,6 +144,7 @@ function resourceSupport(page: Page | undefined): Support {
 
 export const perfFeature: Feature = {
   id: 'perf',
+  jobKeys: [],
   describe: (_context, support) => describeCoverage(support, {
     'perf.api': 'partial',
     'perf.clock': 'partial',

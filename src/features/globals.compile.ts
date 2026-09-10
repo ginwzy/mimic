@@ -116,6 +116,7 @@ function mediaOperations(): DraftOp[] {
 
 export const globalsFeature: Feature = {
   id: 'globals',
+  jobKeys: [],
   describe: ({ profile }, support) => describeCoverage(support, {
     // The host Shape supplies this flag even when the Chrome Feature is absent.
     'window.secure-context': 'constant',

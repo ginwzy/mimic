@@ -150,6 +150,7 @@ function records(values: readonly string[], prefix: string): Record<string, Json
 
 export const pluginsFeature: Feature = {
   id: 'plugins',
+  jobKeys: [],
   describe: (_context, support) => describeCoverage(support, {
     'plugins.api': 'partial',
     'plugins.data': 'constant',

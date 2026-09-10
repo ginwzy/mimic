@@ -219,8 +219,8 @@ const mimic = createMimic({
 });
 ```
 
-`capture` Job 可选择内置交互策略。省略 `interaction` 等同于 `adapter: 'none'`。`seed` 不参与
-Plan 缓存键；相同 `seed` 可重复生成相同事件序列。
+`capture` Job 可选择内置交互策略。省略 `interaction` 等同于 `adapter: 'none'`。使用内置 Feature 时，
+`seed` 不参与 Plan 缓存键；相同 `seed` 可重复生成相同事件序列。
 
 ```js
 const result = await mimic.capture({
@@ -267,6 +267,14 @@ Page 数据的 `performance.resources` 中提供 `name`、`initiatorType`、`sta
 const plan = await mimic.plan({ kind: 'run', code: 'navigator.userAgent' });
 console.log(plan.id, plan.features, plan.support);
 ```
+
+内置 Feature 的安装只依赖 Job 的 `kind` 和 `trace`；修改 `code`、`timeout`、`scriptUrl` 或
+`interaction` 会复用同一个缓存 Plan，执行时仍使用每次提交的完整 Job。Job 校验仍在缓存查找之前进行。
+
+高级接口中的自定义 Feature 可通过 `jobKeys` 声明 `build` **和** `describe` 读取的所有顶层 Job 字段，
+例如 `jobKeys: ['code', 'trace']`。`[]` 表示两者都不依赖 Job；省略则保守地以完整 Job 为键，包括
+交互 seed。声明 `interaction` 会纳入整个交互对象。编译器始终将 `kind` 纳入键；Profile、Shape、Page、
+环境和支持要求的原有缓存边界保持有效。修改自定义构建或能力描述逻辑时，需要同步更新依赖声明。
 
 `plan` 完成与实际运行相同的解析、能力检查和编译,但不创建 Runtime。稳定 SDK 接受 `run` 或 `capture`
 Job,用于预检与审计安装计划。

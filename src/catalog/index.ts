@@ -24,10 +24,14 @@ export class Catalog implements CatalogPort {
         throw new MimicError({ phase: 'compile', code: 'BAD_PLAN', message: 'Catalog Feature 定义非法' });
       }
       if (featureMap.has(feature.id)) throw new MimicError({ phase: 'compile', code: 'DUPLICATE_FEATURE', message: `Catalog Feature 重复:${feature.id}` });
+      if (feature.jobKeys !== undefined && (!Array.isArray(feature.jobKeys) || feature.jobKeys.some(key => typeof key !== 'string'))) {
+        throw new MimicError({ phase: 'compile', code: 'BAD_PLAN', message: `Catalog Feature jobKeys 非法:${feature.id}` });
+      }
       featureMap.set(feature.id, Object.freeze({
         id: feature.id,
         rev,
         ...(feature.requires === undefined ? {} : { requires: Object.freeze([...feature.requires]) }),
+        ...(feature.jobKeys === undefined ? {} : { jobKeys: Object.freeze([...feature.jobKeys]) }),
         build: feature.build,
         ...(feature.describe === undefined ? {} : { describe: feature.describe }),
       }));

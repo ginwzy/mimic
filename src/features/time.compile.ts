@@ -120,6 +120,7 @@ export function operations(): DraftOp[] {
 
 export const timeFeature: Feature = {
   id: 'time',
+  jobKeys: [],
   describe: (_context, support) => describeCoverage(support, {
     'time.api': 'partial',
     'time.clock': 'partial',

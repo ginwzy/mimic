@@ -127,6 +127,7 @@ export function operations(): DraftOp[] {
 
 export const webglFeature: Feature = {
   id: 'webgl',
+  jobKeys: [],
   describe: ({ profile }, support) => describeCoverage(support, {
     'webgl.api': profile.webgl ? 'partial' : 'structure',
     'webgl.data': 'constant',
