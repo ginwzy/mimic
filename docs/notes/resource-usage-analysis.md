@@ -4,6 +4,8 @@
 
 结论：轻量任务主要消耗在 Realm 安装；脚本变化导致父线程重复编译并缓存同 ID 的独立 Plan；生产 worker 池的 RSS 高水位明显。回收生命周期检查通过，但不能据此认定内存预算合格或长期稳定。
 
+规划缓存已按文末完成优化；后续生产 worker 的 GC、RSS 归因及线程/进程轮换实验见 [worker 内存跟进](worker-memory-followup.md)。
+
 ## 环境与范围
 
 - Apple M4，10 逻辑核，32 GiB，macOS arm64，Node 24.12.0，jsdom 29.1.1。
