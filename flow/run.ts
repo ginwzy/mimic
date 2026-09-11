@@ -3,9 +3,10 @@ import { createLumiProxy, createLumiRelayProxy } from './proxy.js';
 import { CapturePool, listAndroidChromeProfiles } from './capture.js';
 import { runAnaFlow, type AnaFlowOptions, type AnaFlowResult } from './suppliers/ana/flow.js';
 import { runCebuFlow, type CebuFlowOptions, type CebuFlowResult } from './suppliers/cebu/flow.js';
+import { runJetstarFlow, type JetstarFlowOptions, type JetstarFlowResult } from './suppliers/jetstar/flow.js';
 
 type ProxyMode = 'none' | 'reqable' | 'lumi' | 'mitm';
-type Supplier = 'ana' | 'cebu';
+type Supplier = 'ana' | 'cebu' | 'jetstar';
 type Log = (message: string) => void;
 
 interface CliOptions {
@@ -26,7 +27,7 @@ interface FlowExecution {
 
 function usage(): string {
   return [
-    'Usage: npm run flow -- <ana|cebu> [none|reqable|lumi|mitm] [options]',
+    'Usage: npm run flow -- <ana|cebu|jetstar> [none|reqable|lumi|mitm] [options]',
     '',
     'Options:',
     '  --profile <id>         Full Android Chrome Profile ID (default: random)',
@@ -35,11 +36,10 @@ function usage(): string {
   ].join('\n');
 }
 
-function summarize(result: AnaFlowResult | CebuFlowResult) {
+function summarize(result: AnaFlowResult | CebuFlowResult | JetstarFlowResult) {
   return {
     profile: result.profile,
     interactionSeed: result.interactionSeed,
-    environment: result.environment,
     abckBodyCount: result.abckBodyCount,
     abckPostCount: result.abckPostCount,
     bmsPosted: result.bmsPosted,
@@ -140,6 +140,48 @@ async function runCebu(proxyMode: ProxyMode, log: Log, capturePool: CapturePool,
   };
 }
 
+async function runJetstar(proxyMode: ProxyMode, log: Log, capturePool: CapturePool, profile?: string): Promise<FlowExecution> {
+  const options: JetstarFlowOptions = {
+    capturePool, profilesRoot: './profiles', search: true, log,
+    ...(profile === undefined ? {} : { profile }),
+  };
+  let sessionId: string | undefined;
+  if (proxyMode === 'reqable') {
+    options.proxy = 'http://10.5.2.163:9001';
+  } else if (proxyMode === 'lumi') {
+    const lumi = createLumiProxy({
+      customerZone: 'lum-customer-travel_fusion-zone-gen', password: 'j48ly0d63top',
+      country: ['au', 'jp', 'nz'][randomInt(3)]!,
+    });
+    options.proxy = lumi.url;
+    sessionId = lumi.sessionId;
+  } else if (proxyMode === 'mitm') {
+    const relay = createLumiRelayProxy({
+      proxyUrl: 'http://127.0.0.1:24800',
+      customerZone: 'lum-customer-travel_fusion-zone-gen', password: 'j48ly0d63top',
+      country: ['au', 'jp', 'nz'][randomInt(3)]!, clientHelloId: 'hellochrome_152',
+    });
+    options.proxy = relay.url;
+    options.proxyHeaders = relay.proxyHeaders;
+    sessionId = relay.sessionId;
+  }
+  const result = await runJetstarFlow(options);
+  return {
+    success: result.search?.success ?? false,
+    ...(result.search === undefined ? {} : { status: result.search.status, classification: result.search.class }),
+    summary: {
+      supplier: 'jetstar', proxy: proxyMode,
+      ...(sessionId === undefined ? {} : { sessionId }),
+      ...summarize(result), source: result.source, sourceUrl: result.sourceUrl,
+      bmsPostCount: result.bmsPostCount, bmsTelemetryPosted: result.bmsTelemetryPosted,
+      challengeSolved: result.challengeSolved, secCptState: result.secCptState,
+      search: result.search === undefined ? undefined : {
+        status: result.search.status, success: result.search.success, class: result.search.class,
+      },
+    },
+  };
+}
+
 function parsePositiveInteger(value: string | undefined, option: string): number {
   if (value === undefined || !/^\d+$/.test(value)) {
     throw new Error(`${option} must be a positive integer\n\n${usage()}`);
@@ -155,7 +197,7 @@ function parseArguments(args: readonly string[]): CliOptions | undefined {
   if (args.includes('--help') || args.includes('-h')) return undefined;
 
   const [supplier, ...rest] = args;
-  if (supplier !== 'ana' && supplier !== 'cebu') throw new Error(`supplier must be ana or cebu\n\n${usage()}`);
+  if (supplier !== 'ana' && supplier !== 'cebu' && supplier !== 'jetstar') throw new Error(`supplier must be ana, cebu, or jetstar\n\n${usage()}`);
 
   let proxyMode: ProxyMode = 'none';
   let offset = 0;
@@ -201,7 +243,9 @@ function parseArguments(args: readonly string[]): CliOptions | undefined {
 }
 
 function runSupplier(supplier: Supplier, proxyMode: ProxyMode, log: Log, capturePool: CapturePool, profile?: string): Promise<FlowExecution> {
-  return supplier === 'ana' ? runAna(proxyMode, log, capturePool, profile) : runCebu(proxyMode, log, capturePool, profile);
+  if (supplier === 'ana') return runAna(proxyMode, log, capturePool, profile);
+  if (supplier === 'cebu') return runCebu(proxyMode, log, capturePool, profile);
+  return runJetstar(proxyMode, log, capturePool, profile);
 }
 
 function errorMessage(error: unknown): string {

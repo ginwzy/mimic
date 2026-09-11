@@ -71,10 +71,10 @@ const raw = {
   },
 };
 
-async function fixture(): Promise<{ root: string; id: string; text: string }> {
+async function fixture(input = raw): Promise<{ root: string; id: string; text: string }> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'mimic-fp-env-'));
   const directory = path.join(root, '_fp-env', 'android_148');
-  const text = JSON.stringify(raw);
+  const text = JSON.stringify(input);
   await mkdir(directory, { recursive: true });
   await writeFile(path.join(directory, 'z__env_1589412.json'), text);
   return { root, id: 'android-chrome/23049pcd8g-v148-1589412', text };
@@ -144,6 +144,38 @@ test('createMimic executes directly from the raw fp-env cache', async (t) => {
     zone: 'Europe/Warsaw',
   });
   assert.ok((await mimic.list('profiles')).includes(item.id));
+});
+
+test('Android non-mobile profiles retain touch surfaces and bindings in a real Realm', async (t) => {
+  const tablet = structuredClone(raw);
+  tablet.navigator.userAgentData.HighEntropyValues.mobile = false;
+  tablet.navigator.userAgent = tablet.navigator.userAgent.replace(' Mobile', '');
+  tablet.navigator.appVersion = tablet.navigator.appVersion.replace(' Mobile', '');
+  const item = await fixture(tablet);
+  t.after(() => rm(item.root, { recursive: true, force: true }));
+  const { profile } = await new FpEnvProfiles(item.root).load(item.id);
+  assert.equal(profile.target.form, 'desktop');
+  assert.equal(profile.navigator.userAgentData.mobile, false);
+  assert.equal(profile.navigator.maxTouchPoints, 5);
+  const mimic = createMimic({ profilesRoot: item.root, profile: item.id, size: 1 });
+  t.after(() => mimic.close());
+  const result = await mimic.run({
+    kind: 'run',
+    code: `(() => {
+      const keys = ['ontouchcancel', 'ontouchend', 'ontouchmove', 'ontouchstart'];
+      const touch = new Touch({ identifier: 7, target: document.body, clientX: 12, clientY: 34 });
+      let received = 0;
+      document.body.ontouchstart = event => { received = event.touches[0].identifier; };
+      document.body.dispatchEvent(new TouchEvent('touchstart', { touches: [touch] }));
+      return {
+        doc: keys.every(key => Object.hasOwn(Document.prototype, key)),
+        html: keys.every(key => Object.hasOwn(HTMLElement.prototype, key)),
+        coordinates: [touch.clientX, touch.clientY], received,
+      };
+    })()`,
+  });
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.deepEqual(result.value, { doc: true, html: true, coordinates: [12, 34], received: 7 });
 });
 
 test('FpEnvProfiles rejects malformed raw records through the Profile error contract', async (t) => {

@@ -6,6 +6,7 @@ import { callableWrite, operationWrites } from '../shape/writes.js';
 import { accessor, fn, fnShape, refProp, tag } from './ops.js';
 import { PROTOS } from './dom.data.js';
 import { SURFACES, type SurfaceId } from './dom.missing.data.js';
+import { hasTouchSurface } from './touch.shared.js';
 import { ANDROID_CHROME_NAVIGATOR_ORDER, hasAndroidChromeCapabilities } from './nav.capabilities.compile.js';
 
 const NODE_KEYS = [
@@ -44,7 +45,7 @@ function operations(shape: Shape, reserved: ReadonlySet<string>): DraftOp[] {
     for (const name of proto.g) add(proto.owner, name, 'get', 0);
     for (const name of proto.s) add(proto.owner, name, 'set', 1);
   }
-  if (shape.target.form === 'mobile') {
+  if (hasTouchSurface(shape.target)) {
     for (const owner of ['window.Document.prototype', 'window.HTMLElement.prototype']) {
       for (const name of ['ontouchcancel', 'ontouchend', 'ontouchmove', 'ontouchstart']) {
         add(owner, name, 'get', 0);

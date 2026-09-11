@@ -11,7 +11,6 @@ import {
 } from './collect/server.js';
 import { startServer, type ServerHandle } from './http/server.js';
 import { encodeResult } from './core/result.js';
-import { parseEnvironmentOptions } from './core/environment.js';
 import type { JsonValue } from './core/types.js';
 import { DEFAULT_TIMEOUT_MS } from './executor/pool.js';
 import { createMimic } from './sdk.js';
@@ -43,7 +42,6 @@ const defaultIo: CliIo = {
 
 const knownFlags = new Set([
   'profile',
-  'environment',
   'profiles',
   'probe',
   'pool-size',
@@ -83,9 +81,6 @@ function parseArguments(argv: readonly string[]): Arguments {
     } else {
       flags[name] = true;
     }
-  }
-  if (flags.environment !== undefined && (command === 'serve' || command === 'collect')) {
-    throw new TypeError('--environment applies to execution commands; HTTP tasks carry environment in the request body');
   }
   return { command, positionals, flags };
 }
@@ -154,9 +149,7 @@ function failure(io: CliIo, error: unknown): number {
 function sharedOptions(args: Arguments, io: CliIo) {
   const size = integerFlag(args.flags, 'pool-size', 1, 1);
   const timeoutMs = integerFlag(args.flags, 'timeout', DEFAULT_TIMEOUT_MS, 1);
-  const environment = stringFlag(args.flags, 'environment');
   return {
-    ...(environment === undefined ? {} : { environment: parseEnvironmentOptions(JSON.parse(environment)) }),
     profile: stringFlag(args.flags, 'profile', '') as string,
     profilesRoot: pathFlag(args, io, 'profiles', absolute(io.cwd, 'profiles')),
     probePath: pathFlag(args, io, 'probe', DEFAULT_PROBE_PATH),
@@ -200,12 +193,11 @@ async function sdkCommand(args: Arguments, io: CliIo): Promise<number> {
   }
   const listKind = args.command === 'list' ? args.positionals[0] ?? 'profiles' : undefined;
   if (args.command === 'list'
-    && (args.positionals.length > 1 || !['profiles', 'shapes', 'features', 'drivers', 'regions'].includes(listKind ?? ''))) {
-    throw new TypeError('list kind must be profiles, shapes, features, drivers, or regions');
+    && (args.positionals.length > 1 || !['profiles', 'shapes', 'features', 'drivers'].includes(listKind ?? ''))) {
+    throw new TypeError('list kind must be profiles, shapes, features, or drivers');
   }
 
   const mimic = createMimic(sharedOptions(args, io));
-  if (mimic.environment?.selection) io.stderr(`regional environment=${JSON.stringify(mimic.environment)}`);
   try {
     let value: unknown;
     switch (args.command) {
@@ -230,7 +222,7 @@ async function sdkCommand(args: Arguments, io: CliIo): Promise<number> {
         break;
       }
       case 'list': {
-        value = await mimic.list(listKind as 'profiles' | 'shapes' | 'features' | 'drivers' | 'regions');
+        value = await mimic.list(listKind as 'profiles' | 'shapes' | 'features' | 'drivers');
         break;
       }
     }

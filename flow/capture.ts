@@ -5,7 +5,7 @@ import { FpEnvProfiles } from '../src/profiles/fp-env.js';
 import { parseCaptureResult } from '../src/core/capture.js';
 import type { CaptureNetworkOptions } from '../src/network/types.js';
 import { digest, seal } from '../src/core/seal.js';
-import type { EnvironmentOptions, Page } from '../src/core/types.js';
+import type { Page } from '../src/core/types.js';
 
 export type CaptureMode = 'abck' | 'bms';
 
@@ -16,7 +16,6 @@ export interface CaptureBodiesOptions {
   scriptSource: string;
   cookies?: readonly string[];
   profile: string;
-  environment?: EnvironmentOptions;
   profilesRoot?: string;
   deadlineMs: number;
   scriptTimeoutMs: number;
@@ -119,7 +118,6 @@ export class CapturePool {
     try {
       const result = parseCaptureResult(await executor.run({
         profile: options.profile,
-        ...(options.environment === undefined ? {} : { environment: options.environment }),
         page: capturePage(options),
         job: {
           kind: 'capture',

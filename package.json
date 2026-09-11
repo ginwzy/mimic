@@ -48,7 +48,6 @@
     "generate:shapes:compiled": "node scripts/generate-shapes.js",
     "generate:shapes": "npm run build && npm run generate:shapes:compiled",
     "generate:interaction-model": "python3 scripts/compile-csd4ca.py",
-    "generate:regions": "node scripts/generate-regions.mjs",
     "check:shapes:compiled": "node scripts/generate-shapes.js --check",
     "check:shapes": "npm run build && npm run check:shapes:compiled",
     "prepack": "npm run build && npm run check:shapes:compiled && npm run check:data:compiled",

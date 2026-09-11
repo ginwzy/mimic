@@ -1,8 +1,4 @@
 export { CapturePool, captureBodies, listAndroidChromeProfiles } from './capture.js';
-export { resolveEnvironment } from '../src/core/environment.js';
-export { listRegions, regionalCatalog, regionalRuntime } from '../src/core/regions.js';
-export type { RegionPreset, RegionFilter } from '../src/core/regions.js';
-export type { EnvironmentOptions, RegionalEnvironment, RegionalSelection, ResolvedEnvironment } from '../src/core/types.js';
 export type {
   CaptureBodiesOptions,
   CaptureBodiesResult,
@@ -63,3 +59,21 @@ export type {
   CebuScripts,
   CebuSearchResult,
 } from './suppliers/cebu/request.js';
+export { runJetstarFlow } from './suppliers/jetstar/flow.js';
+export type { JetstarFlowOptions, JetstarFlowResult } from './suppliers/jetstar/flow.js';
+export {
+  JETSTAR_SITE,
+  JETSTAR_BOOKING_SITE,
+  JETSTAR_SEARCH_URL,
+  JETSTAR_CAPTCHA_URL,
+  JETSTAR_SOURCE_URLS,
+  createJetstarRequest,
+} from './suppliers/jetstar/request.js';
+export type {
+  JetstarSource,
+  JetstarPage,
+  JetstarRequest,
+  JetstarRequestOptions,
+  JetstarSearchOptions,
+  JetstarSearchResult,
+} from './suppliers/jetstar/request.js';

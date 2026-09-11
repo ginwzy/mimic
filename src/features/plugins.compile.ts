@@ -16,7 +16,7 @@ const dataRef = (target: Ref, key: string, node: string, enumerable: boolean): D
   desc: { kind: 'data', value: { ref: { node } }, writable: false, enumerable, configurable: true },
 });
 
-/** Data property whose value is a function node. Android Chrome 152 methods are writable. */
+/** Data property whose value is a function node. Android Chrome methods are writable. */
 const fnRef = (target: Ref, key: string, node: string, enumerable: boolean, writable = false): DraftOp => ({
   op: 'prop', target, key,
   desc: { kind: 'data', value: { ref: { node } }, writable, enumerable, configurable: true },
